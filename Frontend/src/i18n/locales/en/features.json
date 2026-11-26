@@ -1,0 +1,83 @@
+{
+  "hero": {
+    "title": "Core Capabilities & Self-Healing Loop",
+    "subtitle": "Your Kubernetes infrastructure is protected 24/7 through a 6-stage autonomous workflow: from instant detection, AI forecasting, root-cause diagnostics to controlled self-healing under human authority."
+  },
+  "lifecycle": {
+    "title": "6 Pillars of Autonomous Infrastructure Operations",
+    "desc": "Engineered around the MAPE-K control loop (Monitor - Analyze - Plan - Execute - Knowledge) purposefully tailored for SME engineering teams."
+  },
+  "steps": {
+    "detect": {
+      "badge": "STAGE 01 // Detect",
+      "title": "Infrastructure Radar & Instant Telemetry Collection",
+      "desc": "Continuously captures ultra-low-latency telemetry (< 1.2ms) via eBPF kernel probes and Prometheus scrapers. 10-second radar sweeps immediately surface Pod, Node, and network bottlenecks without degrading cluster performance.",
+      "bullets": [
+        "Captures 100% of CPU saturation, RAM RSS, Disk I/O, and Ingress latency signals.",
+        "One-way outbound TLS streaming architecture (zero open inbound ports).",
+        "Full compatibility across EKS, GKE, AKS, K3s, and bare-metal kubeadm clusters."
+      ]
+    },
+    "predict": {
+      "badge": "STAGE 02 // Predict",
+      "title": "15–30 Minute Early Degradation Forecasting via GRU Models",
+      "desc": "GRU (Gated Recurrent Unit) time-series neural networks continuously track hundreds of telemetry parameters, catching degradation trajectories well before OOMKilled crashes or CPU throttling hit.",
+      "cardMsg": "Resource degradation forecast: OOMKilled risk in 14m 20s (94.6% confidence)",
+      "bullets": [
+        "Forecasts memory leak slopes and request queue saturation early.",
+        "Adaptive noise filtering eliminates false positives from transient network blips.",
+        "Continuously updated risk scores maintaining > 94% prediction confidence."
+      ]
+    },
+    "diagnose": {
+      "badge": "STAGE 03 // Diagnose",
+      "title": "Automated Multi-Dimensional Root-Cause Analysis (RCA)",
+      "desc": "Instead of combing through thousands of distributed log lines, the RCA engine correlates Kubernetes events (CrashLoopBackOff, Evicted), container exit codes (Exit Code 137/1), and GitOps drift to isolate the single root culprit.",
+      "cardMsg": "Root cause isolated: Container ExitCode 137 in checkout-service (98.4%)",
+      "bullets": [
+        "Pinpoints the faulty microservice accurately on a causal dependency DAG.",
+        "Extracts contextual failure traces from container stderr and CoreDNS telemetry.",
+        "Delivers diagnostic Confidence Scores paired with targeted remediation options."
+      ]
+    },
+    "verify": {
+      "badge": "STAGE 04 // Verify",
+      "title": "Kubernetes YAML Diff Preview & Safe Approval (HITL)",
+      "desc": "Core principle: AI Proposes — Humans Decide — Agent Executes. Sensitive infrastructure mutations display Before vs After YAML diffs and blast radius estimates, requiring explicit engineer sign-off before execution.",
+      "cardMsg": "Human approval required before patching Memory: 256Mi → 512Mi",
+      "bullets": [
+        "Visual resource diff previews (Resource limits, Replicas, Cordon).",
+        "One-click approval right from the Web Console or Slack/Teams webhooks.",
+        "Dual Operator Sign-Off mode for mission-critical Production clusters."
+      ]
+    },
+    "recover": {
+      "badge": "STAGE 05 // Recover",
+      "title": "Sub-2-Second Zero-Downtime Autonomous Recovery",
+      "desc": "Once approved or matched against policy guardrails, the Kubernetes Agent orchestrator executes safe actions via the Kubernetes API: gracefully restarting Pods, scaling replicas, or rolling back faulty releases.",
+      "cardMsg": "Self-healing completed in 1.8s: New Replica ready with zero disruption",
+      "bullets": [
+        "Spins up healthy Pods cleanly before terminating failing instances (Rolling Replacement).",
+        "Auto-rollbacks to the latest stable ReplicaSet if a bad rollout triggers crash loops.",
+        "Reclaims resources swiftly from orphaned pods and memory cache leaks."
+      ]
+    },
+    "audit": {
+      "badge": "STAGE 06 // Protect & Audit",
+      "title": "Hardened Cluster Security & Immutable Audit Trails",
+      "desc": "SelfHeal is secure by design under Least Privilege principles. The K8s Agent never requires cluster-admin access, and every recovery action is cryptographically hashed and stored in an immutable PostgreSQL audit log.",
+      "cardMsg": "Immutable audit entry: SHA-256 signed & verified by sre_operator",
+      "bullets": [
+        "Multi-factor identity security and scoped cryptographic tokens per cluster.",
+        "Tamper-evident audit logs capturing User ID, source IP, action, and YAML diffs.",
+        "Strict RBAC enforcement separating Owner, SRE Operator, and Auditor roles."
+      ]
+    }
+  },
+  "cta": {
+    "headline": "Ready to rethink infrastructure reliability?",
+    "desc": "Discover how SelfHeal helps teams monitor, forecast risks, and recover Kubernetes clusters proactively.",
+    "explore": "Explore SelfHeal",
+    "contact": "Contact Team"
+  }
+}

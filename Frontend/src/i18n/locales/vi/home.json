@@ -1,0 +1,241 @@
+{
+  "hero": {
+    "heading": "AI Self Healing",
+    "description": "AI dự đoán các sự cố tiềm ẩn và tự động khôi phục dịch vụ — với sự giám sát của con người khi cần thiết.",
+    "startNow": "Bắt đầu ngay",
+    "viewGuide": "Xem hướng dẫn",
+    "sublink": "onboard with your agent →"
+  },
+  "socialProof": {
+    "sectionAria": "Hệ sinh thái công cụ cốt lõi và tổng quan nền tảng",
+    "toolsAria": "Các công cụ cốt lõi tích hợp",
+    "quote": "SelfHeal là nền tảng AI tự hành giám sát và dự báo sớm nguy cơ hạ tầng với sự kiểm soát minh bạch của con người.",
+    "cta": "Khám phá kiến trúc hệ thống"
+  },
+  "featureStrip": {
+    "ariaLabel": "Agent Bridge Section",
+    "tag": "[ AGENT ]",
+    "heading": "Cách Agent kết nối với dự án của bạn",
+    "description": "SelfHeal Agent đóng vai trò cầu nối liên kết trực tiếp giữa dự án của bạn với chúng tôi.",
+    "learnMore": "Tìm hiểu thêm"
+  },
+  "howItWorks": {
+    "ariaLabel": "Cách thức SelfHeal hoạt động",
+    "badgeTop": "HOW IT WORKS",
+    "steps": [
+      {
+        "label": "Bước 1",
+        "title": "Thu thập & Quan sát đa chiều",
+        "desc": "Liên tục thu thập và giám sát dữ liệu hạ tầng Kubernetes, giúp phát hiện sớm những dấu hiệu bất thường.",
+        "videoAria": "Video mô phỏng thu thập và quan sát đa chiều Kubernetes"
+      },
+      {
+        "label": "Bước 2",
+        "title": "Mô hình AI dự báo suy thoái",
+        "desc": "Phân tích dữ liệu vận hành để dự đoán rủi ro, nhận diện nguy cơ trước khi sự cố xảy ra.",
+        "videoAria": "Video mô phỏng mô hình AI dự báo suy thoái Kubernetes"
+      },
+      {
+        "label": "Bước 3",
+        "title": "Tự động phục hồi có kiểm soát",
+        "desc": "Tự động thực thi biện pháp khắc phục, với cơ chế phê duyệt và giám sát từ con người.",
+        "videoAria": "Video mô phỏng tự động phục hồi có kiểm soát Kubernetes"
+      }
+    ],
+    "predictionTitle": "Dự đoán các sự cố",
+    "predictionDesc": "Từ khả năng quan sát theo thời gian thực đến dự báo dựa trên AI và tự động phục hồi",
+    "badgeBottom": "BA GIAI ĐOẠN BẢO VỆ HẠ TẦNG PRODUCTION."
+  },
+  "adaptationLearning": {
+    "ariaLabel": "Tiến trình khắc phục và học hỏi liên tục từ các lỗi xảy ra",
+    "badge": "[ Sự thích nghi & Học hỏi ]",
+    "heading": "Hệ thống tự thích ứng & học hỏi sau mỗi sự cố",
+    "subtitle": "Từ quy tắc tùy chỉnh theo đặc thù hạ tầng đến cơ chế học hỏi liên tục, SelfHeal ngày càng am hiểu hệ thống của bạn sau mỗi phiên tự phục hồi.",
+    "card1": {
+      "mockupTitle": "Thiết lập quy tắc",
+      "mockupSub": "Chỉ định chính sách và phạm vi dịch vụ áp dụng.",
+      "step1": "Mô tả quy tắc khôi phục",
+      "textarea": "Tự động Rolling Restart khi tỷ lệ lỗi HTTP 5xx vượt quá 5% trong 2 phút liên tiếp trên deployment order-service.",
+      "step2": "Phạm vi dịch vụ áp dụng",
+      "tag": "[ Quy Tắc Tùy Chỉnh ]",
+      "title": "Quy tắc của bạn, quyền kiểm soát của bạn",
+      "desc": "Chỉ định rõ ngữ cảnh cụ thể cho từng cụm k8s và áp dụng nhất quán các ranh giới an toàn tuyệt đối.",
+      "cta": "Thiết lập quy tắc"
+    },
+    "card2": {
+      "userMsg": "Khi restart order-service, nhớ chờ Redis cache warm-up 30s trước khi định tuyến lại traffic.",
+      "agentMsg": "Đã ghi nhận bài học này vào bộ nhớ chính sách! Sẽ tự động áp dụng độ trễ 30s cho các phiên phục hồi sau.",
+      "tag": "[ Học Tập & Ghi Nhớ ]",
+      "title": "Học hỏi liên tục từ các lỗi xảy ra",
+      "desc": "SelfHeal liên tục phân tích phản hồi và hành động can thiệp thực tế của đội ngũ kỹ sư, tự động hoàn thiện tri thức vận hành để không lặp lại sai số cũ.",
+      "cta": "Xem tiến trình học"
+    }
+  },
+  "onboardingWorkflow": {
+    "ariaLabel": "Quy trình 4 bước thiết lập và khởi chạy SelfHeal",
+    "badge": "[ Quy Trình ]",
+    "heading": "Quy trình thiết lập & Khởi chạy trong 4 bước",
+    "subtitle": "Được thiết kế tối ưu cho kỹ sư Kubernetes, SelfHeal kết nối liền mạch vào hạ tầng của bạn chỉ trong vài phút mà không làm gián đoạn hệ thống.",
+    "cta": "Bắt đầu ngay",
+    "bandPill": "CÁC BƯỚC THIẾT LẬP & VẬN HÀNH WORKFLOW",
+    "steps": {
+      "step1": {
+        "orgHeader": "Tổ chức / Workspace",
+        "ready": "Sẵn sàng",
+        "title": "Tạo tổ chức & môi trường",
+        "desc": "Khởi tạo workspace riêng biệt cho nhóm, khai báo cụm Kubernetes và thiết lập các biến môi trường ban đầu an toàn."
+      },
+      "step2": {
+        "title": "Kết nối SelfHeal Agent",
+        "desc": "Cài đặt agent siêu nhẹ qua Helm chart hoặc DaemonSet, tự động thu thập telemetry và đồng bộ metric theo thời gian thực."
+      },
+      "step3": {
+        "header": "Đội ngũ SRE & DevOps",
+        "title": "Mời thành viên vào tổ chức",
+        "desc": "Thêm đồng đội vào workspace, phân quyền RBAC minh bạch để cùng theo dõi trạng thái hệ thống và phối hợp khắc phục."
+      },
+      "step4": {
+        "title": "Quản lý người dùng & Policy AI",
+        "desc": "Cấu hình chính sách tự hành tất định, ma trận phân quyền và thiết lập chốt chặn phê duyệt con người (HITL) khi có rủi ro cao."
+      }
+    }
+  },
+  "humanControl": {
+    "ariaLabel": "Tự hành thông minh, Con người kiểm soát",
+    "badge": "[ Chính Sách & Xác Minh ]",
+    "heading": "Tự hành thông minh, Con người kiểm soát",
+    "subtitle": "SelfHeal vận hành tự động trong ranh giới an toàn tuyệt đối, tự động tạm dừng để bạn phê duyệt trước các hành động có rủi ro cao.",
+    "cta": "Khám phá Human-in-the-Loop",
+    "stage": {
+      "awaitingBadge": "Awaiting SRE Approval",
+      "approvedBadge": "Action Approved By SRE",
+      "tagApproved": "Remediation Approved",
+      "tagAlert": "K8s Anomaly Alert",
+      "podStatus": "Pod Status:",
+      "clusterNode": "Cluster Node:",
+      "proposedAction": "Proposed Action:",
+      "restartAction": "Restart affected Pod",
+      "bubble": "Restart Pod?"
+    }
+  },
+  "faq": {
+    "ariaLabel": "Câu hỏi thường gặp",
+    "title": "FAQ",
+    "items": [
+      {
+        "q": "SelfHeal hoạt động với Kubernetes như thế nào?",
+        "a": "SelfHeal triển khai dưới dạng DaemonSet hoặc Helm chart siêu nhẹ, thu thập eBPF telemetry và pod metrics theo thời gian thực mà không tiêu tốn tài nguyên cụm, phát hiện sớm suy thoái trước khi dịch vụ gián đoạn."
+      },
+      {
+        "q": "SelfHeal có thể tự lưu trữ (self-hosted) trên hạ tầng riêng không?",
+        "a": "Có, SelfHeal hỗ trợ triển khai on-premises và trong private VPC hoàn chỉnh. Toàn bộ dữ liệu telemetry, nhật ký kiểm toán và mô hình dự báo được lưu giữ an toàn tuyệt đối trong mạng nội bộ của bạn."
+      },
+      {
+        "q": "Cơ chế Human-in-the-Loop (HITL) bảo vệ hệ thống ra sao?",
+        "a": "Mọi hành động có rủi ro cao như restart rolling hàng loạt hoặc thay đổi cấu hình tài nguyên đều phải có chữ ký phê duyệt từ kỹ sư trực on-call trước khi thực thi, đảm bảo con người luôn nắm quyền kiểm soát cao nhất."
+      },
+      {
+        "q": "SelfHeal hỗ trợ những phiên bản Kubernetes và nền tảng đám mây nào?",
+        "a": "SelfHeal hỗ trợ mọi cụm Kubernetes từ v1.22+ trên AWS EKS, Google GKE, Azure AKS, K3s, cũng như các cụm bare-metal và hybrid cloud tiêu chuẩn."
+      },
+      {
+        "q": "Có bản dùng thử miễn phí hoặc gói dành cho doanh nghiệp SME không?",
+        "a": "Hoàn toàn có. SelfHeal cung cấp gói Community miễn phí trọn đời cho cụm K8s quy mô dưới 15 nodes và gói Enterprise với đầy đủ tính năng suy luận AI, RCA 3D chuyên sâu cùng SLA hỗ trợ 24/7."
+      },
+      {
+        "q": "Dữ liệu log và chỉ số của hệ thống có được bảo mật không?",
+        "a": "Tuyệt đối bảo mật. SelfHeal tuân thủ nguyên tắc Least Privilege, chỉ phân tích các chỉ số telemetry và metadata số liệu, tuyệt đối không đọc dữ liệu kinh doanh của ứng dụng hay payload nhạy cảm."
+      }
+    ],
+    "notFound": "Bạn không tìm thấy câu trả lời? ",
+    "contactUs": "Liên hệ với chúng tôi."
+  },
+  "connectCluster": {
+    "ariaLabel": "Kết nối môi trường Kubernetes với SelfHeal",
+    "title": "SelfHeal xây dựng lớp tự phục hồi hạ tầng để bạn an tâm phát triển sản phẩm.",
+    "guideBtn": "Xem hướng dẫn",
+    "startBtn": "Bắt đầu ngay"
+  },
+  "healBot": {
+    "ariaLabel": "Hoạt ảnh tiến hóa linh vật HealBot Kubernetes Guardian",
+    "alts": {
+      "egg_idle": "Quả trứng HealBot bập bênh khởi tạo hạ tầng",
+      "egg_cracking": "Trứng HealBot nứt vỏ khi phát hiện tín hiệu sự cố",
+      "chick_hatching": "HealBot nở ra từ vỏ trứng và vươn người vỗ cánh",
+      "guardian": "HealBot Guardian vẫy cánh và kích hoạt khiên bảo vệ",
+      "dissolve": "HealBot đồng bộ hóa trạng thái và chuẩn bị chu kỳ mới"
+    }
+  },
+  "illustrations": {
+    "aiPredictiveAria": "Mô hình AI dự báo suy thoái với các luồng dữ liệu K8s hội tụ vào đầu não trung tâm",
+    "telemetryStreamAria": "Thu thập dữ liệu và eBPF telemetry liên tục truyền về máy chủ"
+  },
+  "dashboardPreview": {
+    "sidebar": [
+      "Tổng quan",
+      "Môi trường",
+      "Giám sát",
+      "Sự cố",
+      "Dự đoán AI",
+      "Tự phục hồi",
+      "Cài đặt"
+    ],
+    "metrics": [
+      { "label": "Độ khả dụng", "value": "98,7%", "change": "↑ 2,4%", "isGood": true },
+      { "label": "Mức sử dụng CPU", "value": "42%", "change": "↓ 6,2%", "isGood": true },
+      { "label": "Mức sử dụng bộ nhớ", "value": "68%", "change": "↓ 4,1%", "isGood": true },
+      { "label": "Số Pod đang chạy", "value": "24", "change": "↑ 2,0%", "isGood": true },
+      { "label": "Sự cố đang diễn ra", "value": "0", "change": "↓ 100%", "isGood": true }
+    ],
+    "activities": [
+      { "title": "Tự phục hồi hoàn tất", "time": "2m trước", "type": "healing" },
+      { "title": "Phát hiện dự đoán AI", "time": "12m trước", "type": "ai" },
+      { "title": "Sự cố mới đã giải quyết", "time": "45m trước", "type": "resolved" },
+      { "title": "Agent trực tuyến", "time": "1h trước", "type": "online" }
+    ],
+    "searchPlaceholder": "Tìm kiếm Pod, namespace...",
+    "statusOnline": "Trực tuyến (Bình thường)",
+    "systemOverview": "Tổng quan hệ thống",
+    "agentOnline": "Agent trực tuyến",
+    "updatedAgo": "Cập nhật: 10s trước",
+    "resourceUsage": "Mức sử dụng tài nguyên",
+    "memoryLabel": "Bộ nhớ",
+    "recentActivity": "Hoạt động gần đây",
+    "aiPredictionPrefix": "Dự đoán AI: ",
+    "aiPredictionMsg": "Mức sử dụng bộ nhớ có thể vượt ngưỡng an toàn trong ~18 phút",
+    "riskMedium": "Rủi ro: Trung bình"
+  },
+  "heroDashboardLive": {
+    "ebpfAgent": "Tác tử eBPF: 1.2ms",
+    "opsMenu": "Menu Vận Hành",
+    "sidebar": [
+      "Tổng quan cụm",
+      "Hạ tầng & Pods",
+      "Giám sát viễn trắc",
+      "Dự báo rủi ro AI",
+      "Tự phục hồi MAPE-K",
+      "Sự cố & Phân tích RCA",
+      "Cài đặt nền tảng"
+    ],
+    "clusterStatus": "Cụm Kubernetes: Bình Thường (Healthy 100%)",
+    "clusterSub": "Độ khả dụng 98,7% • Uptime 99.98% • MTTR 1.4s • 0 sự cố gián đoạn dịch vụ",
+    "mapekActive": "MAPE-K Hoạt Động",
+    "cards": [
+      { "label": "Tải CPU Cụm", "val": "42%", "sub": "↓ 6.2% so với đỉnh", "color": "#059669" },
+      { "label": "Bộ Nhớ RAM", "val": "68%", "sub": "16.4 / 24.0 GB", "color": "#059669" },
+      { "label": "Mạng I/O", "val": "1.2 GB/s", "sub": "Không nghẽn gói", "color": "#2563EB" },
+      { "label": "Pods Đang Chạy", "val": "84 / 84", "sub": "3 Nodes vật lý", "color": "#059669" }
+    ],
+    "telemetryTitle": "Viễn Trắc Tải Đa Biến & Vòng Lặp Tự Trị (MAPE-K Live Stream)",
+    "realtimePing": "● Real-time (1.2s ping)",
+    "yamlModalTitle": "Xem Trước Thay Đổi Cấu Hình Kubernetes YAML Diff",
+    "closePreviewAria": "Đóng xem trước",
+    "configFilePrefix": "Tệp cấu hình: ",
+    "beforeLabel": "• HIỆN TẠI TRONG CỤM (BEFORE)",
+    "afterLabel": "• SAU KHI PHÊ DUYỆT (AFTER)",
+    "cancel": "Hủy bỏ",
+    "approvedHealing": "Đã Ký Duyệt & Đang Tự Phục Hồi",
+    "reset": "Đặt lại",
+    "confirmApprove": "Xác Nhận Ký Duyệt & Thực Thi"
+  }
+}

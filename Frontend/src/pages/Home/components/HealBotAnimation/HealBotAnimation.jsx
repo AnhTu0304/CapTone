@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import './HealBotAnimation.css';
 
 import eggIdleImg from '../../../../assets/sprites/healbot/healbot_egg_idle.png';
@@ -45,6 +46,7 @@ const PHASES = [
 ];
 
 export const HealBotAnimation = ({ className = '', reducedMotion = false }) => {
+  const { t } = useTranslation('home');
   const [phaseIndex, setPhaseIndex] = useState(reducedMotion ? 3 : 0);
 
   useEffect(() => {
@@ -68,13 +70,13 @@ export const HealBotAnimation = ({ className = '', reducedMotion = false }) => {
     <div
       className={`healbot-stage ${className}`.trim()}
       data-testid="healbot-animation-stage"
-      aria-label="Hoạt ảnh tiến hóa linh vật HealBot Kubernetes Guardian"
+      aria-label={t('healBot.ariaLabel')}
     >
       {/* Pixel Sprite Frame — Pure Character Frames on Section Background */}
       <div className={`healbot-sprite-frame healbot-frame-${currentPhase.id}`}>
         <img
           src={currentPhase.image}
-          alt={currentPhase.alt}
+          alt={t(`healBot.alts.${currentPhase.id}`, { defaultValue: currentPhase.alt })}
           className={`healbot-pixel-img ${isDissolve ? 'healbot-img-dissolve' : ''}`}
           data-testid="healbot-sprite-image"
         />

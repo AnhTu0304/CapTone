@@ -1,8 +1,10 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ShieldCheck, Bot, Users, Cpu, Check, Terminal, Layers, ArrowRight } from 'lucide-react';
 import './OnboardingWorkflowSection.css';
 
 export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
+  const { t } = useTranslation('home');
   const handleNav = (e, path) => {
     e.preventDefault();
     if (onNavigate) {
@@ -17,17 +19,16 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
     <section
       className={`onboarding-workflow-section ${className}`.trim()}
       data-testid="onboarding-workflow-section"
-      aria-label="Quy trình 4 bước thiết lập và khởi chạy SelfHeal"
+      aria-label={t('onboardingWorkflow.ariaLabel')}
     >
       {/* ================= HEADER BLOCK ================= */}
       <div className="ows-header-container">
         <div className="ows-header-flex">
           <div className="ows-header-left">
-            <span className="ows-label-badge">[ Quy Trình ]</span>
-            <h2 className="ows-heading">Quy trình thiết lập &amp; Khởi chạy trong 4 bước</h2>
+            <span className="ows-label-badge">{t('onboardingWorkflow.badge')}</span>
+            <h2 className="ows-heading">{t('onboardingWorkflow.heading')}</h2>
             <p className="ows-subtitle">
-              Được thiết kế tối ưu cho kỹ sư Kubernetes, SelfHeal kết nối liền mạch vào hạ tầng của bạn chỉ
-              trong vài phút mà không làm gián đoạn hệ thống.
+              {t('onboardingWorkflow.subtitle')}
             </p>
           </div>
 
@@ -36,7 +37,7 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
             onClick={(e) => handleNav(e, '/login')}
             className="ows-header-btn"
           >
-            <span>Bắt đầu ngay</span>
+            <span>{t('onboardingWorkflow.cta')}</span>
           </a>
         </div>
       </div>
@@ -47,7 +48,7 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
         <div className="ows-ruler-track" />
 
         {/* Centered Neon Lime Badge aligned right in the middle between the 2 lines */}
-        <span className="ows-neon-pill">CÁC BƯỚC THIẾT LẬP &amp; VẬN HÀNH WORKFLOW</span>
+        <span className="ows-neon-pill">{t('onboardingWorkflow.bandPill')}</span>
 
         {/* Bottom Full-Width Horizontal Dashed Guideline */}
         <div className="ows-band-bottom-line" />
@@ -77,8 +78,8 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
                   {/* Form Mockup */}
                   <div className="ows-mockup-org">
                     <div className="ows-mockup-header-bar">
-                      <span>Tổ chức / Workspace</span>
-                      <span className="ows-pill-active">Sẵn sàng</span>
+                      <span>{t('onboardingWorkflow.steps.step1.orgHeader')}</span>
+                      <span className="ows-pill-active">{t('onboardingWorkflow.steps.step1.ready')}</span>
                     </div>
                     <div className="ows-form-row">
                       <span>Org Name:</span>
@@ -99,10 +100,9 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
 
             <div className="ows-card-info">
               <span className="ows-step-num">01</span>
-              <h3 className="ows-card-title">Tạo tổ chức &amp; môi trường</h3>
+              <h3 className="ows-card-title">{t('onboardingWorkflow.steps.step1.title')}</h3>
               <p className="ows-card-desc">
-                Khởi tạo workspace riêng biệt cho nhóm, khai báo cụm Kubernetes và thiết lập các biến môi
-                trường ban đầu an toàn.
+                {t('onboardingWorkflow.steps.step1.desc')}
               </p>
             </div>
           </article>
@@ -143,10 +143,9 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
 
             <div className="ows-card-info">
               <span className="ows-step-num">02</span>
-              <h3 className="ows-card-title">Kết nối SelfHeal Agent</h3>
+              <h3 className="ows-card-title">{t('onboardingWorkflow.steps.step2.title')}</h3>
               <p className="ows-card-desc">
-                Cài đặt agent siêu nhẹ qua Helm chart hoặc DaemonSet, tự động thu thập telemetry và đồng bộ
-                metric theo thời gian thực.
+                {t('onboardingWorkflow.steps.step2.desc')}
               </p>
             </div>
           </article>
@@ -171,7 +170,7 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
                   {/* Members Mockup */}
                   <div className="ows-mockup-invite">
                     <div className="ows-mockup-header-bar">
-                      <span>Đội ngũ SRE &amp; DevOps</span>
+                      <span>{t('onboardingWorkflow.steps.step3.header')}</span>
                       <Users size={12} color="#555368" />
                     </div>
                     <div className="ows-member-row">
@@ -193,10 +192,9 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
 
             <div className="ows-card-info">
               <span className="ows-step-num">03</span>
-              <h3 className="ows-card-title">Mời thành viên vào tổ chức</h3>
+              <h3 className="ows-card-title">{t('onboardingWorkflow.steps.step3.title')}</h3>
               <p className="ows-card-desc">
-                Thêm đồng đội vào workspace, phân quyền RBAC minh bạch để cùng theo dõi trạng thái hệ thống
-                và phối hợp khắc phục.
+                {t('onboardingWorkflow.steps.step3.desc')}
               </p>
             </div>
           </article>
@@ -234,10 +232,9 @@ export const OnboardingWorkflowSection = ({ className = '', onNavigate }) => {
 
             <div className="ows-card-info">
               <span className="ows-step-num">04</span>
-              <h3 className="ows-card-title">Quản lý người dùng &amp; Policy AI</h3>
+              <h3 className="ows-card-title">{t('onboardingWorkflow.steps.step4.title')}</h3>
               <p className="ows-card-desc">
-                Cấu hình chính sách tự hành tất định, ma trận phân quyền và thiết lập chốt chặn phê duyệt
-                con người (HITL) khi có rủi ro cao.
+                {t('onboardingWorkflow.steps.step4.desc')}
               </p>
             </div>
           </article>

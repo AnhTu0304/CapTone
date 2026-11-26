@@ -1,9 +1,11 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowRight, ShieldCheck } from 'lucide-react';
 import './HumanControlSection.css';
 import { ControlledSelfHealingStage } from './ControlledSelfHealingStage';
 
 export const HumanControlSection = ({ className = '', onNavigate }) => {
+  const { t } = useTranslation('home');
   const handleNav = (e, path) => {
     e.preventDefault();
     if (onNavigate) {
@@ -19,21 +21,20 @@ export const HumanControlSection = ({ className = '', onNavigate }) => {
       id="human-approval"
       className={`human-control-section ${className}`.trim()}
       data-testid="human-control-section"
-      aria-label="Tự hành thông minh, Con người kiểm soát"
+      aria-label={t('humanControl.ariaLabel')}
     >
       <div className="hcs-header-container">
-        <span className="hcs-label-badge">[ Chính Sách & Xác Minh ]</span>
-        <h2 className="hcs-heading">Tự hành thông minh, Con người kiểm soát</h2>
+        <span className="hcs-label-badge">{t('humanControl.badge')}</span>
+        <h2 className="hcs-heading">{t('humanControl.heading')}</h2>
         <p className="hcs-subtitle">
-          SelfHeal vận hành tự động trong ranh giới an toàn tuyệt đối, tự động tạm dừng để bạn phê duyệt
-          trước các hành động có rủi ro cao.
+          {t('humanControl.subtitle')}
         </p>
         <a
           href="/guide"
           onClick={(e) => handleNav(e, '/guide')}
           className="hcs-cta-btn"
         >
-          <span>Khám phá Human-in-the-Loop</span>
+          <span>{t('humanControl.cta')}</span>
           <ArrowRight size={16} />
         </a>
       </div>

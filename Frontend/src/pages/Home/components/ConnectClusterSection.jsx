@@ -1,8 +1,10 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import HealBotAnimation from './HealBotAnimation';
 import './ConnectClusterSection.css';
 
 export const ConnectClusterSection = ({ className = '', onNavigate }) => {
+  const { t } = useTranslation('home');
   const handleNav = (e, path) => {
     e.preventDefault();
     if (onNavigate) {
@@ -17,7 +19,7 @@ export const ConnectClusterSection = ({ className = '', onNavigate }) => {
     <section
       className={`connect-cluster-section ${className}`.trim()}
       data-testid="connect-cluster-section"
-      aria-label="Kết nối môi trường Kubernetes với SelfHeal"
+      aria-label={t('connectCluster.ariaLabel')}
     >
       {/* Greptile-Inspired Vertical Architectural Background Grid */}
       <div className="ccs-bg-grid" data-testid="ccs-bg-grid" aria-hidden="true">
@@ -34,7 +36,7 @@ export const ConnectClusterSection = ({ className = '', onNavigate }) => {
           {/* ================= LEFT COLUMN ================= */}
           <div className="ccs-left-col">
             <h2 className="ccs-title">
-              SelfHeal xây dựng lớp tự phục hồi hạ tầng để bạn an tâm phát triển sản phẩm.
+              {t('connectCluster.title')}
             </h2>
 
             {/* Dual-Hexagon Connected Pill Button Group */}
@@ -44,7 +46,7 @@ export const ConnectClusterSection = ({ className = '', onNavigate }) => {
                 onClick={(e) => handleNav(e, '/guide')}
                 className="ccs-btn-left"
               >
-                <span>Xem hướng dẫn</span>
+                <span>{t('connectCluster.guideBtn')}</span>
               </a>
 
               <a
@@ -52,7 +54,7 @@ export const ConnectClusterSection = ({ className = '', onNavigate }) => {
                 onClick={(e) => handleNav(e, '/login')}
                 className="ccs-btn-right"
               >
-                <span>Bắt đầu ngay</span>
+                <span>{t('connectCluster.startBtn')}</span>
               </a>
             </div>
           </div>

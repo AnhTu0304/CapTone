@@ -1,0 +1,136 @@
+{
+  "header": {
+    "ariaMainNav": "SelfHeal main navigation bar",
+    "ariaPrimaryNav": "Primary navigation",
+    "ariaHome": "SelfHeal Homepage",
+    "ariaLangSwitcher": "Switch language",
+    "ariaOpenMobileMenu": "Open mobile menu",
+    "nav": {
+      "guide": "GUIDE",
+      "features": "FEATURES",
+      "about": "ABOUT",
+      "docs": "DOCS"
+    },
+    "lang": {
+      "viName": "Tiếng Việt",
+      "enName": "English",
+      "viCode": "VI",
+      "enCode": "EN"
+    },
+    "auth": {
+      "dashboard": "Dashboard",
+      "dashboardTitle": "Go to Dashboard",
+      "goToDashboard": "Go to Dashboard",
+      "logout": "Sign out",
+      "login": "Sign in",
+      "loginTitle": "Sign in to your account",
+      "register": "Sign up",
+      "registerTitle": "Create an account",
+      "defaultUser": "User"
+    }
+  },
+  "megaMenu": {
+    "ariaLabel": "SelfHeal Resources Menu",
+    "items": {
+      "docs": {
+        "title": "Documentation & Guide",
+        "description": "Installation steps, agent configuration, and platform reference docs."
+      },
+      "terms": {
+        "title": "Terms & Conditions",
+        "description": "Terms of use and platform service policies."
+      },
+      "contact": {
+        "title": "Contact & Consultation",
+        "description": "Connect directly with the SelfHeal engineering and support team."
+      },
+      "security": {
+        "title": "System Security",
+        "description": "Multi-layered security architecture, access control, and K8s infrastructure protection."
+      },
+      "privacy": {
+        "title": "Privacy Policy",
+        "description": "Rules for collecting, processing, and protecting personal and enterprise data."
+      },
+      "about": {
+        "title": "About SelfHeal",
+        "description": "Learn about our mission, self-healing architecture, and engineering team."
+      }
+    }
+  },
+  "mobileNav": {
+    "ariaClose": "Close menu",
+    "nav": {
+      "guide": "Guide",
+      "features": "Features",
+      "about": "About",
+      "docs": "Docs"
+    },
+    "docsItems": {
+      "guide": "Documentation & guide",
+      "terms": "Terms & conditions",
+      "contact": "Contact & consultation",
+      "privacy": "Privacy & data security",
+      "community": "Community & GitHub",
+      "about": "About SelfHeal"
+    }
+  },
+  "footer": {
+    "ariaLabel": "SelfHeal system footer",
+    "platform": {
+      "aria": "Platform",
+      "title": "PLATFORM",
+      "overview": "OVERVIEW",
+      "monitoring": "INFRASTRUCTURE MONITORING",
+      "prediction": "AI PREDICTION",
+      "rca": "ROOT CAUSE ANALYSIS",
+      "selfHealing": "SELF-HEALING ENGINE",
+      "humanApproval": "HUMAN APPROVAL"
+    },
+    "resources": {
+      "aria": "Resources",
+      "title": "RESOURCES",
+      "guide": "DOCUMENTATION",
+      "getStarted": "GET STARTED",
+      "installAgent": "INSTALL AGENT",
+      "about": "ABOUT PROJECT"
+    },
+    "support": {
+      "aria": "Support and Socials",
+      "title": "SUPPORT",
+      "contact": "CONTACT",
+      "faq": "FAQ",
+      "feedback": "SEND FEEDBACK",
+      "security": "SYSTEM SECURITY",
+      "privacy": "PRIVACY POLICY",
+      "terms": "TERMS OF SERVICE",
+      "reportIssue": "REPORT AN ISSUE",
+      "socialsTitle": "SOCIALS"
+    },
+    "bottom": {
+      "arch": "SELFHEAL SYSTEM ARCHITECTURE",
+      "k8s": "AUTONOMOUS KUBERNETES INFRASTRUCTURE",
+      "spec": "K8S 1.28+ READY",
+      "copyright": "© {{year}} SELFHEAL. ALL RIGHTS RESERVED."
+    }
+  },
+  "app": {
+    "errorBoundary": {
+      "defaultMessage": "An unexpected error occurred while rendering the interface.",
+      "title": "500 — Interface Rendering Error"
+    },
+    "httpToast": {
+      "503Title": "Service Warning — 503",
+      "503Message": "Server is under maintenance or temporarily overloaded.",
+      "429Title": "Rate Limit Warning — 429",
+      "429Message": "Too many requests sent in a short time. Please try again later.",
+      "403Title": "Authorization Warning — 403",
+      "403Message": "Your account does not have permission to access the admin area.",
+      "401Title": "Authentication Warning — 401",
+      "401Message": "Your session has expired or is unauthenticated.",
+      "500Title": "Server Warning — 500",
+      "500Message": "The server encountered an internal processing error."
+    },
+    "authGuardLoading": "Verifying your session..."
+  }
+}

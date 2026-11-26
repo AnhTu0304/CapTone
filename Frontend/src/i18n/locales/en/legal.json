@@ -1,0 +1,169 @@
+{
+  "privacy": {
+    "hero": {
+      "title": "Privacy Policy & Data Protection",
+      "subtitle": "SelfHeal's transparent commitment to how we collect, process, and protect personal data and enterprise Kubernetes infrastructure information"
+    },
+    "lastUpdated": "Last updated: November 14, 2026",
+    "intro": "SelfHeal (\"we\", \"the platform\") respects the privacy of users and partner organizations. This policy defines the categories of data collected, processing purposes, technical security safeguards applied, and your rights regarding data when interacting with our admin portal and deploying the SelfHeal Kubernetes Agent.",
+    "s1": {
+      "heading": "1. Introduction & Scope",
+      "p1": "This policy applies to all services provided by SelfHeal, including the web dashboard console, Application Programming Interfaces (APIs), and the K8s Agent installed inside customer cluster environments.",
+      "p2Before": "We operate on the principle of ",
+      "p2Strong": "Data Minimization",
+      "p2After": ": the platform collects only the minimum information essential for observability, Root-Cause Analysis (RCA), and controlled autonomous infrastructure recovery."
+    },
+    "s2": {
+      "heading": "2. Data We Collect",
+      "intro": "To provide infrastructure forecasting and recovery services, SelfHeal classifies ingested data into two core categories:",
+      "accountTitle": "Account & Organization Identity Data",
+      "accountBody": "When registering and managing accounts, we collect user names, email addresses, profile avatars (if any), organization roles, and one-way Bcrypt-hashed passwords. We also record environment identifiers (Environment IDs) and connected Kubernetes cluster names.",
+      "telemetryTitle": "Infrastructure Telemetry Data",
+      "telemetryBody": "The Kubernetes Agent collects technical time-series operational metrics only: CPU, RAM, network bandwidth consumption, Pod replica counts, Workload lifecycle states (such as CrashLoopBackOff or OOMKilled), and Kubernetes Events system logs.",
+      "noBusinessLabel": "Zero Business Payload Guarantee:",
+      "noBusinessBody": " SelfHeal strictly never reads, inspects, or stores business application payload data (database records, user messages, payment details, or internal application files)."
+    },
+    "s3": {
+      "heading": "3. How We Use Information",
+      "intro": "Collected data is strictly used for the following specific technical purposes:",
+      "items": [
+        {
+          "label": "Service Delivery & Maintenance:",
+          "text": " Rendering real-time observability dashboards, managing cluster inventory, and coordinating incident remediation approval flows."
+        },
+        {
+          "label": "AI Inference & Root-Cause Analysis:",
+          "text": " GRU time-series neural networks process CPU/Memory metrics to forecast resource exhaustion trends before incidents occur using de-identified telemetry."
+        },
+        {
+          "label": "Technical Alerting & Notifications:",
+          "text": " Dispatching instant alerts when anomalies are detected or when an engineer's remediation approval is required."
+        }
+      ]
+    },
+    "s4": {
+      "heading": "4. Data Storage & Security Controls",
+      "intro": "We enforce rigorous security standards throughout the entire data lifecycle:",
+      "items": [
+        {
+          "label": "Multi-Tenant Isolation:",
+          "text": " Data between organizations and environments is strictly separated logically or physically in PostgreSQL, eliminating cross-tenant access risks."
+        },
+        {
+          "label": "End-to-End Encryption in Transit:",
+          "text": " All communication between web browsers, API backends, and the Kubernetes Agent is secured via HTTPS and secure WebSockets (wss:// over TLS)."
+        },
+        {
+          "label": "Automated Sensitive Field Redaction:",
+          "text": " Credentials such as auth keys, tokens, and passwords are automatically masked as [REDACTED] before writing to operational logs."
+        }
+      ]
+    },
+    "s5": {
+      "heading": "5. Information Sharing & Disclosure",
+      "noSellLabel": "Zero Data Selling Policy:",
+      "noSellBody": " SelfHeal affirms that we never sell, rent, or monetize customer personal data or infrastructure telemetry to any third party for advertising.",
+      "p2": "Information is shared only when strictly required with core infrastructure sub-processors (such as transactional email or hosting providers) under binding confidentiality agreements, or when legally compelled by valid court or regulatory orders."
+    },
+    "s6": {
+      "heading": "6. Enterprise & User Rights",
+      "intro": "You retain full authority over your data on the SelfHeal platform:",
+      "items": [
+        {
+          "label": "Right to Access & Update:",
+          "text": " Users may inspect and update personal profile details or organization configurations through Settings."
+        },
+        {
+          "label": "Right to Erasure:",
+          "text": " Administrators may request deletion of their organization and all associated historical telemetry from production systems."
+        },
+        {
+          "label": "Right to Revoke Agent Tokens:",
+          "text": " Organizations can revoke Agent Tokens anytime from the dashboard to disconnect the Agent from SelfHeal immediately."
+        }
+      ]
+    },
+    "s7": {
+      "heading": "7. Cookies & Session Management",
+      "body": "SelfHeal uses strictly essential technical cookies solely to authenticate and maintain secure user sessions (JWT session). We do not plant cross-site behavioral tracking cookies or third-party advertising cookies."
+    },
+    "s8": {
+      "heading": "8. Contact & Privacy Inquiries",
+      "before": "If you have questions, privacy rights requests, or feedback regarding our data protection policy, please contact our privacy team directly at: ",
+      "after": ". We commit to responding promptly to all valid requests."
+    }
+  },
+  "terms": {
+    "hero": {
+      "title": "Terms of Service & System Usage",
+      "subtitle": "Operational standards, liability boundaries, and safety commitments when deploying SelfHeal's autonomous infrastructure healing platform for enterprise clusters"
+    },
+    "lastUpdated": "Last updated: November 14, 2026",
+    "intro": "Welcome to SelfHeal (\"we\", \"the platform\"). These Terms of Service (\"Terms\") govern the rights, obligations, and legal responsibilities between your organization and SelfHeal when accessing the admin console, using our APIs, or connecting the SelfHeal Kubernetes Agent to your infrastructure.",
+    "s1": {
+      "heading": "1. Introduction & Acceptance of Terms",
+      "p1": "SelfHeal provides an AI-Driven Proactive Self-Healing and observability solution tailored for small and medium enterprises (SMEs), combining time-series telemetry forecasting and containerized remediation orchestration across Docker and Kubernetes.",
+      "p2": "By registering an account, signing into the dashboard, or connecting the K8s Agent to a cluster, you confirm that you have read, understood, and agree to be bound by these Terms and our Privacy Policy. If accepting on behalf of a company or organization, you represent that you hold legal authority to bind that entity."
+    },
+    "s2": {
+      "heading": "2. License & Scope of Use",
+      "p1": "Subject to these Terms, SelfHeal grants you a limited, revocable, non-exclusive, non-transferable Software-as-a-Service (SaaS) license solely to monitor and heal your organization's internal infrastructure.",
+      "prohibitedHeading": "Prohibited Conduct",
+      "prohibitedList": [
+        "Reverse-engineering, decompiling, or attempting to extract proprietary source code of our ML models (GRU Neural Network), Root-Cause Analysis (RCA) algorithms, or SelfHeal Agent.",
+        "Abusing APIs, distributing malware, or conducting denial-of-service attacks to bypass rate limits and gateway safeguards.",
+        "Using the platform to monitor, harvest telemetry from, or manipulate infrastructure clusters that you do not own or lack legal administrative authorization to manage.",
+        "Reselling, sub-leasing, redistributing, or sublicensing the service to third parties without prior written consent from SelfHeal."
+      ]
+    },
+    "s3": {
+      "heading": "3. Intellectual Property & Customer Data",
+      "customerLabel": "Customer Data:",
+      "customerBody": " Customers retain all intellectual property rights and control over application source code, service configurations, Secrets/ConfigMaps, and cluster telemetry. SelfHeal claims no ownership over your data and processes it solely to deliver analytics and automation.",
+      "selfhealLabel": "SelfHeal Property:",
+      "selfhealBody": " All trademarks, visual UI designs, platform codebases, dashboards, SelfHeal Agent binaries, documentation, and AI forecasting models remain the exclusive intellectual property of SelfHeal protected under applicable IP laws."
+    },
+    "s4": {
+      "heading": "4. K8s Agent Deployment & Infrastructure Responsibilities",
+      "rbacLabel": "Least Privilege RBAC Principle:",
+      "rbacBody": " The SelfHeal Agent is designed to operate with minimal necessary Kubernetes permissions. Customers are responsible for reviewing and applying the provided ClusterRole and RoleBinding manifests so the Agent is not granted excessive cluster privileges.",
+      "keysHighlight": "Secret & Credential Management: Customers are responsible for safeguarding Agent Tokens and JWT credentials. If token exposure is suspected, customers must revoke the token immediately via the console or notify the SelfHeal security team.",
+      "costLabel": "Infrastructure Resource Costs:",
+      "costBody": " Customers bear responsibility for cloud hardware compute costs (CPU, Memory, Network egress) consumed by the Agent and approved remediation actions (scaling, restarts) on customer clusters."
+    },
+    "s5": {
+      "heading": "5. AI Features & Human-in-the-Loop (HITL) Approval",
+      "aiLabel": "Nature of AI Recommendations:",
+      "aiBody": " Resource exhaustion forecasts and self-healing recommendations are computed by GRU neural network models over historical patterns. While accuracy is continuously optimized, AI predictions serve as technical decision support and do not guarantee prevention of 100% of force-majeure failures.",
+      "hitlLabel": "Human-in-the-Loop (HITL) Gate:",
+      "hitlBody": " To preserve maximum safety across enterprise infrastructure, high-impact remediation operations (such as Deployment restarts, Pod scaling, or runtime patches) require deliberate approval by your operations engineers in the dashboard, except for policies you explicitly authorize for full automation."
+    },
+    "s6": {
+      "heading": "6. Limitation of Liability & Disclaimer of Warranties",
+      "asIsLabel": "Provided \"As Is\":",
+      "asIsBody": " The service is provided on an \"as is\" and \"as available\" basis. SelfHeal disclaims all implied warranties that the service will be completely uninterrupted, error-free, or compatible with every custom Kubernetes distribution.",
+      "exclusionLabel": "Exclusion of Consequential Damages:",
+      "exclusionBody": " To the maximum extent permitted by law, SelfHeal shall not be liable for indirect, special, incidental, or punitive damages, including production data loss, business interruption, lost profits, or recovery costs arising from remediation decisions approved by the customer.",
+      "capLabel": "Aggregate Liability Cap:",
+      "capBody": " SelfHeal's total cumulative liability for any claim arising from or relating to the service shall not exceed the total fees actually paid by you to SelfHeal during the six (6) months preceding the event giving rise to liability."
+    },
+    "s7": {
+      "heading": "7. Suspension & Termination",
+      "suspendLabel": "Right to Suspend:",
+      "suspendBody": " SelfHeal reserves the right to suspend or terminate access at any time if:",
+      "suspendList": [
+        "You materially breach any provision of these Terms.",
+        "Your usage introduces cybersecurity risks or degrades stability across shared SelfHeal control-plane services.",
+        "Recurring service fees remain unpaid beyond overdue reminder notices."
+      ],
+      "effectLabel": "Effect of Termination:",
+      "effectBody": " Upon termination, you must uninstall all SelfHeal Agents from your clusters. Dashboard and API access are revoked immediately, and historical data retention or deletion follows our Privacy Policy."
+    },
+    "s8": {
+      "heading": "8. Governing Law & Dispute Resolution",
+      "p1": "These Terms of Service are governed by and construed in accordance with the laws of the Socialist Republic of Vietnam. Any dispute shall first be addressed through good-faith negotiation; if unresolved within thirty (30) days, it shall be submitted to the competent Courts in Ho Chi Minh City.",
+      "p2": "For legal feedback, inquiries, or official notices regarding these Terms of Service, please contact our legal desk via email:",
+      "emailLabel": "Legal & Compliance Email:"
+    }
+  }
+}

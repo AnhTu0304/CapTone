@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowRight, Loader2, ShieldCheck, ArrowLeft } from 'lucide-react';
 import Logo from '../../components/common/Logo';
 import {
@@ -12,6 +13,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 export const LoginPage = ({ onNavigate }) => {
+  const { t } = useTranslation('auth');
   const { login, loginWithGoogle, verify2FALogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -59,9 +61,9 @@ export const LoginPage = ({ onNavigate }) => {
       handleRedirect();
     } catch (err) {
       if (err.message === 'Failed to fetch' || err.message?.toLowerCase().includes('fetch')) {
-        setError('Không thể kết nối đến máy chủ Backend (Port 5005). Vui lòng kiểm tra lại dịch vụ Backend.');
+        setError(t('login.errors.backendUnreachable'));
       } else {
-        setError(err.message || 'Đăng nhập không thành công. Vui lòng thử lại.');
+        setError(err.message || t('login.errors.loginFailed'));
       }
       setLoading(false);
     }
@@ -70,7 +72,7 @@ export const LoginPage = ({ onNavigate }) => {
   const handleVerify2FA = async (e) => {
     e.preventDefault();
     if (!otpCode.trim()) {
-      setError('Vui lòng nhập mã xác thực OTP 6 số hoặc mã dự phòng');
+      setError(t('login.twoFactor.missingOtp'));
       return;
     }
     setError('');
@@ -82,7 +84,7 @@ export const LoginPage = ({ onNavigate }) => {
       }
       handleRedirect();
     } catch (err) {
-      setError(err.message || 'Mã xác thực 2FA không chính xác hoặc đã hết hạn');
+      setError(err.message || t('login.twoFactor.invalidOtp'));
       setLoading(false);
     }
   };
@@ -105,7 +107,7 @@ export const LoginPage = ({ onNavigate }) => {
         } else if (attempts >= 15) {
           clearInterval(interval);
           setLoading(false);
-          setError('Không thể kết nối dịch vụ Google. Vui lòng tắt trình chặn quảng cáo nếu có và tải lại trang.');
+          setError(t('login.errors.googleConnectFailed'));
         }
       }, 200);
       return;
@@ -118,13 +120,13 @@ export const LoginPage = ({ onNavigate }) => {
         callback: async (response) => {
           if (response.error) {
             setLoading(false);
-            setError('Đăng nhập Google không thành công: ' + response.error);
+            setError(t('login.errors.googleFailedPrefix') + response.error);
             return;
           }
 
           if (!response.access_token) {
             setLoading(false);
-            setError('Không nhận được mã xác thực từ Google');
+            setError(t('login.errors.googleNoToken'));
             return;
           }
 
@@ -134,7 +136,7 @@ export const LoginPage = ({ onNavigate }) => {
             await authFn(response.access_token);
             handleRedirect();
           } catch (err) {
-            setError(err.message || 'Đăng nhập Google không thành công. Vui lòng thử lại.');
+            setError(err.message || t('login.errors.googleRetry'));
             setLoading(false);
           }
         },
@@ -142,18 +144,16 @@ export const LoginPage = ({ onNavigate }) => {
           setLoading(false);
           if (err?.type === 'popup_closed') return;
           if (err?.type === 'popup_blocked_by_browser') {
-            setError(
-              'Trình duyệt đã chặn cửa sổ đăng nhập Google. Vui lòng nhấn vào biểu tượng ổ khóa trên thanh địa chỉ để cho phép popup và thử lại.'
-            );
+            setError(t('login.errors.googlePopupBlocked'));
             return;
           }
-          setError(err?.message || 'Không thể mở cửa sổ Google. Vui lòng kiểm tra chặn popup trên trình duyệt.');
+          setError(err?.message || t('login.errors.googlePopupFailed'));
         },
       });
 
       tokenClient.requestAccessToken({ prompt: 'select_account' });
     } catch (err) {
-      setError('Không thể khởi tạo phiên đăng nhập Google: ' + err.message);
+      setError(t('login.errors.googleInitFailedPrefix') + err.message);
     }
   };
 
@@ -165,10 +165,10 @@ export const LoginPage = ({ onNavigate }) => {
 
       <div style={{ textAlign: 'center', marginBottom: '36px' }}>
         <h1 style={AUTH_HEADING_STYLE}>
-          Đăng nhập tài khoản
+          {t('login.title')}
         </h1>
         <p style={{ fontSize: '0.875rem', color: '#4B5563', fontFamily: 'var(--font-body)', margin: 0 }}>
-          Chưa có tài khoản?{' '}
+          {t('login.noAccount')}{' '}
           <a
             href="/register"
             className="auth-link"
@@ -178,7 +178,7 @@ export const LoginPage = ({ onNavigate }) => {
             }}
             style={{ fontWeight: 500 }}
           >
-            Đăng ký
+            {t('login.registerLink')}
           </a>
         </p>
       </div>
@@ -202,10 +202,10 @@ export const LoginPage = ({ onNavigate }) => {
               <ShieldCheck size={26} />
             </div>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
-              Xác thực Hai Yếu Tố (2FA)
+              {t('login.twoFactor.heading')}
             </h3>
             <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-              Nhập mã xác thực 6 số từ ứng dụng Google Authenticator hoặc mã dự phòng để hoàn tất đăng nhập.
+              {t('login.twoFactor.subtitle')}
             </p>
           </div>
 
@@ -237,7 +237,7 @@ export const LoginPage = ({ onNavigate }) => {
                 textAlign: 'center',
               }}
             >
-              Mã OTP hoặc Mã dự phòng
+              {t('login.twoFactor.otpLabel')}
             </label>
             <input
               id="login-2fa-otp"
@@ -285,7 +285,7 @@ export const LoginPage = ({ onNavigate }) => {
               gap: '8px',
             }}
           >
-            {loading ? <Loader2 size={18} className="animate-spin" /> : <span>Xác Nhận Đăng Nhập</span>}
+            {loading ? <Loader2 size={18} className="animate-spin" /> : <span>{t('login.twoFactor.submit')}</span>}
           </button>
 
           <button
@@ -308,7 +308,7 @@ export const LoginPage = ({ onNavigate }) => {
               padding: '6px',
             }}
           >
-            <ArrowLeft size={16} /> Quay lại đăng nhập
+            <ArrowLeft size={16} /> {t('login.twoFactor.backToLogin')}
           </button>
         </form>
       ) : (
@@ -331,16 +331,16 @@ export const LoginPage = ({ onNavigate }) => {
 
         <div>
           <label htmlFor="login-email" style={AUTH_LABEL_STYLE}>
-            Email công việc hoặc Tên tài khoản
+            {t('login.emailLabel')}
           </label>
           <input
             id="login-email"
             type="text"
             required
-            aria-label="Email công việc hoặc Tên tài khoản"
+            aria-label={t('login.emailLabel')}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="ten@congty.com"
+            placeholder={t('login.emailPlaceholder')}
             style={AUTH_INPUT_STYLE}
             onFocus={(e) => {
               e.target.style.borderColor = '#111827';
@@ -356,7 +356,7 @@ export const LoginPage = ({ onNavigate }) => {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <label htmlFor="login-password" style={{ ...AUTH_LABEL_STYLE, marginBottom: 0 }}>
-              Mật khẩu
+              {t('login.passwordLabel')}
             </label>
             <a
               href="/forgot-password"
@@ -371,14 +371,14 @@ export const LoginPage = ({ onNavigate }) => {
                 fontFamily: 'var(--font-body)',
               }}
             >
-              Quên mật khẩu?
+              {t('login.forgotPassword')}
             </a>
           </div>
           <input
             id="login-password"
             type="password"
             required
-            aria-label="Mật khẩu"
+            aria-label={t('login.passwordLabel')}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••••••"
@@ -413,17 +413,17 @@ export const LoginPage = ({ onNavigate }) => {
             {loading ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                <span>Đang đăng nhập...</span>
+                <span>{t('login.submitting')}</span>
               </>
             ) : (
               <>
-                <span>Đăng nhập</span>
+                <span>{t('login.submit')}</span>
                 <ArrowRight size={17} strokeWidth={2.2} />
               </>
             )}
           </button>
 
-          <GoogleAuthButton label="Đăng nhập với Google" onClick={handleGoogleSignIn} disabled={loading} />
+          <GoogleAuthButton label={t('login.googleBtn')} onClick={handleGoogleSignIn} disabled={loading} />
         </div>
       </form>
       )}

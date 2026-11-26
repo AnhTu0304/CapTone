@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Menu, ChevronDown, LayoutDashboard, LogOut, Shield, Globe } from 'lucide-react';
 import Logo from '../common/Logo';
 import ResourcesMegaMenu from './ResourcesMegaMenu';
 import MobileNavigation from './MobileNavigation';
 import useScrollHeader from '../../hooks/useScrollHeader';
 import { useAuth } from '../../context/AuthContext';
+import { normalizeLanguage } from '../../i18n';
 import './Header.css';
 
 export const Header = ({ currentPath = '/', onNavigate }) => {
+  const { t, i18n } = useTranslation('common');
   const isScrolled = useScrollHeader(25);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -15,7 +18,8 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
   const [resourcesMenuOpen, setResourcesMenuOpen] = useState(false);
   const resourcesMenuRef = useRef(null);
   const megaMenuDropdownRef = useRef(null);
-  const [currentLang, setCurrentLang] = useState('VI');
+  const currentLangCode = normalizeLanguage(i18n.resolvedLanguage || i18n.language);
+  const currentLang = currentLangCode === 'en' ? 'EN' : 'VI';
 
   const userDropdownRef = useRef(null);
   const langDropdownRef = useRef(null);
@@ -57,10 +61,10 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
   }, []);
 
   const navLinks = [
-    { label: 'HƯỚNG DẪN', path: '/guide', hasDropdown: false },
-    { label: 'TÍNH NĂNG', path: '/features', hasDropdown: false },
-    { label: 'GIỚI THIỆU', path: '/about', hasDropdown: false },
-    { label: 'TÀI LIỆU', path: '/docs', hasDropdown: true },
+    { key: 'guide', label: t('header.nav.guide'), path: '/guide', hasDropdown: false },
+    { key: 'features', label: t('header.nav.features'), path: '/features', hasDropdown: false },
+    { key: 'about', label: t('header.nav.about'), path: '/about', hasDropdown: false },
+    { key: 'docs', label: t('header.nav.docs'), path: '/docs', hasDropdown: true },
   ];
 
   const handleLinkClick = (e, path) => {
@@ -86,7 +90,8 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
   };
 
   const selectLanguage = (lang) => {
-    setCurrentLang(lang);
+    const targetLang = normalizeLanguage(lang);
+    i18n.changeLanguage(targetLang);
     setLangDropdownOpen(false);
   };
 
@@ -98,7 +103,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
       >
         <header
           className="header-inner-box"
-          aria-label="Thanh điều hướng chính của SelfHeal"
+          aria-label={t('header.ariaMainNav')}
         >
           {/* Technical Corner Crosshairs (+) visible when header contracts on scroll */}
           {isScrolled && (
@@ -123,7 +128,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
               href="/"
               onClick={(e) => handleLinkClick(e, '/')}
               className="header-logo-link"
-              aria-label="SelfHeal Homepage"
+              aria-label={t('header.ariaHome')}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -138,13 +143,13 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
           <div className="header-center-wrapper">
             <nav
               className="header-center-nav"
-              aria-label="Điều hướng chính"
+              aria-label={t('header.ariaPrimaryNav')}
             >
               {navLinks.map((link) => {
                 const isActive = currentPath === link.path;
                 if (link.hasDropdown) {
                   return (
-                    <div key={link.label} ref={resourcesMenuRef} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    <div key={link.key} ref={resourcesMenuRef} style={{ display: 'inline-flex', alignItems: 'center' }}>
                       <button
                         type="button"
                         onClick={(e) => {
@@ -169,7 +174,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                 }
                 return (
                   <a
-                    key={link.label}
+                    key={link.key}
                     href={link.path}
                     onClick={(e) => handleLinkClick(e, link.path)}
                     className={`header-nav-item ${isActive ? 'active' : ''}`}
@@ -189,7 +194,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                 type="button"
                 onClick={() => setLangDropdownOpen(!langDropdownOpen)}
                 className="header-lang-btn"
-                aria-label="Chuyển đổi ngôn ngữ"
+                aria-label={t('header.ariaLangSwitcher')}
                 aria-expanded={langDropdownOpen}
               >
                 <Globe size={14} color="#3D3B4F" aria-hidden="true" />
@@ -201,20 +206,20 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                 <div className="header-lang-dropdown" role="menu">
                   <button
                     type="button"
-                    onClick={() => selectLanguage('VI')}
+                    onClick={() => selectLanguage('vi')}
                     className={`header-lang-option ${currentLang === 'VI' ? 'active' : ''}`}
                     role="menuitem"
                   >
-                    <span>Tiếng Việt</span>
+                    <span>{t('header.lang.viName')}</span>
                     {currentLang === 'VI' && <span>✓</span>}
                   </button>
                   <button
                     type="button"
-                    onClick={() => selectLanguage('EN')}
+                    onClick={() => selectLanguage('en')}
                     className={`header-lang-option ${currentLang === 'EN' ? 'active' : ''}`}
                     role="menuitem"
                   >
-                    <span>English</span>
+                    <span>{t('header.lang.enName')}</span>
                     {currentLang === 'EN' && <span>✓</span>}
                   </button>
                 </div>
@@ -244,10 +249,10 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
                     transition: 'all 0.15s ease',
                   }}
-                  title="Vào Bảng điều khiển"
+                  title={t('header.auth.dashboardTitle')}
                 >
                   <LayoutDashboard size={14} color="var(--color-accent)" />
-                  <span>Bảng điều khiển</span>
+                  <span>{t('header.auth.dashboard')}</span>
                 </a>
 
                 {/* User Capsule & Dropdown */}
@@ -345,7 +350,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                     >
                       <div style={{ padding: '8px 16px 12px', borderBottom: '1px dashed rgba(61, 59, 79, 0.15)' }}>
                         <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-ink)' }}>
-                          {user.full_name || 'Người dùng'}
+                          {user.full_name || t('header.auth.defaultUser')}
                         </div>
                         <div
                           style={{
@@ -398,7 +403,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                           }}
                         >
                           <LayoutDashboard size={15} color="var(--color-primary)" />
-                          <span>Vào Bảng điều khiển</span>
+                          <span>{t('header.auth.goToDashboard')}</span>
                         </a>
                       </div>
 
@@ -423,7 +428,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                         }}
                       >
                         <LogOut size={15} color="#DC2626" />
-                        <span>Đăng xuất</span>
+                        <span>{t('header.auth.logout')}</span>
                       </button>
                     </div>
                   )}
@@ -437,9 +442,9 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                   href="/login"
                   onClick={(e) => handleLinkClick(e, '/login')}
                   className="header-hex-btn-login"
-                  title="Đăng nhập tài khoản"
+                  title={t('header.auth.loginTitle')}
                 >
-                  <span>Đăng nhập</span>
+                  <span>{t('header.auth.login')}</span>
                 </a>
 
                 {/* Button 2: Đăng ký (Vibrant Mint #28E99F) */}
@@ -447,9 +452,9 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
                   href="/register"
                   onClick={(e) => handleLinkClick(e, '/register')}
                   className="header-hex-btn-signup"
-                  title="Đăng ký tài khoản"
+                  title={t('header.auth.registerTitle')}
                 >
-                  <span>Đăng ký</span>
+                  <span>{t('header.auth.register')}</span>
                 </a>
               </div>
             )}
@@ -459,7 +464,7 @@ export const Header = ({ currentPath = '/', onNavigate }) => {
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(true)}
-                aria-label="Mở menu di động"
+                aria-label={t('header.ariaOpenMobileMenu')}
                 style={{
                   background: 'none',
                   border: 'none',

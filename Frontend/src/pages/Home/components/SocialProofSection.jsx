@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowRight } from 'lucide-react';
 import logoPng from '../../../assets/Logo-transparent.png';
 import kubernetesLogo from '../../../assets/kubernetes-logo.png';
@@ -8,6 +9,7 @@ import grafanaLogo from '../../../assets/grafana-icon.png';
 import './SocialProofSection.css';
 
 export const SocialProofSection = ({ onNavigate }) => {
+  const { t } = useTranslation('home');
   const handleCtaClick = (e, path) => {
     e.preventDefault();
     if (onNavigate) {
@@ -41,10 +43,10 @@ export const SocialProofSection = ({ onNavigate }) => {
     <section
       className="social-proof-section"
       data-testid="social-proof-section"
-      aria-label="Hệ sinh thái công cụ cốt lõi và tổng quan nền tảng"
+      aria-label={t('socialProof.sectionAria')}
     >
       {/* ================= 1. HÀNG 4 LOGO CÔNG CỤ CỐT LÕI (FULL-WIDTH TOÀN MÀN HÌNH) ================= */}
-      <div className="sp-tools-block" role="region" aria-label="Các công cụ cốt lõi tích hợp">
+      <div className="sp-tools-block" role="region" aria-label={t('socialProof.toolsAria')}>
         <div className="sp-tools-grid" role="list">
           {coreTools.map((tool) => (
             <div key={tool.name} className="sp-tool-cell" role="listitem">
@@ -82,7 +84,7 @@ export const SocialProofSection = ({ onNavigate }) => {
 
           {/* Tiêu đề trích dẫn mô tả tổng quát dự án */}
           <blockquote className="sp-quote-text">
-            &ldquo;SelfHeal là nền tảng AI tự hành giám sát và dự báo sớm nguy cơ hạ tầng với sự kiểm soát minh bạch của con người.&rdquo;
+            &ldquo;{t('socialProof.quote')}&rdquo;
           </blockquote>
 
 
@@ -92,9 +94,9 @@ export const SocialProofSection = ({ onNavigate }) => {
               href="/features"
               onClick={(e) => handleCtaClick(e, '/features')}
               className="sp-hex-btn"
-              title="Khám phá kiến trúc hệ thống"
+              title={t('socialProof.cta')}
             >
-              <span>Khám phá kiến trúc hệ thống</span>
+              <span>{t('socialProof.cta')}</span>
               <ArrowRight size={16} strokeWidth={2.2} />
             </a>
           </div>

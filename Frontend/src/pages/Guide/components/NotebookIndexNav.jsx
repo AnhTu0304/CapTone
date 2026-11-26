@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Bookmark, Compass } from 'lucide-react';
 
 /**
@@ -11,6 +12,7 @@ export const NotebookIndexNav = ({
   onItemClick,
   className = '',
 }) => {
+  const { t } = useTranslation('guide');
   const [scrollProgress, setScrollProgress] = useState(0);
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export const NotebookIndexNav = ({
   return (
     <nav
       className={`notebook-sticky-nav ${className}`}
-      aria-label="Mục lục sổ tay hướng dẫn"
+      aria-label={t('toc.asideAria')}
       style={{
         position: 'sticky',
         top: '90px',
@@ -43,11 +45,11 @@ export const NotebookIndexNav = ({
       <div className="notebook-nav-header">
         <div className="notebook-nav-badge">
           <Compass size={13} color="#28E99F" />
-          <span>SỔ TAY VẬN HÀNH</span>
+          <span>{t('toc.indexNavBadge')}</span>
         </div>
 
         {/* Reading Progress Indicator */}
-        <div className="notebook-progress-track" title={`Tiến độ đọc: ${Math.round(scrollProgress)}%`}>
+        <div className="notebook-progress-track" title={t('toc.indexNavProgress', { progress: Math.round(scrollProgress) })}>
           <div
             className="notebook-progress-fill"
             style={{ width: `${scrollProgress}%` }}

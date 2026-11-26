@@ -3,9 +3,9 @@ import PixelStatusPage from './PixelStatusPage';
 import { STATUS_PAGE_CONFIGS } from './statusConfigs';
 
 const createStatusPage = (key) => {
-  const cfg = STATUS_PAGE_CONFIGS[key];
+  const { title, message, imageAlt, ...rest } = STATUS_PAGE_CONFIGS[key];
   return function StatusPageComponent(overrides) {
-    return <PixelStatusPage {...cfg} {...overrides} />;
+    return <PixelStatusPage {...rest} statusKey={key} {...overrides} />;
   };
 };
 

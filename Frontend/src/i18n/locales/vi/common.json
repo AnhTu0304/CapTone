@@ -1,0 +1,136 @@
+{
+  "header": {
+    "ariaMainNav": "Thanh điều hướng chính của SelfHeal",
+    "ariaPrimaryNav": "Điều hướng chính",
+    "ariaHome": "SelfHeal Homepage",
+    "ariaLangSwitcher": "Chuyển đổi ngôn ngữ",
+    "ariaOpenMobileMenu": "Mở menu di động",
+    "nav": {
+      "guide": "HƯỚNG DẪN",
+      "features": "TÍNH NĂNG",
+      "about": "GIỚI THIỆU",
+      "docs": "TÀI LIỆU"
+    },
+    "lang": {
+      "viName": "Tiếng Việt",
+      "enName": "English",
+      "viCode": "VI",
+      "enCode": "EN"
+    },
+    "auth": {
+      "dashboard": "Bảng điều khiển",
+      "dashboardTitle": "Vào Bảng điều khiển",
+      "goToDashboard": "Vào Bảng điều khiển",
+      "logout": "Đăng xuất",
+      "login": "Đăng nhập",
+      "loginTitle": "Đăng nhập tài khoản",
+      "register": "Đăng ký",
+      "registerTitle": "Đăng ký tài khoản",
+      "defaultUser": "Người dùng"
+    }
+  },
+  "megaMenu": {
+    "ariaLabel": "Menu Tài nguyên SelfHeal",
+    "items": {
+      "docs": {
+        "title": "Tài Liệu Hướng Dẫn",
+        "description": "Hướng dẫn cài đặt, cấu hình tác tử và tài liệu nền tảng."
+      },
+      "terms": {
+        "title": "Điều Khoản & Điều Kiện",
+        "description": "Điều khoản sử dụng và chính sách dịch vụ nền tảng."
+      },
+      "contact": {
+        "title": "Liên Hệ Tư Vấn",
+        "description": "Kết nối trực tiếp với đội ngũ phát triển và kỹ sư SelfHeal."
+      },
+      "security": {
+        "title": "Bảo Mật Hệ Thống",
+        "description": "Kiến trúc an ninh đa tầng, kiểm soát truy cập và bảo vệ hạ tầng K8s."
+      },
+      "privacy": {
+        "title": "Chính Sách Bảo Mật",
+        "description": "Quy định thu thập, xử lý và bảo vệ dữ liệu cá nhân & thông tin doanh nghiệp."
+      },
+      "about": {
+        "title": "Giới Thiệu SelfHeal",
+        "description": "Tìm hiểu về sứ mệnh, kiến trúc tự phục hồi và đội ngũ phát triển."
+      }
+    }
+  },
+  "mobileNav": {
+    "ariaClose": "Đóng menu",
+    "nav": {
+      "guide": "Hướng dẫn",
+      "features": "Tính năng",
+      "about": "Giới thiệu",
+      "docs": "Tài liệu"
+    },
+    "docsItems": {
+      "guide": "Tài liệu hướng dẫn",
+      "terms": "Điều khoản & Điều kiện",
+      "contact": "Liên hệ tư vấn",
+      "privacy": "Bảo mật & Quyền riêng tư",
+      "community": "Mạng xã hội & Cộng đồng",
+      "about": "Giới thiệu SelfHeal"
+    }
+  },
+  "footer": {
+    "ariaLabel": "Footer hệ thống SelfHeal",
+    "platform": {
+      "aria": "Nền tảng",
+      "title": "NỀN TẢNG",
+      "overview": "TỔNG QUAN",
+      "monitoring": "GIÁM SÁT HẠ TẦNG",
+      "prediction": "DỰ ĐOÁN BẰNG AI",
+      "rca": "PHÂN TÍCH NGUYÊN NHÂN GỐC",
+      "selfHealing": "CƠ CHẾ TỰ PHỤC HỒI",
+      "humanApproval": "PHÊ DUYỆT CỦA CON NGƯỜI"
+    },
+    "resources": {
+      "aria": "Tài nguyên",
+      "title": "TÀI NGUYÊN",
+      "guide": "TÀI LIỆU HƯỚNG DẪN",
+      "getStarted": "BẮT ĐẦU NGAY",
+      "installAgent": "CÀI ĐẶT TÁC TỬ",
+      "about": "GIỚI THIỆU DỰ ÁN"
+    },
+    "support": {
+      "aria": "Hỗ trợ và Mạng xã hội",
+      "title": "HỖ TRỢ",
+      "contact": "LIÊN HỆ",
+      "faq": "CÂU HỎI THƯỜNG GẶP",
+      "feedback": "GỬI PHẢN HỒI",
+      "security": "BẢO MẬT HỆ THỐNG",
+      "privacy": "CHÍNH SÁCH BẢO MẬT",
+      "terms": "ĐIỀU KHOẢN DỊCH VỤ",
+      "reportIssue": "BÁO CÁO SỰ CỐ",
+      "socialsTitle": "MẠNG XÃ HỘI"
+    },
+    "bottom": {
+      "arch": "KIẾN TRÚC HỆ THỐNG SELFHEAL",
+      "k8s": "TỰ CHỦ HẠ TẦNG KUBERNETES",
+      "spec": "CHUẨN K8S 1.28+",
+      "copyright": "© {{year}} SELFHEAL. BẢO LƯU MỌI QUYỀN."
+    }
+  },
+  "app": {
+    "errorBoundary": {
+      "defaultMessage": "Đã xảy ra lỗi không mong muốn khi hiển thị giao diện.",
+      "title": "500 — Lỗi hiển thị giao diện"
+    },
+    "httpToast": {
+      "503Title": "Cảnh báo dịch vụ — 503",
+      "503Message": "Máy chủ đang bảo trì hoặc tạm quá tải.",
+      "429Title": "Cảnh báo giới hạn — 429",
+      "429Message": "Bạn đã gửi quá nhiều yêu cầu trong thời gian ngắn. Vui lòng thử lại sau.",
+      "403Title": "Cảnh báo phân quyền — 403",
+      "403Message": "Tài khoản không có quyền truy cập khu vực quản trị.",
+      "401Title": "Cảnh báo xác thực — 401",
+      "401Message": "Phiên đăng nhập đã hết hạn hoặc chưa xác thực.",
+      "500Title": "Cảnh báo máy chủ — 500",
+      "500Message": "Máy chủ gặp lỗi xử lý nội bộ."
+    },
+    "authGuardLoading": "Đang xác thực phiên làm việc..."
+  }
+}

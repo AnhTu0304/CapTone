@@ -1,0 +1,154 @@
+{
+  "breadcrumb": {
+    "home": "Trang chủ",
+    "current": "Sổ tay Vận hành Kỹ sư"
+  },
+  "hero": {
+    "title": "Sổ Tay Vận Hành Hạ Tầng SelfHeal",
+    "subtitle": "Tài liệu thực địa dành cho kỹ sư SRE và DevOps: Hướng dẫn cấu hình tổ chức, kết nối Kubernetes telemetry, thiết lập chính sách tự phục hồi sự cố tự hành."
+  },
+  "toc": {
+    "mobileToggle": "Mục lục sổ tay ({{count}} chương)",
+    "asideAria": "Mục lục sổ tay hướng dẫn",
+    "navHeading": "Mục Lục Vận Hành",
+    "readingProgress": "TIẾN ĐỘ ĐỌC",
+    "indexNavBadge": "SỔ TAY VẬN HÀNH",
+    "indexNavProgress": "Tiến độ đọc: {{progress}}%"
+  },
+  "sections": [
+    { "id": "sec-01", "title": "01 Bắt đầu nhanh" },
+    { "id": "sec-02", "title": "02 Tạo tổ chức của bạn" },
+    { "id": "sec-03", "title": "03 Thiết lập môi trường" },
+    { "id": "sec-04", "title": "04 Kết nối Kubernetes Cluster" },
+    { "id": "sec-05", "title": "05 Cài đặt SelfHeal Agent" },
+    { "id": "sec-06", "title": "06 Giám sát hạ tầng" },
+    { "id": "sec-07", "title": "07 Hiểu về dự báo AI" },
+    { "id": "sec-08", "title": "08 Xử lý sự cố hạ tầng" },
+    { "id": "sec-09", "title": "09 Tự phục hồi và khôi phục" },
+    { "id": "sec-10", "title": "10 Phê duyệt và kiểm soát" },
+    { "id": "sec-11", "title": "11 Kiểm tra kết quả khôi phục" }
+  ],
+  "ch01": {
+    "desc": "SelfHeal được thiết kế để mang đến khả năng phục hồi hạ tầng tự hành cho các đội ngũ kỹ thuật doanh nghiệp SME mà không gặp phải sự phức tạp hay chi phí đắt đỏ của các nền tảng APM truyền thống. Trước khi kết nối các workload môi trường production, hãy đảm bảo bạn có quyền quản trị cơ bản đối với Kubernetes cluster mục tiêu.",
+    "prereqTitle": "Điều kiện tiên quyết của hệ thống",
+    "prereq1": "Kubernetes cluster phiên bản 1.25+ (EKS, GKE, AKS, K3s hoặc máy chủ vật lý kubeadm).",
+    "prereq2Before": "Công cụ dòng lệnh ",
+    "prereq2After": " đã được cài đặt và cấu hình quyền cluster-admin.",
+    "prereq3Before": "Kết nối mạng chiều ra (outbound) tới ",
+    "prereq3After": " qua cổng 443.",
+    "noticeTitle": "Lưu ý: Không yêu cầu mở cổng Inbound",
+    "noticeBody": "SelfHeal agent vận hành hoàn toàn thông qua luồng WebSocket TLS chiều ra. Bạn tuyệt đối không cần mở bất kỳ cổng tường lửa nào hoặc công khai các endpoint ingress ra bên ngoài."
+  },
+  "ch02": {
+    "desc": "Tổ chức (Organization) là đơn vị cô lập người thuê cấp cao nhất trong SelfHeal. Toàn bộ thành viên đội ngũ, nhật ký kiểm toán và các cluster đều được cách ly nghiêm ngặt trong ranh giới tổ chức của bạn.",
+    "step1Label": "Đăng ký hoặc Đăng nhập:",
+    "step1Text": " Truy cập Cổng Xác thực SelfHeal bằng email doanh nghiệp của bạn.",
+    "step2Label": "Đặt tên Tổ chức:",
+    "step2Before": " Cung cấp định danh công ty hoặc nhóm kỹ thuật (ví dụ: ",
+    "step2After": ").",
+    "step3Label": "Thiết lập Vùng dữ liệu Tuân thủ:",
+    "step3Text": " Chọn khu vực lưu trữ dữ liệu theo quy định (EU, US-East hoặc AP-Southeast).",
+    "noticeTitle": "Kiểm soát truy cập dựa trên vai trò (RBAC)",
+    "noticeBodyBefore": "Tổ chức hỗ trợ các vai trò định sẵn: ",
+    "noticeRole1": "Owner",
+    "noticeRole1Desc": " (Chủ sở hữu), ",
+    "noticeRole2": "SRE Operator",
+    "noticeRole2Desc": " (Có quyền phê duyệt khắc phục sự cố), và ",
+    "noticeRole3": "Auditor",
+    "noticeRole3Desc": " (Chỉ đọc nhật ký kiểm toán)."
+  },
+  "ch03": {
+    "descPart1": "Môi trường thiết lập sự phân tách giữa các giai đoạn vận hành như ",
+    "descPart2": ", và ",
+    "descPart3": ". Quy tắc tự phục hồi và ngưỡng phê duyệt của con người được cấu hình riêng cho từng môi trường.",
+    "prereqTitle": "Khuyến nghị Chính sách Môi trường",
+    "pBefore": "Đối với ",
+    "pMid1": ", hãy bật ",
+    "pAuto": "Khắc phục tự hành toàn phần",
+    "pMid2": " để AI tự động thử nghiệm rollout, khởi động lại pod và co giãn replica mà không cần can thiệp. Đối với ",
+    "pMid3": ", hãy bật ",
+    "pHuman": "Con người phê duyệt",
+    "pAfter": " cho các hành động nhạy cảm."
+  },
+  "ch04": {
+    "p1Before": "Trên bảng điều khiển SelfHeal, điều hướng tới ",
+    "p1Strong": "Clusters → Đăng ký Cluster Mới",
+    "p1Mid": ". Nhập định danh duy nhất (ví dụ: ",
+    "p1After": ") và chọn Môi trường tương ứng.",
+    "p2Before": "Sau khi đăng ký, hệ thống sẽ tạo một ",
+    "p2Strong": "Agent Token",
+    "p2After": " mật mã duy nhất dùng để ký số và xác thực toàn bộ dữ liệu đo từ xa của cụm cluster."
+  },
+  "ch05": {
+    "descBefore": "Agent được triển khai thông qua Helm hoặc file Kubernetes manifest tiêu chuẩn vào namespace riêng biệt ",
+    "descAfter": ".",
+    "codeTitle": "Cài đặt qua Helm v3",
+    "code": "# 1. Thêm kho lưu trữ SelfHeal Helm\nhelm repo add selfheal https://charts.selfheal.infra\nhelm repo update\n\n# 2. Triển khai agent với token cluster\nhelm install selfheal-agent selfheal/k8s-agent \\\n  --namespace selfheal-system \\\n  --create-namespace \\\n  --set clusterToken=\"sh_live_89f02c91a7e4b\" \\\n  --set clusterName=\"k8s-prod-us-east-1\"",
+    "noticeTitle": "Phạm vi Phân quyền RBAC Tối Thiểu",
+    "noticeBody": "Agent chỉ áp dụng ClusterRole có phạm vi giới hạn quyền ghi nghiêm ngặt vào các nhóm API được định nghĩa trước (Pods, Deployments, ReplicaSets). Agent tuyệt đối không có quyền truy cập vào Secrets hay các ConfigMap chứa dữ liệu nhạy cảm."
+  },
+  "ch06": {
+    "p1": "Ngay khi kết nối thành công, agent sẽ bắt đầu truyền tải các chỉ số tài nguyên tần suất cao (CPU, bộ nhớ thường trú, disk I/O, rớt gói mạng) và các sự kiện Kubernetes control-plane theo chu kỳ mỗi 10 giây.",
+    "p2": "Kiểm tra tín hiệu nhịp tim (heartbeat) của agent trực tiếp từ terminal:",
+    "codeTitle": "Kiểm tra trạng thái Pod của Agent"
+  },
+  "ch07": {
+    "desc": "SelfHeal ứng dụng mô hình dự báo chuỗi thời gian đa biến liên tục nhằm phân biệt các đột biến tải tạm thời với các đường cong suy giảm nghiêm trọng có nguy cơ gây sự cố.",
+    "items": [
+      {
+        "label": "Thời gian đến khi hỏng hóc (TTF):",
+        "text": " Ước tính số phút còn lại trước khi xảy ra sự cố OOMKilled hoặc nghẽn luồng xử lý."
+      },
+      {
+        "label": "Điểm tin cậy (Confidence Score):",
+        "text": " Xác suất thống kê của nguy cơ sự cố (ví dụ: 96,2%)."
+      },
+      {
+        "label": "Bán kính ảnh hưởng (Blast Radius):",
+        "text": " Các microservice phụ thuộc ở hạ nguồn sẽ bị ảnh hưởng nếu không được khắc phục kịp thời."
+      }
+    ]
+  },
+  "ch08": {
+    "desc": "Khi quỹ đạo tiền sự cố được xác nhận, SelfHeal sẽ mở hồ sơ sự cố có cấu trúc. Thay vì làm ngập kênh thông báo bằng hàng trăm cảnh báo thô, nền tảng cung cấp một bản tóm lược toàn diện gồm:",
+    "item1Before": "Tín hiệu nguyên nhân gốc rễ tương quan (ví dụ: Rò rỉ bộ nhớ trong container ",
+    "item1Mid": " bắt đầu từ commit ",
+    "item1After": ").",
+    "item2": "Xếp hạng các chiến lược khắc phục kèm bán kính ảnh hưởng được tính toán trước.",
+    "item3": "Kết quả mô phỏng giả lập trước khi áp dụng (dry-run)."
+  },
+  "ch09": {
+    "desc": "Các hành động tự động phục hồi mang tính tất định tuyệt đối và tuân thủ các bộ điều khiển nguyên thủy của Kubernetes:",
+    "items": [
+      {
+        "label": "Khởi động lại Pod Rolling:",
+        "text": " Drain êm dịu và khởi động lại từng pod riêng lẻ mà không làm rớt các kết nối TCP đang hoạt động."
+      },
+      {
+        "label": "Co giãn ngang ReplicaSet:",
+        "text": " Tạm thời tăng số lượng replica của deployment để hấp thụ các đợt tăng vọt lưu lượng truy cập bất thường."
+      },
+      {
+        "label": "Tự động Hoàn nguyên (Rollback):",
+        "text": " Trở về phiên bản ReplicaSet ổn định gần nhất nếu tỷ lệ crash vượt quá giới hạn chính sách."
+      }
+    ]
+  },
+  "ch10": {
+    "desc": "Khi một hành động yêu cầu phê duyệt từ con người, thông báo tương tác sẽ được gửi ngay tới kỹ sư chỉ định qua Web UI và webhook Slack/Teams. Kỹ sư có thể xem xét toàn bộ diff, bấm Phê duyệt, Từ chối hoặc Tinh chỉnh kế hoạch chỉ với một cú nhấp chuột xác thực.",
+    "noticeTitle": "Rào chắn Phê duyệt Kép",
+    "noticeBodyBefore": "Đối với cơ sở dữ liệu môi trường Production hoặc cổng Ingress Gateway cấp 1, bạn có thể thiết lập ",
+    "noticeEm": "Phê duyệt kép (Dual Operator Sign-Off)",
+    "noticeBodyAfter": " yêu cầu hai kỹ sư độc lập cùng xác nhận trước khi thực thi."
+  },
+  "ch11": {
+    "descBefore": "Sau khi thực thi hành động tự phục hồi, SelfHeal kích hoạt ",
+    "descStrong": "Vòng lặp Kiểm chứng Hậu Khắc phục",
+    "descAfter": " liên tục trong 5 phút:",
+    "items": [
+      "Kiểm tra đầu dò readiness của container và trạng thái endpoint (HTTP 200).",
+      "Xác nhận tốc độ tăng bộ nhớ và CPU đã trở về đường cơ sở an toàn.",
+      "Xuất bản bản tóm lược sự cố (post-mortem) bất biến trực tiếp vào nhật ký kiểm toán phục vụ báo cáo tuân thủ."
+    ]
+  }
+}

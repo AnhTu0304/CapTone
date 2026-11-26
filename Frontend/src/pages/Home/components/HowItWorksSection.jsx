@@ -1,15 +1,17 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import './HowItWorksSection.css';
 import videocard1 from '../../../assets/videocard1.mp4';
 import videocard2 from '../../../assets/card2.mp4';
 import videocard3 from '../../../assets/card3.mp4';
 
 export const HowItWorksSection = ({ className = '' }) => {
+  const { t } = useTranslation('home');
   return (
     <section
       className={`how-it-works-section ${className}`.trim()}
       data-testid="how-it-works-section"
-      aria-label="Cách thức SelfHeal hoạt động"
+      aria-label={t('howItWorks.ariaLabel')}
     >
       {/* Continuous Left & Right Vertical Dashed Guidelines spanning the section down to the bottom scan track dots */}
       <span className="hiw-guide-v-left" aria-hidden="true" />
@@ -27,7 +29,7 @@ export const HowItWorksSection = ({ className = '' }) => {
         {/* Badge HOW IT WORKS */}
         <div className="hiw-badge-wrapper">
           <div className="hiw-badge-box">
-            <span className="hiw-badge-text">HOW IT WORKS</span>
+            <span className="hiw-badge-text">{t('howItWorks.badgeTop')}</span>
           </div>
         </div>
 
@@ -61,17 +63,17 @@ export const HowItWorksSection = ({ className = '' }) => {
                     onLoadedMetadata={(e) => {
                       e.currentTarget.playbackRate = 1.75;
                     }}
-                    aria-label="Video mô phỏng thu thập và quan sát đa chiều Kubernetes"
+                    aria-label={t('howItWorks.steps.0.videoAria')}
                   />
                 </div>
               </div>
             </div>
 
             <div className="hiw-info">
-              <span className="hiw-step-label">Bước 1</span>
-              <h3 className="hiw-title">Thu thập &amp; Quan sát đa chiều</h3>
+              <span className="hiw-step-label">{t('howItWorks.steps.0.label')}</span>
+              <h3 className="hiw-title">{t('howItWorks.steps.0.title')}</h3>
               <p className="hiw-desc">
-                Liên tục thu thập và giám sát dữ liệu hạ tầng Kubernetes, giúp phát hiện sớm những dấu hiệu bất thường.
+                {t('howItWorks.steps.0.desc')}
               </p>
             </div>
           </article>
@@ -94,17 +96,17 @@ export const HowItWorksSection = ({ className = '' }) => {
                     onLoadedMetadata={(e) => {
                       e.currentTarget.playbackRate = 1.75;
                     }}
-                    aria-label="Video mô phỏng mô hình AI dự báo suy thoái Kubernetes"
+                    aria-label={t('howItWorks.steps.1.videoAria')}
                   />
                 </div>
               </div>
             </div>
 
             <div className="hiw-info">
-              <span className="hiw-step-label">Bước 2</span>
-              <h3 className="hiw-title">Mô hình AI dự báo suy thoái</h3>
+              <span className="hiw-step-label">{t('howItWorks.steps.1.label')}</span>
+              <h3 className="hiw-title">{t('howItWorks.steps.1.title')}</h3>
               <p className="hiw-desc">
-                Phân tích dữ liệu vận hành để dự đoán rủi ro, nhận diện nguy cơ trước khi sự cố xảy ra.
+                {t('howItWorks.steps.1.desc')}
               </p>
             </div>
           </article>
@@ -127,17 +129,17 @@ export const HowItWorksSection = ({ className = '' }) => {
                     onLoadedMetadata={(e) => {
                       e.currentTarget.playbackRate = 1.75;
                     }}
-                    aria-label="Video mô phỏng tự động phục hồi có kiểm soát Kubernetes"
+                    aria-label={t('howItWorks.steps.2.videoAria')}
                   />
                 </div>
               </div>
             </div>
 
             <div className="hiw-info">
-              <span className="hiw-step-label">Bước 3</span>
-              <h3 className="hiw-title">Tự động phục hồi có kiểm soát</h3>
+              <span className="hiw-step-label">{t('howItWorks.steps.2.label')}</span>
+              <h3 className="hiw-title">{t('howItWorks.steps.2.title')}</h3>
               <p className="hiw-desc">
-                Tự động thực thi biện pháp khắc phục, với cơ chế phê duyệt và giám sát từ con người.
+                {t('howItWorks.steps.2.desc')}
               </p>
             </div>
           </article>
@@ -155,9 +157,9 @@ export const HowItWorksSection = ({ className = '' }) => {
 
         {/* Centered Title & Description */}
         <div className="hiw-prediction-content">
-          <h2 className="hiw-prediction-title">Dự đoán các sự cố</h2>
+          <h2 className="hiw-prediction-title">{t('howItWorks.predictionTitle')}</h2>
           <p className="hiw-prediction-desc">
-            Từ khả năng quan sát theo thời gian thực đến dự báo dựa trên AI và tự động phục hồi
+            {t('howItWorks.predictionDesc')}
           </p>
         </div>
 
@@ -171,7 +173,7 @@ export const HowItWorksSection = ({ className = '' }) => {
         {/* Bottom Monospace Badge under the 2nd Line */}
         <div className="hiw-badge-wrapper hiw-prediction-badge-wrapper">
           <div className="hiw-badge-box">
-            <span className="hiw-badge-text">BA GIAI ĐOẠN BẢO VỆ HẠ TẦNG PRODUCTION.</span>
+            <span className="hiw-badge-text">{t('howItWorks.badgeBottom')}</span>
           </div>
         </div>
 

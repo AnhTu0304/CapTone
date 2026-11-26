@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import i18n from './i18n';
 import RouteRenderer from './routes';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { AuthProvider } from './context/AuthContext';
@@ -17,7 +18,7 @@ class AppErrorBoundary extends React.Component {
   static getDerivedStateFromError(error) {
     return {
       hasError: true,
-      errorMessage: error?.message || 'Đã xảy ra lỗi không mong muốn khi hiển thị giao diện.',
+      errorMessage: error?.message || i18n.t('common:app.errorBoundary.defaultMessage'),
     };
   }
 
@@ -30,7 +31,7 @@ class AppErrorBoundary extends React.Component {
       return (
         <PublicLayout currentPath="/500" onNavigate={this.props.onNavigate}>
           <ServerErrorPage
-            title="500 — Lỗi hiển thị giao diện"
+            title={i18n.t('common:app.errorBoundary.title')}
             message={this.state.errorMessage}
           />
         </PublicLayout>
@@ -68,16 +69,16 @@ const AppContent = () => {
 
       if (status === 503) {
         warning(
-          message || 'Máy chủ đang bảo trì hoặc tạm quá tải.',
-          'Cảnh báo dịch vụ — 503'
+          message || i18n.t('common:app.httpToast.503Message'),
+          i18n.t('common:app.httpToast.503Title')
         );
         if (currentPathname !== '/503') {
           handleNavigate('/503');
         }
       } else if (status === 429) {
         warning(
-          message || 'Bạn đã gửi quá nhiều yêu cầu trong thời gian ngắn. Vui lòng thử lại sau.',
-          'Cảnh báo giới hạn — 429'
+          message || i18n.t('common:app.httpToast.429Message'),
+          i18n.t('common:app.httpToast.429Title')
         );
         if (currentPathname !== '/429') {
           handleNavigate('/429');
@@ -87,8 +88,8 @@ const AppContent = () => {
         (normalizedEndpoint.includes('/admin') || currentPathname.startsWith('/admin'))
       ) {
         warning(
-          message || 'Tài khoản không có quyền truy cập khu vực quản trị.',
-          'Cảnh báo phân quyền — 403'
+          message || i18n.t('common:app.httpToast.403Message'),
+          i18n.t('common:app.httpToast.403Title')
         );
         if (currentPathname !== '/403') {
           handleNavigate('/403');
@@ -101,16 +102,16 @@ const AppContent = () => {
           currentPathname.startsWith('/onboarding'))
       ) {
         warning(
-          message || 'Phiên đăng nhập đã hết hạn hoặc chưa xác thực.',
-          'Cảnh báo xác thực — 401'
+          message || i18n.t('common:app.httpToast.401Message'),
+          i18n.t('common:app.httpToast.401Title')
         );
         if (currentPathname !== '/401') {
           handleNavigate('/401');
         }
       } else if (status === 500) {
         warning(
-          message || 'Máy chủ gặp lỗi xử lý nội bộ.',
-          'Cảnh báo máy chủ — 500'
+          message || i18n.t('common:app.httpToast.500Message'),
+          i18n.t('common:app.httpToast.500Title')
         );
       }
     };

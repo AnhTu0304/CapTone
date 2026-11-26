@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown } from 'lucide-react';
 import './FAQSection.css';
 
 export const FAQSection = ({ className = '', onNavigate }) => {
+  const { t } = useTranslation('home');
   const [openIndex, setOpenIndex] = useState(null);
 
   const toggleItem = (idx) => {
@@ -19,39 +21,15 @@ export const FAQSection = ({ className = '', onNavigate }) => {
     }
   };
 
-  const faqData = [
-    {
-      q: 'SelfHeal hoạt động với Kubernetes như thế nào?',
-      a: 'SelfHeal triển khai dưới dạng DaemonSet hoặc Helm chart siêu nhẹ, thu thập eBPF telemetry và pod metrics theo thời gian thực mà không tiêu tốn tài nguyên cụm, phát hiện sớm suy thoái trước khi dịch vụ gián đoạn.',
-    },
-    {
-      q: 'SelfHeal có thể tự lưu trữ (self-hosted) trên hạ tầng riêng không?',
-      a: 'Có, SelfHeal hỗ trợ triển khai on-premises và trong private VPC hoàn chỉnh. Toàn bộ dữ liệu telemetry, nhật ký kiểm toán và mô hình dự báo được lưu giữ an toàn tuyệt đối trong mạng nội bộ của bạn.',
-    },
-    {
-      q: 'Cơ chế Human-in-the-Loop (HITL) bảo vệ hệ thống ra sao?',
-      a: 'Mọi hành động có rủi ro cao như restart rolling hàng loạt hoặc thay đổi cấu hình tài nguyên đều phải có chữ ký phê duyệt từ kỹ sư trực on-call trước khi thực thi, đảm bảo con người luôn nắm quyền kiểm soát cao nhất.',
-    },
-    {
-      q: 'SelfHeal hỗ trợ những phiên bản Kubernetes và nền tảng đám mây nào?',
-      a: 'SelfHeal hỗ trợ mọi cụm Kubernetes từ v1.22+ trên AWS EKS, Google GKE, Azure AKS, K3s, cũng như các cụm bare-metal và hybrid cloud tiêu chuẩn.',
-    },
-    {
-      q: 'Có bản dùng thử miễn phí hoặc gói dành cho doanh nghiệp SME không?',
-      a: 'Hoàn toàn có. SelfHeal cung cấp gói Community miễn phí trọn đời cho cụm K8s quy mô dưới 15 nodes và gói Enterprise với đầy đủ tính năng suy luận AI, RCA 3D chuyên sâu cùng SLA hỗ trợ 24/7.',
-    },
-    {
-      q: 'Dữ liệu log và chỉ số của hệ thống có được bảo mật không?',
-      a: 'Tuyệt đối bảo mật. SelfHeal tuân thủ nguyên tắc Least Privilege, chỉ phân tích các chỉ số telemetry và metadata số liệu, tuyệt đối không đọc dữ liệu kinh doanh của ứng dụng hay payload nhạy cảm.',
-    },
-  ];
+  const translatedFaq = t('faq.items', { returnObjects: true });
+  const faqData = Array.isArray(translatedFaq) ? translatedFaq : [];
 
   return (
     <section
       id="faq"
       className={`faq-section ${className}`.trim()}
       data-testid="faq-section"
-      aria-label="Câu hỏi thường gặp"
+      aria-label={t('faq.ariaLabel')}
     >
       {/* ================= LEFT CONSTELLATION GRID ================= */}
       <div className="faq-constellation-left" aria-hidden="true">
@@ -114,7 +92,7 @@ export const FAQSection = ({ className = '', onNavigate }) => {
       </div>
 
       {/* ================= TITLE ================= */}
-      <h2 className="faq-title">FAQ</h2>
+      <h2 className="faq-title">{t('faq.title')}</h2>
 
       {/* ================= ACCORDION LIST ================= */}
       <div className="faq-accordion-container">
@@ -153,13 +131,13 @@ export const FAQSection = ({ className = '', onNavigate }) => {
 
         {/* Bottom Contact Text */}
         <div className="faq-bottom-contact">
-          <span>Bạn không tìm thấy câu trả lời? </span>
+          <span>{t('faq.notFound')}</span>
           <a
             href="/guide"
             onClick={handleContactClick}
             className="faq-contact-link"
           >
-            Liên hệ với chúng tôi.
+            {t('faq.contactUs')}
           </a>
         </div>
       </div>

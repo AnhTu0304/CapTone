@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/dist/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
@@ -16,19 +17,9 @@ if (typeof window !== 'undefined') {
 }
 
 export const GuidePage = () => {
-  const guideSections = [
-    { id: "sec-01", title: "01 Bắt đầu nhanh" },
-    { id: "sec-02", title: "02 Tạo tổ chức của bạn" },
-    { id: "sec-03", title: "03 Thiết lập môi trường" },
-    { id: "sec-04", title: "04 Kết nối Kubernetes Cluster" },
-    { id: "sec-05", title: "05 Cài đặt SelfHeal Agent" },
-    { id: "sec-06", title: "06 Giám sát hạ tầng" },
-    { id: "sec-07", title: "07 Hiểu về dự báo AI" },
-    { id: "sec-08", title: "08 Xử lý sự cố hạ tầng" },
-    { id: "sec-09", title: "09 Tự phục hồi và khôi phục" },
-    { id: "sec-10", title: "10 Phê duyệt và kiểm soát" },
-    { id: "sec-11", title: "11 Kiểm tra kết quả khôi phục" },
-  ];
+  const { t } = useTranslation('guide');
+  const translatedSections = t('sections', { returnObjects: true });
+  const guideSections = Array.isArray(translatedSections) ? translatedSections : [];
 
   const sectionIds = guideSections.map((s) => s.id);
   const activeId = useScrollSpy(sectionIds, 120);
@@ -201,17 +192,16 @@ export const GuidePage = () => {
         <div className="guide-hero-breadcrumb">
           <Breadcrumb
             items={[
-              { label: 'Trang chủ', href: '/' },
-              { label: 'Sổ tay Vận hành Kỹ sư' },
+              { label: t('breadcrumb.home'), href: '/' },
+              { label: t('breadcrumb.current') },
             ]}
           />
         </div>
         <h1 className="guide-hero-title">
-          Sổ Tay Vận Hành Hạ Tầng SelfHeal
+          {t('hero.title')}
         </h1>
         <p className="guide-hero-subtitle">
-          Tài liệu thực địa dành cho kỹ sư SRE và DevOps: Hướng dẫn cấu hình tổ chức,
-          kết nối Kubernetes telemetry, thiết lập chính sách tự phục hồi sự cố tự hành.
+          {t('hero.subtitle')}
         </p>
       </header>
 
@@ -249,7 +239,7 @@ export const GuidePage = () => {
               boxShadow: 'none',
             }}
           >
-            <span>Mục lục sổ tay ({guideSections.length} chương)</span>
+            <span>{t('toc.mobileToggle', { count: guideSections.length })}</span>
             <span>{mobileTocOpen ? '▲' : '▼'}</span>
           </button>
 
@@ -297,19 +287,19 @@ export const GuidePage = () => {
           {/* CỘT TRÁI: MỤC LỤC & STICKY NAV NẰM TRỰC TIẾP TRÊN TRANG SỔ TAY */}
           <aside
             className="notebook-left-nav-col"
-            aria-label="Mục lục sổ tay hướng dẫn"
+            aria-label={t('toc.asideAria')}
           >
             <div className="notebook-left-nav-card">
               <div className="notebook-left-stamp">
                 <Compass size={13} color="#059669" />
                 <span>SRE NOTEBOOK // VOL.01</span>
               </div>
-              <h2 className="notebook-left-title">Mục Lục Vận Hành</h2>
+              <h2 className="notebook-left-title">{t('toc.navHeading')}</h2>
 
               {/* Reading Progress */}
               <div className="notebook-progress-box">
                 <div className="notebook-progress-meta">
-                  <span>TIẾN ĐỘ ĐỌC</span>
+                  <span>{t('toc.readingProgress')}</span>
                   <span>{Math.round(scrollProgress)}%</span>
                 </div>
                 <div className="notebook-progress-bar">
@@ -369,25 +359,25 @@ export const GuidePage = () => {
             <section id="sec-01" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="01" />
-                <h2 className="guide-content-title">01 Bắt đầu nhanh</h2>
+                <h2 className="guide-content-title">{guideSections[0]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                SelfHeal được thiết kế để mang đến khả năng phục hồi hạ tầng tự hành cho các đội ngũ kỹ thuật doanh nghiệp SME mà không gặp phải sự phức tạp hay chi phí đắt đỏ của các nền tảng APM truyền thống. Trước khi kết nối các workload môi trường production, hãy đảm bảo bạn có quyền quản trị cơ bản đối với Kubernetes cluster mục tiêu.
+                {t('ch01.desc')}
               </p>
               <div className="open-notebook-prereq">
-                <div className="open-notebook-prereq-title">Điều kiện tiên quyết của hệ thống</div>
+                <div className="open-notebook-prereq-title">{t('ch01.prereqTitle')}</div>
                 <ul style={{ paddingLeft: '20px', color: '#555368', fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: '8px', lineHeight: 1.5 }}>
-                  <li>Kubernetes cluster phiên bản 1.25+ (EKS, GKE, AKS, K3s hoặc máy chủ vật lý kubeadm).</li>
-                  <li>Công cụ dòng lệnh <code>kubectl</code> đã được cài đặt và cấu hình quyền cluster-admin.</li>
-                  <li>Kết nối mạng chiều ra (outbound) tới <code>api.selfheal.infra</code> qua cổng 443.</li>
+                  <li>{t('ch01.prereq1')}</li>
+                  <li>{t('ch01.prereq2Before')}<code>kubectl</code>{t('ch01.prereq2After')}</li>
+                  <li>{t('ch01.prereq3Before')}<code>api.selfheal.infra</code>{t('ch01.prereq3After')}</li>
                 </ul>
               </div>
               <NotebookNoticeCard
                 type="warning"
                 important={true}
-                title="Lưu ý: Không yêu cầu mở cổng Inbound"
+                title={t('ch01.noticeTitle')}
               >
-                SelfHeal agent vận hành hoàn toàn thông qua luồng WebSocket TLS chiều ra. Bạn tuyệt đối không cần mở bất kỳ cổng tường lửa nào hoặc công khai các endpoint ingress ra bên ngoài.
+                {t('ch01.noticeBody')}
               </NotebookNoticeCard>
             </section>
 
@@ -395,27 +385,27 @@ export const GuidePage = () => {
             <section id="sec-02" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="02" />
-                <h2 className="guide-content-title">02 Tạo tổ chức của bạn</h2>
+                <h2 className="guide-content-title">{guideSections[1]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                Tổ chức (Organization) là đơn vị cô lập người thuê cấp cao nhất trong SelfHeal. Toàn bộ thành viên đội ngũ, nhật ký kiểm toán và các cluster đều được cách ly nghiêm ngặt trong ranh giới tổ chức của bạn.
+                {t('ch02.desc')}
               </p>
               <ol style={{ paddingLeft: '20px', color: '#3D3B4F', fontSize: '0.9375rem', display: 'flex', flexDirection: 'column', gap: '12px', lineHeight: 1.6, marginBottom: '20px' }}>
                 <li>
-                  <strong>Đăng ký hoặc Đăng nhập:</strong> Truy cập Cổng Xác thực SelfHeal bằng email doanh nghiệp của bạn.
+                  <strong>{t('ch02.step1Label')}</strong>{t('ch02.step1Text')}
                 </li>
                 <li>
-                  <strong>Đặt tên Tổ chức:</strong> Cung cấp định danh công ty hoặc nhóm kỹ thuật (ví dụ: <code>acme-fintech</code>).
+                  <strong>{t('ch02.step2Label')}</strong>{t('ch02.step2Before')}<code>acme-fintech</code>{t('ch02.step2After')}
                 </li>
                 <li>
-                  <strong>Thiết lập Vùng dữ liệu Tuân thủ:</strong> Chọn khu vực lưu trữ dữ liệu theo quy định (EU, US-East hoặc AP-Southeast).
+                  <strong>{t('ch02.step3Label')}</strong>{t('ch02.step3Text')}
                 </li>
               </ol>
               <NotebookNoticeCard
                 type="tip"
-                title="Kiểm soát truy cập dựa trên vai trò (RBAC)"
+                title={t('ch02.noticeTitle')}
               >
-                Tổ chức hỗ trợ các vai trò định sẵn: <em>Owner</em> (Chủ sở hữu), <em>SRE Operator</em> (Có quyền phê duyệt khắc phục sự cố), và <em>Auditor</em> (Chỉ đọc nhật ký kiểm toán).
+                {t('ch02.noticeBodyBefore')}<em>{t('ch02.noticeRole1')}</em>{t('ch02.noticeRole1Desc')}<em>{t('ch02.noticeRole2')}</em>{t('ch02.noticeRole2Desc')}<em>{t('ch02.noticeRole3')}</em>{t('ch02.noticeRole3Desc')}
               </NotebookNoticeCard>
             </section>
 
@@ -423,15 +413,15 @@ export const GuidePage = () => {
             <section id="sec-03" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="03" />
-                <h2 className="guide-content-title">03 Thiết lập môi trường</h2>
+                <h2 className="guide-content-title">{guideSections[2]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                Môi trường thiết lập sự phân tách giữa các giai đoạn vận hành như <code>Production</code>, <code>Staging</code>, và <code>Development</code>. Quy tắc tự phục hồi và ngưỡng phê duyệt của con người được cấu hình riêng cho từng môi trường.
+                {t('ch03.descPart1')}<code>Production</code>, <code>Staging</code>{t('ch03.descPart2')}<code>Development</code>{t('ch03.descPart3')}
               </p>
               <div className="open-notebook-prereq">
-                <div className="open-notebook-prereq-title">Khuyến nghị Chính sách Môi trường</div>
+                <div className="open-notebook-prereq-title">{t('ch03.prereqTitle')}</div>
                 <p style={{ fontSize: '0.875rem', color: '#555368', margin: 0, lineHeight: 1.6 }}>
-                  Đối với <strong>Staging</strong>, hãy bật <em>Khắc phục tự hành toàn phần</em> để AI tự động thử nghiệm rollout, khởi động lại pod và co giãn replica mà không cần can thiệp. Đối với <strong>Production</strong>, hãy bật <em>Con người phê duyệt</em> cho các hành động nhạy cảm.
+                  {t('ch03.pBefore')}<strong>Staging</strong>{t('ch03.pMid1')}<em>{t('ch03.pAuto')}</em>{t('ch03.pMid2')}<strong>Production</strong>{t('ch03.pMid3')}<em>{t('ch03.pHuman')}</em>{t('ch03.pAfter')}
                 </p>
               </div>
             </section>
@@ -440,13 +430,13 @@ export const GuidePage = () => {
             <section id="sec-04" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="04" />
-                <h2 className="guide-content-title">04 Kết nối Kubernetes Cluster</h2>
+                <h2 className="guide-content-title">{guideSections[3]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                Trên bảng điều khiển SelfHeal, điều hướng tới <strong>Clusters &rarr; Đăng ký Cluster Mới</strong>. Nhập định danh duy nhất (ví dụ: <code>k8s-prod-us-east-1</code>) và chọn Môi trường tương ứng.
+                {t('ch04.p1Before')}<strong>{t('ch04.p1Strong')}</strong>{t('ch04.p1Mid')}<code>k8s-prod-us-east-1</code>{t('ch04.p1After')}
               </p>
               <p className="guide-content-desc">
-                Sau khi đăng ký, hệ thống sẽ tạo một <strong>Agent Token</strong> mật mã duy nhất dùng để ký số và xác thực toàn bộ dữ liệu đo từ xa của cụm cluster.
+                {t('ch04.p2Before')}<strong>{t('ch04.p2Strong')}</strong>{t('ch04.p2After')}
               </p>
             </section>
 
@@ -454,23 +444,23 @@ export const GuidePage = () => {
             <section id="sec-05" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="05" />
-                <h2 className="guide-content-title">05 Cài đặt SelfHeal Agent</h2>
+                <h2 className="guide-content-title">{guideSections[4]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                Agent được triển khai thông qua Helm hoặc file Kubernetes manifest tiêu chuẩn vào namespace riêng biệt <code>selfheal-system</code>.
+                {t('ch05.descBefore')}<code>selfheal-system</code>{t('ch05.descAfter')}
               </p>
               <CodeBlock
                 language="bash"
-                title="Cài đặt qua Helm v3"
-                code={`# 1. Thêm kho lưu trữ SelfHeal Helm\nhelm repo add selfheal https://charts.selfheal.infra\nhelm repo update\n\n# 2. Triển khai agent với token cluster\nhelm install selfheal-agent selfheal/k8s-agent \\\n  --namespace selfheal-system \\\n  --create-namespace \\\n  --set clusterToken="sh_live_89f02c91a7e4b" \\\n  --set clusterName="k8s-prod-us-east-1"`}
+                title={t('ch05.codeTitle')}
+                code={t('ch05.code')}
               />
               <NotebookNoticeCard
                 type="warning"
                 important={true}
-                title="Phạm vi Phân quyền RBAC Tối Thiểu"
+                title={t('ch05.noticeTitle')}
                 style={{ marginTop: '20px' }}
               >
-                Agent chỉ áp dụng ClusterRole có phạm vi giới hạn quyền ghi nghiêm ngặt vào các nhóm API được định nghĩa trước (Pods, Deployments, ReplicaSets). Agent tuyệt đối không có quyền truy cập vào Secrets hay các ConfigMap chứa dữ liệu nhạy cảm.
+                {t('ch05.noticeBody')}
               </NotebookNoticeCard>
             </section>
 
@@ -478,17 +468,17 @@ export const GuidePage = () => {
             <section id="sec-06" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="06" />
-                <h2 className="guide-content-title">06 Giám sát hạ tầng</h2>
+                <h2 className="guide-content-title">{guideSections[5]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                Ngay khi kết nối thành công, agent sẽ bắt đầu truyền tải các chỉ số tài nguyên tần suất cao (CPU, bộ nhớ thường trú, disk I/O, rớt gói mạng) và các sự kiện Kubernetes control-plane theo chu kỳ mỗi 10 giây.
+                {t('ch06.p1')}
               </p>
               <p className="guide-content-desc">
-                Kiểm tra tín hiệu nhịp tim (heartbeat) của agent trực tiếp từ terminal:
+                {t('ch06.p2')}
               </p>
               <CodeBlock
                 language="bash"
-                title="Kiểm tra trạng thái Pod của Agent"
+                title={t('ch06.codeTitle')}
                 code={`kubectl get pods -n selfheal-system\n# NAME                              READY   STATUS    RESTARTS   AGE\n# selfheal-agent-5b98f79cd4-v8m4k   1/1     Running   0          2m14s`}
               />
             </section>
@@ -497,15 +487,15 @@ export const GuidePage = () => {
             <section id="sec-07" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="07" />
-                <h2 className="guide-content-title">07 Hiểu về dự báo AI</h2>
+                <h2 className="guide-content-title">{guideSections[6]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                SelfHeal ứng dụng mô hình dự báo chuỗi thời gian đa biến liên tục nhằm phân biệt các đột biến tải tạm thời với các đường cong suy giảm nghiêm trọng có nguy cơ gây sự cố.
+                {t('ch07.desc')}
               </p>
               <ul style={{ paddingLeft: '20px', color: '#555368', fontSize: '0.9375rem', display: 'flex', flexDirection: 'column', gap: '8px', lineHeight: 1.5, marginBottom: '20px' }}>
-                <li><strong>Thời gian đến khi hỏng hóc (TTF):</strong> Ước tính số phút còn lại trước khi xảy ra sự cố OOMKilled hoặc nghẽn luồng xử lý.</li>
-                <li><strong>Điểm tin cậy (Confidence Score):</strong> Xác suất thống kê của nguy cơ sự cố (ví dụ: 96,2%).</li>
-                <li><strong>Bán kính ảnh hưởng (Blast Radius):</strong> Các microservice phụ thuộc ở hạ nguồn sẽ bị ảnh hưởng nếu không được khắc phục kịp thời.</li>
+                {(Array.isArray(t('ch07.items', { returnObjects: true })) ? t('ch07.items', { returnObjects: true }) : []).map((item, idx) => (
+                  <li key={idx}><strong>{item.label}</strong>{item.text}</li>
+                ))}
               </ul>
             </section>
 
@@ -513,16 +503,16 @@ export const GuidePage = () => {
             <section id="sec-08" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="08" />
-                <h2 className="guide-content-title">08 Xử lý sự cố hạ tầng</h2>
+                <h2 className="guide-content-title">{guideSections[7]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                Khi quỹ đạo tiền sự cố được xác nhận, SelfHeal sẽ mở hồ sơ sự cố có cấu trúc. Thay vì làm ngập kênh thông báo bằng hàng trăm cảnh báo thô, nền tảng cung cấp một bản tóm lược toàn diện gồm:
+                {t('ch08.desc')}
               </p>
               <div className="open-notebook-prereq">
                 <ol style={{ paddingLeft: '20px', color: '#3D3B4F', fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: '8px', lineHeight: 1.5, margin: 0 }}>
-                  <li>Tín hiệu nguyên nhân gốc rễ tương quan (ví dụ: Rò rỉ bộ nhớ trong container <code>worker</code> bắt đầu từ commit <code>7b91a</code>).</li>
-                  <li>Xếp hạng các chiến lược khắc phục kèm bán kính ảnh hưởng được tính toán trước.</li>
-                  <li>Kết quả mô phỏng giả lập trước khi áp dụng (dry-run).</li>
+                  <li>{t('ch08.item1Before')}<code>worker</code>{t('ch08.item1Mid')}<code>7b91a</code>{t('ch08.item1After')}</li>
+                  <li>{t('ch08.item2')}</li>
+                  <li>{t('ch08.item3')}</li>
                 </ol>
               </div>
             </section>
@@ -531,15 +521,15 @@ export const GuidePage = () => {
             <section id="sec-09" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="09" />
-                <h2 className="guide-content-title">09 Tự phục hồi và khôi phục</h2>
+                <h2 className="guide-content-title">{guideSections[8]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                Các hành động tự động phục hồi mang tính tất định tuyệt đối và tuân thủ các bộ điều khiển nguyên thủy của Kubernetes:
+                {t('ch09.desc')}
               </p>
               <ul style={{ paddingLeft: '20px', color: '#555368', fontSize: '0.9375rem', display: 'flex', flexDirection: 'column', gap: '8px', lineHeight: 1.5, marginBottom: '20px' }}>
-                <li><strong>Khởi động lại Pod Rolling:</strong> Drain êm dịu và khởi động lại từng pod riêng lẻ mà không làm rớt các kết nối TCP đang hoạt động.</li>
-                <li><strong>Co giãn ngang ReplicaSet:</strong> Tạm thời tăng số lượng replica của deployment để hấp thụ các đợt tăng vọt lưu lượng truy cập bất thường.</li>
-                <li><strong>Tự động Hoàn nguyên (Rollback):</strong> Trở về phiên bản ReplicaSet ổn định gần nhất nếu tỷ lệ crash vượt quá giới hạn chính sách.</li>
+                {(Array.isArray(t('ch09.items', { returnObjects: true })) ? t('ch09.items', { returnObjects: true }) : []).map((item, idx) => (
+                  <li key={idx}><strong>{item.label}</strong>{item.text}</li>
+                ))}
               </ul>
             </section>
 
@@ -547,16 +537,16 @@ export const GuidePage = () => {
             <section id="sec-10" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="10" />
-                <h2 className="guide-content-title">10 Phê duyệt và kiểm soát</h2>
+                <h2 className="guide-content-title">{guideSections[9]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                Khi một hành động yêu cầu phê duyệt từ con người, thông báo tương tác sẽ được gửi ngay tới kỹ sư chỉ định qua Web UI và webhook Slack/Teams. Kỹ sư có thể xem xét toàn bộ diff, bấm Phê duyệt, Từ chối hoặc Tinh chỉnh kế hoạch chỉ với một cú nhấp chuột xác thực.
+                {t('ch10.desc')}
               </p>
               <NotebookNoticeCard
                 type="tip"
-                title="Rào chắn Phê duyệt Kép"
+                title={t('ch10.noticeTitle')}
               >
-                Đối với cơ sở dữ liệu môi trường Production hoặc cổng Ingress Gateway cấp 1, bạn có thể thiết lập <em>Phê duyệt kép (Dual Operator Sign-Off)</em> yêu cầu hai kỹ sư độc lập cùng xác nhận trước khi thực thi.
+                {t('ch10.noticeBodyBefore')}<em>{t('ch10.noticeEm')}</em>{t('ch10.noticeBodyAfter')}
               </NotebookNoticeCard>
             </section>
 
@@ -564,15 +554,15 @@ export const GuidePage = () => {
             <section id="sec-11" className="guide-content-section">
               <header className="guide-content-header">
                 <SectionTitleCanvas chapterNumber="11" />
-                <h2 className="guide-content-title">11 Kiểm tra kết quả khôi phục</h2>
+                <h2 className="guide-content-title">{guideSections[10]?.title}</h2>
               </header>
               <p className="guide-content-desc">
-                Sau khi thực thi hành động tự phục hồi, SelfHeal kích hoạt <strong>Vòng lặp Kiểm chứng Hậu Khắc phục</strong> liên tục trong 5 phút:
+                {t('ch11.descBefore')}<strong>{t('ch11.descStrong')}</strong>{t('ch11.descAfter')}
               </p>
               <ol style={{ paddingLeft: '20px', color: '#3D3B4F', fontSize: '0.9375rem', display: 'flex', flexDirection: 'column', gap: '8px', lineHeight: 1.5 }}>
-                <li>Kiểm tra đầu dò readiness của container và trạng thái endpoint (HTTP 200).</li>
-                <li>Xác nhận tốc độ tăng bộ nhớ và CPU đã trở về đường cơ sở an toàn.</li>
-                <li>Xuất bản bản tóm lược sự cố (post-mortem) bất biến trực tiếp vào nhật ký kiểm toán phục vụ báo cáo tuân thủ.</li>
+                {(Array.isArray(t('ch11.items', { returnObjects: true })) ? t('ch11.items', { returnObjects: true }) : []).map((item, idx) => (
+                  <li key={idx}>{item}</li>
+                ))}
               </ol>
             </section>
           </main>

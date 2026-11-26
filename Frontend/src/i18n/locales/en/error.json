@@ -1,0 +1,65 @@
+{
+  "defaultWarnTitle": "Navigation Warning — {{code}}",
+  "defaultWarnMessage": "The route \"{{path}}\" does not exist or has been moved.",
+  "routes": {
+    "warnAuthTitle": "Authentication Warning — 401",
+    "warnAuthMessage": "You must sign in to access \"{{path}}\".",
+    "warnForbiddenTitle": "Authorization Warning — 403",
+    "warnForbiddenMessage": "The System Administration area (/admin) is reserved for Platform Administrators (Admin / Super Admin). Please use the Organization Dashboard (/dashboard).",
+    "forbiddenTitle": "403 — Admin Access Denied",
+    "forbiddenMessage": "The System Administration area (/admin) is restricted to Platform Administrators (Admin / Super Admin). Organization users and operators should work within the Business Dashboard.",
+    "notFoundMessage": "The path \"{{path}}\" does not exist on this system or has been moved."
+  },
+  "statuses": {
+    "401": {
+      "title": "Your session has expired.",
+      "message": "Your authentication token is no longer valid. Please sign in again with your account to continue.",
+      "imageAlt": "SelfHeal Bot scanning an expired authentication badge"
+    },
+    "403": {
+      "title": "Access denied.",
+      "message": "Your account does not have permission to access this page or resource under current RBAC policies.",
+      "imageAlt": "SelfHeal Bot standing in front of a locked security gate"
+    },
+    "404": {
+      "title": "This is not the page you are looking for.",
+      "message": "This resource or route does not exist on the system or has been relocated.",
+      "imageAlt": "SelfHeal Bot searching with a magnifying glass"
+    },
+    "500": {
+      "title": "Internal server error encountered.",
+      "message": "The system experienced an unexpected failure. The SelfHeal AI Agent is collecting logs for automated diagnostics.",
+      "imageAlt": "SelfHeal Bot inspecting a malfunctioning server rack"
+    },
+    "503": {
+      "title": "Service temporarily unavailable.",
+      "message": "The cluster is undergoing autonomous recovery or temporary overload. Please check back in a few moments.",
+      "imageAlt": "SelfHeal Bot repairing the server cluster with a wrench"
+    },
+    "429": {
+      "title": "Too many requests at once.",
+      "message": "Rate limiting is temporarily throttling requests to protect cluster service stability.",
+      "imageAlt": "SelfHeal Bot surrounded by incoming request packets"
+    },
+    "agent-offline": {
+      "title": "Attempting to reconnect with Agent.",
+      "message": "No heartbeat received from the SelfHeal Agent in your Kubernetes cluster. Please check Pod status or network connectivity.",
+      "imageAlt": "SelfHeal Bot reconnecting the Agent signal cable"
+    },
+    "cluster-lost": {
+      "title": "Cluster node synchronization lost.",
+      "message": "The Kubernetes cluster is temporarily unresponsive. The platform is re-establishing API Server connectivity.",
+      "imageAlt": "SelfHeal Bot reconnecting disconnected Kubernetes nodes"
+    },
+    "monitoring": {
+      "title": "Inspecting live telemetry stream.",
+      "message": "SelfHeal Bot is continuously monitoring real-time Kubernetes CPU, RAM, and cluster latency metrics.",
+      "imageAlt": "SelfHeal Bot checking the live telemetry waveform screen"
+    },
+    "maintenance": {
+      "title": "Scheduled system maintenance in progress.",
+      "message": "Our engineering team and SelfHeal Bot are upgrading infrastructure. Services will resume shortly.",
+      "imageAlt": "SelfHeal Bot wearing an engineer hard hat during maintenance"
+    }
+  }
+}

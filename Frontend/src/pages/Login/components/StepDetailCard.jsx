@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import gsap from 'gsap';
 import { 
   X, 
@@ -27,6 +28,7 @@ export const StepDetailCard = ({
   onResumeAutoPlay,
   onSelectStep,
 }) => {
+  const { t } = useTranslation('auth');
   const cardRef = useRef(null);
   const contentRef = useRef(null);
   const StepIcon = step?.icon || Zap;
@@ -161,7 +163,7 @@ export const StepDetailCard = ({
                   letterSpacing: '0.06em',
                 }}
               >
-                BƯỚC 0{step.num}/0{totalSteps}
+                {t('onboarding3d.detailCard.stepCounter', { step: step.num, total: totalSteps })}
               </span>
               <span
                 style={{
@@ -196,7 +198,7 @@ export const StepDetailCard = ({
         <button
           type="button"
           onClick={handleClose}
-          aria-label="Đóng chi tiết"
+          aria-label={t('onboarding3d.detailCard.closeAria')}
           style={{
             width: '28px',
             height: '28px',
@@ -280,7 +282,7 @@ export const StepDetailCard = ({
                 textTransform: 'uppercase',
               }}
             >
-              CƠ CHẾ HOẠT ĐỘNG
+              {t('onboarding3d.detailCard.howItWorksHeading')}
             </span>
           </div>
 
@@ -354,7 +356,7 @@ export const StepDetailCard = ({
                   textTransform: 'uppercase',
                 }}
               >
-                THÔNG SỐ KỸ THUẬT & GIAO THỨC
+                {t('onboarding3d.detailCard.techSpecsHeading')}
               </span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
@@ -402,7 +404,7 @@ export const StepDetailCard = ({
                 lineHeight: 1.35,
               }}
             >
-              <strong>Lợi ích:</strong> {step.benefit}
+              <strong>{t('onboarding3d.detailCard.benefitPrefix')}</strong> {step.benefit}
             </span>
           </div>
         )}
@@ -450,7 +452,7 @@ export const StepDetailCard = ({
             }}
           >
             <ChevronLeft size={14} />
-            <span>Trước</span>
+            <span>{t('onboarding3d.detailCard.prev')}</span>
           </button>
 
           <button
@@ -480,7 +482,7 @@ export const StepDetailCard = ({
               e.currentTarget.style.backgroundColor = '#FFFFFF';
             }}
           >
-            <span>Tiếp</span>
+            <span>{t('onboarding3d.detailCard.next')}</span>
             <ChevronRight size={14} />
           </button>
         </div>
@@ -494,7 +496,7 @@ export const StepDetailCard = ({
               <button
                 key={stepIndex}
                 type="button"
-                aria-label={`Xem bước ${stepIndex}`}
+                aria-label={t('onboarding3d.detailCard.viewStepAria', { step: stepIndex })}
                 onClick={() => onSelectStep(stepIndex)}
                 style={{
                   width: isCurrent ? '16px' : '6px',
@@ -541,7 +543,7 @@ export const StepDetailCard = ({
           }}
         >
           <Play size={12} fill="#000000" />
-          <span>Tự động phát</span>
+          <span>{t('onboarding3d.detailCard.resumeAutoPlay')}</span>
         </button>
       </div>
     </div>

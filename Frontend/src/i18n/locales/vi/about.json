@@ -1,0 +1,142 @@
+{
+  "hero": {
+    "title": "Về Dự án SelfHeal",
+    "subtitle": "Nghiên cứu kiến trúc tự phục hồi hạ tầng Kubernetes chủ động dựa trên trí tuệ nhân tạo dành cho doanh nghiệp vừa và nhỏ."
+  },
+  "story": {
+    "heading": "Vận hành hạ tầng thông minh bắt đầu từ tư duy chủ động.",
+    "desc": "SelfHeal ra đời nhằm thay đổi cách doanh nghiệp vận hành hạ tầng Kubernetes: chuyển dịch từ phản ứng bị động sang phát hiện rủi ro sớm và phục hồi chủ động.",
+    "p1": "Trong kỷ nguyên Cloud-Native, Kubernetes đã trở thành tiêu chuẩn công nghiệp cho việc triển khai ứng dụng. Tuy nhiên, việc vận hành các cụm máy chủ phân tán đặt ra những thách thức khổng lồ về độ phức tạp. Phần lớn các công cụ giám sát hiện nay chỉ gửi cảnh báo sau khi sự cố hoặc cạn kiệt tài nguyên đã xảy ra, khiến kỹ sư luôn rơi vào thế \"chữa cháy\" bị động.",
+    "p2": "SelfHeal được khởi xướng từ ý tưởng kết hợp ba trụ cột: khả năng quan sát toàn diện (Observability), trí tuệ nhân tạo (AI) và tự động hóa phục hồi có kiểm soát (Self-Healing Automation). Mục tiêu của chúng tôi là giúp các doanh nghiệp vừa và nhỏ (SMEs)—những đơn vị thường không có đội ngũ DevOps/SRE chuyên trách—dễ dàng tiếp cận khả năng quản trị hạ tầng thông minh, an toàn và bền bỉ hơn."
+  },
+  "problem": {
+    "heading": "Sự cố hạ tầng không nên trở thành nguyên nhân gián đoạn kinh doanh.",
+    "desc": "Doanh nghiệp vừa và nhỏ thường phải đối mặt với áp lực duy trì độ tin cậy của cụm Kubernetes trong điều kiện nguồn lực hạn chế.",
+    "items": [
+      {
+        "label": "Giám sát bị động (Reactive Monitoring):",
+        "text": " Cảnh báo thường chỉ kích hoạt khi dịch vụ đã ngừng hoạt động, khiến thời gian gián đoạn kéo dài và ảnh hưởng trực tiếp đến người dùng cuối."
+      },
+      {
+        "label": "Cạn kiệt tài nguyên bất ngờ:",
+        "text": " CPU hoặc bộ nhớ RAM tăng đột biến ngoài dự tính dẫn đến lỗi OOMKilled hoặc nghẽn nút mà không có dấu hiệu cảnh báo sớm."
+      },
+      {
+        "label": "Sập Pod và gián đoạn dịch vụ:",
+        "text": " Lỗi cấu hình hoặc vòng lặp CrashLoopBackOff làm đứt gãy luồng xử lý ứng dụng của doanh nghiệp."
+      },
+      {
+        "label": "Thiếu hụt nhân lực DevOps/SRE:",
+        "text": " Các doanh nghiệp SMEs hiếm khi có đủ nhân sự chuyên trách túc trực 24/7 để theo dõi và xử lý sự cố hạ tầng."
+      },
+      {
+        "label": "Điều tra & phục hồi chậm trễ:",
+        "text": " Việc lần tìm nguyên nhân gốc qua hàng nghìn dòng log phân tán làm tiêu tốn thời gian quý báu trước khi đưa ra quyết định khắc phục."
+      }
+    ]
+  },
+  "mission": {
+    "heading": "Xây dựng hạ tầng thông minh hơn, chủ động hơn và bền bỉ hơn.",
+    "desc": "SelfHeal hướng tới việc giảm tải gánh nặng vận hành, hỗ trợ phát hiện rủi ro sớm và nâng cao khả năng phục hồi liên tục cho cụm Kubernetes.",
+    "items": [
+      {
+        "label": "Sứ mệnh (Mission):",
+        "text": " Cung cấp giải pháp phát hiện sớm rủi ro, hỗ trợ phân tích nguyên nhân gốc và tự động hóa các bước khắc phục sự cố tiêu chuẩn cho cụm Kubernetes của doanh nghiệp vừa và nhỏ."
+      },
+      {
+        "label": "Tầm nhìn (Vision):",
+        "text": " Định hướng phát triển một hệ thống tự quản trị hạ tầng đáng tin cậy, nơi AI đóng vai trò như một trợ lý vận hành đắc lực, đồng hành cùng kỹ sư để bảo vệ sự ổn định của hệ thống."
+      },
+      {
+        "label": "Giá trị cốt lõi (Value):",
+        "text": " Giảm thiểu thời gian gián đoạn dịch vụ, giải phóng nguồn lực cho đội ngũ phát triển tập trung vào sản phẩm, và thiết lập hàng rào bảo vệ vững chắc cho cụm máy chủ."
+      }
+    ]
+  },
+  "howItWorks": {
+    "heading": "Từ tín hiệu hạ tầng đến phục hồi thông minh.",
+    "desc": "Quy trình 3 giai đoạn khép kín giúp giám sát liên tục, dự báo xu hướng suy thoái và kích hoạt hành động khắc phục có kiểm soát.",
+    "items": [
+      {
+        "label": "01. Quan sát (Observe):",
+        "text": " Thu thập số liệu Kubernetes metrics, telemetry và sự kiện hệ thống theo thời gian thực; giám sát tình trạng sức khỏe của Nodes, Pods, Workloads và phát hiện sớm các tín hiệu vi sai, hành vi bất thường."
+      },
+      {
+        "label": "02. Dự báo (Predict):",
+        "text": " Phân tích dữ liệu vận hành theo chuỗi thời gian của tài nguyên tiêu thụ; ứng dụng mô hình AI mạng nơ-ron hồi quy GRU để hỗ trợ dự đoán suy thoái và phân tích nguyên nhân gốc (RCA)."
+      },
+      {
+        "label": "03. Phục hồi (Recover):",
+        "text": " Đề xuất hoặc thực hiện các biện pháp khắc phục phù hợp (restart Pod, scale replicas, rollback deployment); áp dụng cơ chế Phê duyệt Con người (Human-in-the-Loop) và xác minh lại trạng thái hệ thống sau phục hồi."
+      }
+    ]
+  },
+  "principles": {
+    "heading": "Tự động hóa cần trí tuệ. Trí tuệ cần sự kiểm soát.",
+    "desc": "Mọi tính năng của SelfHeal được xây dựng xoay quanh 4 nguyên tắc kỹ thuật không thể thỏa hiệp.",
+    "items": [
+      {
+        "label": "1. Trí tuệ định hướng bởi AI (AI-driven Intelligence):",
+        "text": " Sử dụng học máy để phân tích dữ liệu telemetry phức tạp và hỗ trợ dự báo rủi ro mà con người khó nhận biết thủ công."
+      },
+      {
+        "label": "2. An toàn là trên hết (Safety First):",
+        "text": " Đảm bảo các hành động phục hồi luôn nằm trong giới hạn an toàn nghiêm ngặt nhằm ngăn chặn sự cố dây chuyền."
+      },
+      {
+        "label": "3. Con người làm trung tâm (Human-centered):",
+        "text": " Tự động hóa không thay thế con người. Kỹ sư luôn giữ quyền kiểm soát tối cao, có thể xem xét bản diff tác động và phê duyệt trước khi hành động được thực thi."
+      },
+      {
+        "label": "4. Thiết kế cho khả năng mở rộng (Built for Scalability):",
+        "text": " Hướng đến khả năng mở rộng linh hoạt, thích ứng sâu với chuẩn Cloud-Native và quy mô tăng trưởng của các cụm Kubernetes."
+      }
+    ]
+  },
+  "technology": {
+    "heading": "Được xây dựng trên nền tảng các công nghệ hạ tầng hiện đại.",
+    "desc": "Sự kết hợp giữa các giải pháp tiêu chuẩn công nghiệp Cloud-Native và công nghệ trí tuệ nhân tạo tiên tiến.",
+    "items": [
+      {
+        "label": "Hạ tầng & Đóng gói (Kubernetes, Docker):",
+        "text": " Nền tảng điều phối container cốt lõi cho mọi workload và cụm máy chủ phân tán, đảm bảo tính nhất quán giữa các môi trường vận hành."
+      },
+      {
+        "label": "Khả năng quan sát (Prometheus, OpenTelemetry):",
+        "text": " Thu thập và lưu trữ chuỗi dữ liệu số liệu thời gian thực với hiệu năng cao, cung cấp telemetry phân tán toàn diện trên toàn cụm."
+      },
+      {
+        "label": "Trí tuệ nhân tạo & Ứng dụng (Python, GRU, ReactJS, Node.js):",
+        "text": " Mô hình mạng nơ-ron hồi quy GRU phục vụ suy luận dự báo suy thoái, kết hợp giao diện web phản hồi nhanh và backend điều phối an toàn."
+      }
+    ]
+  },
+  "team": {
+    "heading": "Được phát triển bởi đội ngũ đam mê hạ tầng thông minh.",
+    "desc": "Dự án nghiên cứu và phát triển sản phẩm với sự phối hợp chặt chẽ giữa các chuyên môn kỹ thuật điện toán đám mây và trí tuệ nhân tạo.",
+    "items": [
+      {
+        "label": "Quản lý Dự án & Scrum:",
+        "text": " Định hướng lộ trình nghiên cứu, điều phối các sprint phát triển và đảm bảo sản phẩm giải quyết đúng bài toán của doanh nghiệp."
+      },
+      {
+        "label": "Kỹ thuật Backend & Tích hợp Hệ thống:",
+        "text": " Thiết kế API Gateway, kết nối tác tử K8s Agent, đồng bộ telemetry và xây dựng luồng tự động hóa an toàn."
+      },
+      {
+        "label": "Trí tuệ Nhân tạo & Học máy:",
+        "text": " Xây dựng pipeline xử lý dữ liệu thời gian thực, nghiên cứu và tối ưu hóa mô hình mạng nơ-ron GRU phục vụ dự đoán sự cố."
+      },
+      {
+        "label": "Frontend & Trải nghiệm Người dùng:",
+        "text": " Phát triển giao diện quản trị trực quan, xây dựng bảng điều khiển telemetry và cổng phê duyệt Human-in-the-Loop liền mạch."
+      }
+    ]
+  },
+  "cta": {
+    "headline": "Sẵn sàng thay đổi tư duy về độ tin cậy của hạ tầng?",
+    "desc": "Khám phá cách SelfHeal hỗ trợ doanh nghiệp giám sát, dự đoán rủi ro và phục hồi cụm Kubernetes chủ động hơn.",
+    "explore": "Khám phá SelfHeal",
+    "contact": "Liên hệ Đội ngũ"
+  }
+}

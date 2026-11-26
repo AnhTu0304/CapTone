@@ -1,7 +1,9 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import './FeatureStrip.css';
 
 export const FeatureStrip = ({ className = '', onNavigate }) => {
+  const { t } = useTranslation('home');
   const handleLearnMore = (e) => {
     e.preventDefault();
     if (onNavigate) {
@@ -16,7 +18,7 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
     <section
       className={`agent-bridge-banner ${className}`.trim()}
       data-testid="agent-bridge-section"
-      aria-label="Agent Bridge Section"
+      aria-label={t('featureStrip.ariaLabel')}
     >
       {/* 2. Top Parallel Pinstripe Scanline Bar with Guideline Nodes */}
       <div className="agent-scan-track" aria-hidden="true">
@@ -43,14 +45,14 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
         <div className="agent-box-inner">
           {/* Left Content: [ AGENT ] tag, headline, concise bridge description */}
           <div className="agent-bridge-content">
-            <div className="agent-tag">[ AGENT ]</div>
+            <div className="agent-tag">{t('featureStrip.tag')}</div>
 
             <h2 className="agent-heading">
-              Cách Agent kết nối với dự án của bạn
+              {t('featureStrip.heading')}
             </h2>
 
             <p className="agent-description">
-              SelfHeal Agent đóng vai trò cầu nối liên kết trực tiếp giữa dự án của bạn với chúng tôi.
+              {t('featureStrip.description')}
             </p>
           </div>
 
@@ -60,9 +62,9 @@ export const FeatureStrip = ({ className = '', onNavigate }) => {
               href="/guide"
               onClick={handleLearnMore}
               className="agent-btn-learn-more"
-              title="Tìm hiểu thêm"
+              title={t('featureStrip.learnMore')}
             >
-              Tìm hiểu thêm
+              {t('featureStrip.learnMore')}
             </a>
           </div>
         </div>

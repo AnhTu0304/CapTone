@@ -1,0 +1,154 @@
+{
+  "breadcrumb": {
+    "home": "Home",
+    "current": "Engineer Operations Handbook"
+  },
+  "hero": {
+    "title": "SelfHeal Operations & SRE Handbook",
+    "subtitle": "Field documentation for SRE and DevOps engineers: organization configuration, Kubernetes telemetry setup, and autonomous self-healing policy design."
+  },
+  "toc": {
+    "mobileToggle": "Handbook Table of Contents ({{count}} chapters)",
+    "asideAria": "Handbook table of contents",
+    "navHeading": "Operations Index",
+    "readingProgress": "READING PROGRESS",
+    "indexNavBadge": "OPERATIONS HANDBOOK",
+    "indexNavProgress": "Reading progress: {{progress}}%"
+  },
+  "sections": [
+    { "id": "sec-01", "title": "01 Quick Start" },
+    { "id": "sec-02", "title": "02 Create Your Organization" },
+    { "id": "sec-03", "title": "03 Configure Environments" },
+    { "id": "sec-04", "title": "04 Connect Kubernetes Cluster" },
+    { "id": "sec-05", "title": "05 Install SelfHeal Agent" },
+    { "id": "sec-06", "title": "06 Monitor Infrastructure" },
+    { "id": "sec-07", "title": "07 Understanding AI Forecasting" },
+    { "id": "sec-08", "title": "08 Incident Diagnostics & RCA" },
+    { "id": "sec-09", "title": "09 Self-Healing & Recovery" },
+    { "id": "sec-10", "title": "10 Approval & Guardrails" },
+    { "id": "sec-11", "title": "11 Post-Recovery Verification" }
+  ],
+  "ch01": {
+    "desc": "SelfHeal is built to bring autonomous infrastructure resilience to SME engineering teams without the steep cost or operational complexity of legacy APM platforms. Before onboarding production workloads, make sure you hold basic administrative permissions on the target Kubernetes cluster.",
+    "prereqTitle": "System Prerequisites",
+    "prereq1": "Kubernetes cluster v1.25+ (EKS, GKE, AKS, K3s, or bare-metal kubeadm).",
+    "prereq2Before": "The ",
+    "prereq2After": " CLI installed and configured with cluster-admin access for initial setup.",
+    "prereq3Before": "Outbound HTTPS connectivity to ",
+    "prereq3After": " over port 443.",
+    "noticeTitle": "Note: Zero Inbound Ports Required",
+    "noticeBody": "The SelfHeal Agent operates strictly over outbound TLS WebSockets. You never need to open inbound firewall ports or expose cluster ingress endpoints publicly."
+  },
+  "ch02": {
+    "desc": "An Organization is the top-level tenant isolation unit in SelfHeal. All team members, audit trails, and connected clusters remain strictly isolated inside your organization boundary.",
+    "step1Label": "Sign Up or Sign In:",
+    "step1Text": " Access the SelfHeal Auth Portal with your enterprise work email.",
+    "step2Label": "Name Your Organization:",
+    "step2Before": " Provide a unique company or engineering group identifier (e.g., ",
+    "step2After": ").",
+    "step3Label": "Set Data Compliance Region:",
+    "step3Text": " Choose your preferred compliance storage region (EU, US-East, or AP-Southeast).",
+    "noticeTitle": "Role-Based Access Control (RBAC)",
+    "noticeBodyBefore": "Organizations support built-in roles: ",
+    "noticeRole1": "Owner",
+    "noticeRole1Desc": " (Full organization authority), ",
+    "noticeRole2": "SRE Operator",
+    "noticeRole2Desc": " (Can approve remediation playbooks), and ",
+    "noticeRole3": "Auditor",
+    "noticeRole3Desc": " (Read-only audit log inspection)."
+  },
+  "ch03": {
+    "descPart1": "Environments cleanly separate operational lifecycle stages such as ",
+    "descPart2": ", and ",
+    "descPart3": ". Self-healing policies and Human-in-the-Loop approval thresholds are configured independently per environment.",
+    "prereqTitle": "Recommended Environment Policies",
+    "pBefore": "For ",
+    "pMid1": ", enable ",
+    "pAuto": "Full Autonomous Healing",
+    "pMid2": " so the AI can verify rollouts, Pod restarts, and replica scaling without manual bottlenecks. For ",
+    "pMid3": ", enable ",
+    "pHuman": "Human Approval Gates",
+    "pAfter": " on high-impact operations."
+  },
+  "ch04": {
+    "p1Before": "In the SelfHeal console, navigate to ",
+    "p1Strong": "Clusters → Register New Cluster",
+    "p1Mid": ". Enter a unique cluster identifier (e.g., ",
+    "p1After": ") and bind it to the target Environment.",
+    "p2Before": "Once registered, the platform issues a unique cryptographic ",
+    "p2Strong": "Agent Token",
+    "p2After": " to sign and authenticate all cluster telemetry streams."
+  },
+  "ch05": {
+    "descBefore": "The Agent deploys seamlessly via Helm or standard Kubernetes manifests into a dedicated ",
+    "descAfter": " namespace.",
+    "codeTitle": "Install via Helm v3",
+    "code": "# 1. Add the SelfHeal Helm repository\nhelm repo add selfheal https://charts.selfheal.infra\nhelm repo update\n\n# 2. Deploy the agent with your cluster token\nhelm install selfheal-agent selfheal/k8s-agent \\\n  --namespace selfheal-system \\\n  --create-namespace \\\n  --set clusterToken=\"sh_live_89f02c91a7e4b\" \\\n  --set clusterName=\"k8s-prod-us-east-1\"",
+    "noticeTitle": "Least-Privilege RBAC Scope",
+    "noticeBody": "The Agent binds only a tightly scoped ClusterRole restricting write permissions to pre-approved API groups (Pods, Deployments, ReplicaSets). It never has access to cluster Secrets or sensitive ConfigMaps."
+  },
+  "ch06": {
+    "p1": "Immediately upon connection, the Agent streams high-frequency resource metrics (CPU, RSS memory, disk I/O, network packet drops) and Kubernetes control-plane events every 10 seconds.",
+    "p2": "Verify the Agent heartbeat directly from your terminal:",
+    "codeTitle": "Check Agent Pod Status"
+  },
+  "ch07": {
+    "desc": "SelfHeal runs continuous multivariate time-series forecasting models to distinguish brief traffic spikes from sustained degradation curves likely to trigger failures.",
+    "items": [
+      {
+        "label": "Time-To-Failure (TTF):",
+        "text": " Estimated minutes remaining before an OOMKilled crash or request queue saturation."
+      },
+      {
+        "label": "Confidence Score:",
+        "text": " Statistical probability of the predicted failure trajectory (e.g., 96.2%)."
+      },
+      {
+        "label": "Blast Radius:",
+        "text": " Downstream dependent microservices impacted if remediation is delayed."
+      }
+    ]
+  },
+  "ch08": {
+    "desc": "When a pre-incident trajectory is confirmed, SelfHeal opens a structured incident brief. Rather than flooding alert channels with raw noise, the platform surfaces an actionable summary:",
+    "item1Before": "Correlated root-cause signals (e.g., Memory leak in ",
+    "item1Mid": " container introduced since commit ",
+    "item1After": ").",
+    "item2": "Ranked remediation strategies with pre-calculated blast radius.",
+    "item3": "Simulated dry-run validation results prior to execution."
+  },
+  "ch09": {
+    "desc": "Autonomous recovery playbooks are strictly deterministic and leverage native Kubernetes controllers:",
+    "items": [
+      {
+        "label": "Rolling Pod Restart:",
+        "text": " Gracefully drains and restarts failing pods sequentially without dropping live TCP sessions."
+      },
+      {
+        "label": "ReplicaSet Horizontal Scaling:",
+        "text": " Temporarily scales deployment replicas to absorb unexpected traffic surges."
+      },
+      {
+        "label": "Automated Rollback:",
+        "text": " Reverts to the last known healthy ReplicaSet revision if crash rates breach policy thresholds."
+      }
+    ]
+  },
+  "ch10": {
+    "desc": "Whenever a playbook requires human sign-off, an interactive alert is pushed immediately to designated engineers via the Web UI and Slack/Teams webhooks. Engineers review the full configuration diff and Approve, Reject, or Refine in one click.",
+    "noticeTitle": "Dual Operator Sign-Off Guardrail",
+    "noticeBodyBefore": "For Production databases or tier-1 Ingress Gateways, you can enforce ",
+    "noticeEm": "Dual Operator Sign-Off",
+    "noticeBodyAfter": " requiring two independent engineers to approve before execution."
+  },
+  "ch11": {
+    "descBefore": "After executing a healing playbook, SelfHeal triggers a continuous 5-minute ",
+    "descStrong": "Post-Recovery Verification Loop",
+    "descAfter": ":",
+    "items": [
+      "Validates container readiness probes and endpoint health (HTTP 200).",
+      "Confirms memory and CPU slope return to safe baseline ranges.",
+      "Publishes an immutable post-mortem record directly to the compliance audit trail."
+    ]
+  }
+}

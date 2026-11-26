@@ -1,8 +1,10 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ShieldCheck, Bot, User, ArrowRight } from 'lucide-react';
 import './AdaptationLearningSection.css';
 
 export const AdaptationLearningSection = ({ className = '', onNavigate }) => {
+  const { t } = useTranslation('home');
   const handleNav = (e, path) => {
     e.preventDefault();
     if (onNavigate) {
@@ -17,15 +19,14 @@ export const AdaptationLearningSection = ({ className = '', onNavigate }) => {
     <section
       className={`adaptation-learning-section ${className}`.trim()}
       data-testid="adaptation-learning-section"
-      aria-label="Tiến trình khắc phục và học hỏi liên tục từ các lỗi xảy ra"
+      aria-label={t('adaptationLearning.ariaLabel')}
     >
       {/* ================= TOP HEADER ================= */}
       <div className="als-header-container">
-        <span className="als-label-badge">[ Sự thích nghi &amp; Học hỏi ]</span>
-        <h2 className="als-heading">Hệ thống tự thích ứng &amp; học hỏi sau mỗi sự cố</h2>
+        <span className="als-label-badge">{t('adaptationLearning.badge')}</span>
+        <h2 className="als-heading">{t('adaptationLearning.heading')}</h2>
         <p className="als-subtitle">
-          Từ quy tắc tùy chỉnh theo đặc thù hạ tầng đến cơ chế học hỏi liên tục, SelfHeal ngày càng am hiểu
-          hệ thống của bạn sau mỗi phiên tự phục hồi.
+          {t('adaptationLearning.subtitle')}
         </p>
       </div>
 
@@ -61,22 +62,21 @@ export const AdaptationLearningSection = ({ className = '', onNavigate }) => {
 
                   {/* Add Context / Custom Rules Mockup Box */}
                   <div className="als-mockup-card">
-                    <h4 className="als-mockup-title">Thiết lập quy tắc</h4>
-                    <p className="als-mockup-sub">Chỉ định chính sách và phạm vi dịch vụ áp dụng.</p>
+                    <h4 className="als-mockup-title">{t('adaptationLearning.card1.mockupTitle')}</h4>
+                    <p className="als-mockup-sub">{t('adaptationLearning.card1.mockupSub')}</p>
 
                     <div className="als-step-badge">
                       <span className="als-step-num">1</span>
-                      <span>Mô tả quy tắc khôi phục</span>
+                      <span>{t('adaptationLearning.card1.step1')}</span>
                     </div>
 
                     <div className="als-mockup-textarea">
-                      Tự động Rolling Restart khi tỷ lệ lỗi HTTP 5xx vượt quá 5% trong 2 phút liên tiếp
-                      trên deployment order-service.
+                      {t('adaptationLearning.card1.textarea')}
                     </div>
 
                     <div className="als-step-badge">
                       <span className="als-step-num">2</span>
-                      <span>Phạm vi dịch vụ áp dụng</span>
+                      <span>{t('adaptationLearning.card1.step2')}</span>
                     </div>
 
                     <div className="als-tags-row">
@@ -90,17 +90,17 @@ export const AdaptationLearningSection = ({ className = '', onNavigate }) => {
             </div>
 
             <div className="als-card-info">
-              <span className="als-card-tag">[ Quy Tắc Tùy Chỉnh ]</span>
-              <p className="als-card-title">Quy tắc của bạn, quyền kiểm soát của bạn</p>
+              <span className="als-card-tag">{t('adaptationLearning.card1.tag')}</span>
+              <p className="als-card-title">{t('adaptationLearning.card1.title')}</p>
               <p className="als-card-desc">
-                Chỉ định rõ ngữ cảnh cụ thể cho từng cụm k8s và áp dụng nhất quán các ranh giới an toàn tuyệt đối.
+                {t('adaptationLearning.card1.desc')}
               </p>
               <a
                 href="/guide"
                 onClick={(e) => handleNav(e, '/guide')}
                 className="als-card-btn"
               >
-                <span>Thiết lập quy tắc</span>
+                <span>{t('adaptationLearning.card1.cta')}</span>
               </a>
             </div>
           </article>
@@ -139,7 +139,7 @@ export const AdaptationLearningSection = ({ className = '', onNavigate }) => {
                       <div>
                         <span className="als-bubble-sender">sre-lead @platform</span>
                         <p className="als-bubble-text-user">
-                          Khi restart order-service, nhớ chờ Redis cache warm-up 30s trước khi định tuyến lại traffic.
+                          {t('adaptationLearning.card2.userMsg')}
                         </p>
                       </div>
                     </div>
@@ -152,7 +152,7 @@ export const AdaptationLearningSection = ({ className = '', onNavigate }) => {
                       <div>
                         <span className="als-bubble-sender" style={{ color: '#047857' }}>selfheal-agent</span>
                         <p className="als-bubble-text-agent">
-                          Đã ghi nhận bài học này vào bộ nhớ chính sách! Sẽ tự động áp dụng độ trễ 30s cho các phiên phục hồi sau.
+                          {t('adaptationLearning.card2.agentMsg')}
                         </p>
                       </div>
                     </div>
@@ -162,18 +162,17 @@ export const AdaptationLearningSection = ({ className = '', onNavigate }) => {
             </div>
 
             <div className="als-card-info">
-              <span className="als-card-tag">[ Học Tập &amp; Ghi Nhớ ]</span>
-              <p className="als-card-title">Học hỏi liên tục từ các lỗi xảy ra</p>
+              <span className="als-card-tag">{t('adaptationLearning.card2.tag')}</span>
+              <p className="als-card-title">{t('adaptationLearning.card2.title')}</p>
               <p className="als-card-desc">
-                SelfHeal liên tục phân tích phản hồi và hành động can thiệp thực tế của đội ngũ kỹ sư,
-                tự động hoàn thiện tri thức vận hành để không lặp lại sai số cũ.
+                {t('adaptationLearning.card2.desc')}
               </p>
               <a
                 href="/guide"
                 onClick={(e) => handleNav(e, '/guide')}
                 className="als-card-btn"
               >
-                <span>Xem tiến trình học</span>
+                <span>{t('adaptationLearning.card2.cta')}</span>
               </a>
             </div>
           </article>

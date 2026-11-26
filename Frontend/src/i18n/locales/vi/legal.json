@@ -1,0 +1,169 @@
+{
+  "privacy": {
+    "hero": {
+      "title": "Chính sách Bảo mật & Quyền riêng tư",
+      "subtitle": "Cam kết minh bạch của SelfHeal về nguyên tắc thu thập, xử lý và bảo vệ dữ liệu cá nhân cùng an toàn thông tin hạ tầng doanh nghiệp"
+    },
+    "lastUpdated": "Cập nhật lần cuối: 14 Tháng 11, 2026 (Last updated: November 14, 2026)",
+    "intro": "SelfHeal (\"chúng tôi\", \"nền tảng\") tôn trọng quyền riêng tư của người dùng và các tổ chức đối tác. Văn bản này quy định rõ các loại dữ liệu được thu thập, mục đích xử lý, các biện pháp an ninh kỹ thuật áp dụng và quyền hạn của bạn đối với dữ liệu khi tương tác với cổng thông tin quản trị và triển khai tác tử SelfHeal Kubernetes Agent.",
+    "s1": {
+      "heading": "1. Giới thiệu & Phạm vi Áp dụng",
+      "p1": "Chính sách này áp dụng cho toàn bộ các dịch vụ do SelfHeal cung cấp, bao gồm ứng dụng web bảng điều khiển, giao diện lập trình ứng dụng (API), và tác tử K8s Agent được cài đặt trong môi trường cụm máy chủ của khách hàng.",
+      "p2Before": "Chúng tôi hoạt động trên nguyên tắc ",
+      "p2Strong": "Tối thiểu hóa Dữ liệu (Data Minimization)",
+      "p2After": ": hệ thống chỉ thu thập những thông tin cần thiết nhất để phục vụ công tác giám sát, phân tích nguyên nhân gốc (RCA) và hỗ trợ tự động phục hồi hạ tầng."
+    },
+    "s2": {
+      "heading": "2. Dữ liệu Chúng tôi Thu thập",
+      "intro": "Để cung cấp các dịch vụ dự báo và khôi phục hạ tầng, SelfHeal phân loại dữ liệu tiếp nhận thành hai nhóm chính:",
+      "accountTitle": "Thông tin Tài khoản & Định danh Tổ chức",
+      "accountBody": "Khi đăng ký và quản lý tài khoản, chúng tôi thu thập tên người dùng, địa chỉ email, ảnh đại diện (nếu có), vai trò trong tổ chức (Role) và mật khẩu đã được băm một chiều bằng thuật toán Bcrypt. Chúng tôi cũng ghi nhận định danh môi trường (Environment ID) và tên cụm Kubernetes mà bạn kết nối.",
+      "telemetryTitle": "Số liệu Đo lường Hạ tầng (Telemetry Data)",
+      "telemetryBody": "Tác tử Kubernetes Agent chỉ thu thập các số liệu vận hành kỹ thuật theo chuỗi thời gian: mức tiêu thụ CPU, RAM, băng thông mạng, số lượng bản sao Pod, trạng thái vòng đời Workload (như CrashLoopBackOff hay OOMKilled) và nhật ký sự kiện hệ thống Kubernetes Events.",
+      "noBusinessLabel": "Cam kết không thu thập dữ liệu nghiệp vụ:",
+      "noBusinessBody": " SelfHeal tuyệt đối không đọc, không ghi nhận và không lưu trữ nội dung dữ liệu kinh doanh của ứng dụng khách hàng (database records, tin nhắn người dùng, dữ liệu thanh toán hay các file ứng dụng nội bộ)."
+    },
+    "s3": {
+      "heading": "3. Mục đích Sử dụng Thông tin",
+      "intro": "Dữ liệu thu thập được sử dụng riêng biệt cho các mục tiêu kỹ thuật cụ thể sau:",
+      "items": [
+        {
+          "label": "Cung cấp & Duy trì Dịch vụ:",
+          "text": " Hiển thị bảng điều khiển trực quan thời gian thực, quản lý cụm máy chủ và điều phối luồng phê duyệt phục hồi sự cố."
+        },
+        {
+          "label": "Hỗ trợ Suy luận & Phân tích AI:",
+          "text": " Mô hình chuỗi thời gian GRU sử dụng dữ liệu số liệu CPU/Memory để dự đoán xu hướng cạn kiệt tài nguyên trước khi sự cố xảy ra. Quá trình phân tích sử dụng dữ liệu telemetry ẩn danh (de-identified)."
+        },
+        {
+          "label": "Cảnh báo & Thông tin Kỹ thuật:",
+          "text": " Gửi thông báo tức thời khi hệ thống phát hiện các bất thường hoặc cần kỹ sư phê duyệt hành động khôi phục."
+        }
+      ]
+    },
+    "s4": {
+      "heading": "4. Cơ chế Lưu trữ & Bảo vệ Dữ liệu",
+      "intro": "Chúng tôi áp dụng các chuẩn mực an toàn cao nhất trong toàn bộ chu kỳ sống của dữ liệu:",
+      "items": [
+        {
+          "label": "Phân vùng Đa người thuê (Tenant Isolation):",
+          "text": " Dữ liệu giữa các tổ chức và môi trường được phân tách vật lý hoặc logic nghiêm ngặt trong cơ sở dữ liệu PostgreSQL, loại trừ hoàn toàn khả năng truy cập chéo."
+        },
+        {
+          "label": "Mã hóa Toàn diện trên Đường truyền:",
+          "text": " Mọi liên lạc giữa giao diện web, API backend và Kubernetes Agent đều được bảo vệ bởi giao thức HTTPS và WebSocket an toàn (wss:// over TLS)."
+        },
+        {
+          "label": "Tự động Ẩn Thông tin Nhạy cảm:",
+          "text": " Mọi thông tin định danh như khóa xác thực, token và mật khẩu đều được tự động gắn nhãn [REDACTED] trước khi ghi vào log giám sát hệ thống."
+        }
+      ]
+    },
+    "s5": {
+      "heading": "5. Chia sẻ & Chuyển giao Thông tin",
+      "noSellLabel": "Nguyên tắc Không Bán Dữ liệu:",
+      "noSellBody": " SelfHeal khẳng định không bao giờ bán, cho thuê hay thương mại hóa dữ liệu cá nhân hoặc số liệu hạ tầng của khách hàng cho bất kỳ bên thứ ba nào vì mục đích quảng cáo.",
+      "p2": "Thông tin chỉ được chia sẻ trong phạm vi cần thiết với các nhà cung cấp dịch vụ hạ tầng cốt lõi (như dịch vụ gửi email thông báo hoặc nhà cung cấp hạ tầng máy chủ) theo các thỏa thuận bảo mật thông tin nghiêm ngặt, hoặc khi có yêu cầu bằng văn bản hợp pháp từ cơ quan có thẩm quyền theo luật định."
+    },
+    "s6": {
+      "heading": "6. Quyền của Doanh nghiệp & Người dùng",
+      "intro": "Bạn luôn nắm quyền kiểm soát đối với dữ liệu của mình trên nền tảng SelfHeal:",
+      "items": [
+        {
+          "label": "Quyền Truy cập & Cập nhật:",
+          "text": " Người dùng có thể kiểm tra và chỉnh sửa thông tin hồ sơ cá nhân hoặc cấu hình tổ chức thông qua trang Cài đặt."
+        },
+        {
+          "label": "Quyền Yêu cầu Xóa Dữ liệu (Right to Erasure):",
+          "text": " Quản trị viên có quyền yêu cầu xóa bỏ tổ chức và toàn bộ dữ liệu lịch sử telemetry tương ứng khỏi hệ thống sản xuất."
+        },
+        {
+          "label": "Quyền Thu hồi Token Kết nối:",
+          "text": " Doanh nghiệp có thể thu hồi Agent Token bất cứ lúc nào từ bảng điều khiển để ngay lập tức ngắt liên kết của tác tử Agent khỏi hạ tầng SelfHeal."
+        }
+      ]
+    },
+    "s7": {
+      "heading": "7. Cookie & Quản lý Phiên làm việc",
+      "body": "SelfHeal chỉ sử dụng các cookie kỹ thuật thiết yếu phục vụ việc xác thực và duy trì phiên đăng nhập an toàn của người dùng (JWT session). Chúng tôi không cài đặt các cookie theo dõi hành vi xuyên trang hoặc cookie quảng cáo của các mạng tiếp thị bên thứ ba."
+    },
+    "s8": {
+      "heading": "8. Liên hệ & Tiếp nhận Thắc mắc",
+      "before": "Nếu bạn có bất kỳ câu hỏi, yêu cầu thực thi quyền riêng tư hoặc phản hồi nào liên quan đến chính sách bảo vệ dữ liệu của chúng tôi, vui lòng liên hệ trực tiếp với bộ phận phụ trách qua địa chỉ email: ",
+      "after": ". Chúng tôi cam kết phản hồi các yêu cầu hợp lệ trong thời gian sớm nhất."
+    }
+  },
+  "terms": {
+    "hero": {
+      "title": "Điều Khoản Dịch Vụ & Sử Dụng Hệ Thống",
+      "subtitle": "Quy chuẩn vận hành, giới hạn trách nhiệm và cam kết an toàn khi ứng dụng nền tảng tự phục hồi hạ tầng SelfHeal cho cụm máy chủ doanh nghiệp"
+    },
+    "lastUpdated": "Cập nhật lần cuối: 14 Tháng 11, 2026 (Last updated: November 14, 2026)",
+    "intro": "Chào mừng bạn đến với SelfHeal (\"chúng tôi\", \"nền tảng\"). Văn bản Điều khoản Dịch vụ này (\"Điều khoản\") xác định các quyền, nghĩa vụ và trách nhiệm pháp lý giữa doanh nghiệp của bạn và SelfHeal khi truy cập bảng điều khiển quản trị, sử dụng giao diện lập trình ứng dụng (API) hoặc kết nối tác tử SelfHeal Kubernetes Agent vào hạ tầng máy chủ của bạn.",
+    "s1": {
+      "heading": "1. Giới thiệu & Chấp thuận Điều khoản",
+      "p1": "SelfHeal cung cấp giải pháp giám sát chủ động và tự phục hồi hạ tầng máy chủ dựa trên trí tuệ nhân tạo (AI-Driven Proactive Self-Healing) dành riêng cho các doanh nghiệp vừa và nhỏ (SMEs). Hệ thống kết hợp phân tích chuỗi thời gian (time-series telemetry) và điều phối khắc phục sự cố trong môi trường container hóa (Docker và Kubernetes).",
+      "p2": "Bằng việc đăng ký tài khoản, đăng nhập vào bảng điều khiển, hoặc kích hoạt lệnh kết nối tác tử K8s Agent vào cụm máy chủ, bạn xác nhận đã đọc, hiểu và đồng ý bị ràng buộc bởi các Điều khoản này cùng Chính sách Bảo mật của chúng tôi. Nếu bạn đăng ký thay mặt cho một công ty hoặc tổ chức, bạn cam kết rằng mình có đầy đủ thẩm quyền pháp lý để đại diện cho tổ chức đó chấp thuận văn bản này."
+    },
+    "s2": {
+      "heading": "2. Quyền & Phạm vi Cấp phép Sử dụng",
+      "p1": "Theo các Điều khoản này, SelfHeal cấp cho bạn quyền sử dụng dịch vụ dưới hình thức phần mềm dịch vụ (SaaS) có giới hạn, có thể hủy bỏ, không độc quyền và không thể chuyển nhượng, nhằm mục đích giám sát và tự phục hồi hạ tầng nội bộ của doanh nghiệp bạn.",
+      "prohibitedHeading": "Hành vi bị nghiêm cấm",
+      "prohibitedList": [
+        "Đảo ngược kỹ thuật (reverse engineer), dịch ngược (decompile) hoặc cố gắng trích xuất mã nguồn độc quyền của mô hình học máy (GRU Neural Network), thuật toán phân tích nguyên nhân gốc rễ (RCA) hoặc tác tử SelfHeal Agent.",
+        "Lạm dụng API, phát tán mã độc, hoặc thực hiện các hành vi tấn công từ chối dịch vụ nhằm vượt qua ranh giới rate limit và các biện pháp bảo vệ của cổng dịch vụ.",
+        "Sử dụng dịch vụ để theo dõi, thu thập dữ liệu hoặc can thiệp vào các cụm máy chủ hạ tầng mà bạn không có quyền sở hữu hoặc quyền quản trị hợp pháp.",
+        "Bán lại, cho thuê lại, phân phối lại hoặc cấp phép lại dịch vụ cho bất kỳ bên thứ ba nào mà không có sự đồng ý trước bằng văn bản của SelfHeal."
+      ]
+    },
+    "s3": {
+      "heading": "3. Quyền Sở hữu Trí tuệ & Dữ liệu Khách hàng",
+      "customerLabel": "Dữ liệu của Khách hàng:",
+      "customerBody": " Khách hàng giữ toàn bộ quyền sở hữu trí tuệ và quyền kiểm soát đối với mã nguồn ứng dụng, cấu hình dịch vụ, biến môi trường (Secrets/ConfigMaps) và số liệu telemetry phát sinh từ cụm máy chủ của mình. SelfHeal không tuyên bố quyền sở hữu đối với dữ liệu của bạn và chỉ xử lý dữ liệu này trong phạm vi cần thiết để cung cấp tính năng phân tích và tự động hóa.",
+      "selfhealLabel": "Tài sản của SelfHeal:",
+      "selfhealBody": " Toàn bộ nhãn hiệu, giao diện đồ họa, mã nguồn nền tảng, thiết kế bảng điều khiển, bộ tác tử SelfHeal Agent, tài liệu hướng dẫn và các mô hình dự báo AI đều thuộc quyền sở hữu trí tuệ độc quyền của SelfHeal và được bảo vệ bởi luật sở hữu trí tuệ hiện hành."
+    },
+    "s4": {
+      "heading": "4. Triển khai Tác tử K8s & Trách nhiệm Hạ tầng",
+      "rbacLabel": "Nguyên tắc Đặc quyền Tối thiểu (Least Privilege RBAC):",
+      "rbacBody": " Tác tử SelfHeal Agent được thiết kế để vận hành với quyền hạn tối thiểu cần thiết bên trong cụm máy chủ Kubernetes. Khách hàng chịu trách nhiệm xác thực và áp dụng đúng cấu hình ClusterRole và RoleBinding do SelfHeal cung cấp, đảm bảo tác tử không bị cấp phát quyền hạn vượt quá phạm vi giám sát cần thiết.",
+      "keysHighlight": "Quản lý Khóa Bí mật: Khách hàng có trách nhiệm bảo mật các khóa xác thực Agent Token và thông tin xác thực JWT. Trường hợp phát hiện token bị lộ lọt, khách hàng cần chủ động thu hồi token trên bảng điều khiển hoặc thông báo ngay lập tức cho đội ngũ kỹ thuật của SelfHeal.",
+      "costLabel": "Chi phí & Tài nguyên Cụm:",
+      "costBody": " Khách hàng chịu trách nhiệm về chi phí tài nguyên phần cứng (CPU, Memory, Băng thông mạng) do tác tử Agent và các hành động phục hồi (scaling, restart) tiêu thụ trên hạ tầng đám mây của khách hàng."
+    },
+    "s5": {
+      "heading": "5. Tính năng AI & Phê duyệt Human-in-the-Loop (HITL)",
+      "aiLabel": "Bản chất của Đề xuất AI:",
+      "aiBody": " Các dự báo suy giảm tài nguyên và khuyến nghị hành động tự phục hồi được tính toán dựa trên mô hình mạng nơ-ron GRU và các mẫu dữ liệu lịch sử. Mặc dù chúng tôi không ngừng tối ưu hóa độ chuẩn xác, các dự báo này mang tính chất cảnh báo hỗ trợ kỹ thuật và không thể đảm bảo ngăn chặn 100% mọi sự cố bất khả kháng.",
+      "hitlLabel": "Cơ chế Phê duyệt Human-in-the-Loop (HITL):",
+      "hitlBody": " Nhằm đảm bảo kiểm soát an toàn tối đa cho hạ tầng doanh nghiệp, mọi thao tác phục hồi nhạy cảm (như tái khởi động Deployment, scale tài nguyên pod hoặc chỉnh sửa cấu hình chạy) đều yêu cầu sự xác nhận và phê duyệt có chủ đích từ kỹ sư quản trị của khách hàng thông qua bảng điều khiển, ngoại trừ các kịch bản đã được khách hàng cấu hình tự động hóa toàn phần một cách rõ ràng."
+    },
+    "s6": {
+      "heading": "6. Giới hạn Trách nhiệm & Khước từ Bảo đảm",
+      "asIsLabel": "Cung cấp theo Nguyên trạng:",
+      "asIsBody": " Dịch vụ được cung cấp trên nguyên tắc \"nguyên trạng\" (as is) và \"như sẵn có\" (as available). SelfHeal khước từ mọi cam kết hoặc bảo đảm ngầm định về việc dịch vụ sẽ hoàn toàn không gặp gián đoạn, không có lỗi hoặc tương thích với mọi bản phân phối Kubernetes tùy biến.",
+      "exclusionLabel": "Loại trừ Thiệt hại Hậu quả:",
+      "exclusionBody": " Trong giới hạn tối đa được pháp luật cho phép, SelfHeal sẽ không chịu trách nhiệm đối với bất kỳ thiệt hại gián tiếp, đặc biệt, ngẫu nhiên hoặc có tính chất trừng phạt nào, bao gồm nhưng không giới hạn ở: mất mát dữ liệu sản xuất, gián đoạn kinh doanh, mất lợi nhuận, hoặc chi phí khôi phục hạ tầng phát sinh từ các quyết định phục hồi do khách hàng phê duyệt.",
+      "capLabel": "Giới hạn Bồi thường Tối đa:",
+      "capBody": " Tổng trách nhiệm bồi thường tích lũy của SelfHeal đối với mọi yêu cầu bồi thường phát sinh từ hoặc liên quan đến việc sử dụng dịch vụ sẽ không vượt quá tổng số tiền phí dịch vụ mà bạn đã chi trả cho SelfHeal trong sáu (06) tháng gần nhất trước khi sự kiện gây thiệt hại phát sinh."
+    },
+    "s7": {
+      "heading": "7. Tạm ngừng & Chấm dứt Dịch vụ",
+      "suspendLabel": "Quyền Tạm ngừng Dịch vụ:",
+      "suspendBody": " SelfHeal có quyền tạm ngừng hoặc chấm dứt quyền truy cập dịch vụ của bạn bất kỳ lúc nào nếu:",
+      "suspendList": [
+        "Bạn vi phạm nghiêm trọng bất kỳ điều khoản nào trong văn bản này.",
+        "Hành vi sử dụng của bạn tạo ra rủi ro an ninh mạng hoặc gây cản trở sự ổn định của cụm dịch vụ SelfHeal dùng chung.",
+        "Hết hạn thanh toán phí dịch vụ định kỳ mà không được khắc phục sau khi nhận được thông báo nhắc nhở."
+      ],
+      "effectLabel": "Hậu quả khi Chấm dứt:",
+      "effectBody": " Khi dịch vụ chấm dứt, bạn phải gỡ bỏ toàn bộ tác tử SelfHeal Agent khỏi cụm máy chủ của mình. Quyền truy cập bảng điều khiển và API sẽ lập tức bị vô hiệu hóa, và việc bảo lưu hoặc tiêu hủy dữ liệu lịch sử sẽ tuân thủ quy trình quy định trong Chính sách Bảo mật."
+    },
+    "s8": {
+      "heading": "8. Luật Điều chỉnh & Kênh Tiếp nhận Khiếu nại",
+      "p1": "Các Điều khoản Dịch vụ này được điều chỉnh và diễn giải theo pháp luật của nước Cộng hòa Xã hội Chủ nghĩa Việt Nam. Mọi tranh chấp phát sinh sẽ trước hết được thương lượng giải quyết trên tinh thần hòa giải thiện chí. Nếu không giải quyết được bằng hòa giải trong vòng ba mươi (30) ngày, tranh chấp sẽ được phân xử tại Tòa án có thẩm quyền tại Thành phố Hồ Chí Minh.",
+      "p2": "Mọi ý kiến đóng góp, thắc mắc pháp lý hoặc thông báo liên quan đến Điều khoản Dịch vụ, xin vui lòng gửi thư điện tử về cho ban pháp chế của chúng tôi:",
+      "emailLabel": "Email Pháp chế & Khiếu nại:"
+    }
+  }
+}

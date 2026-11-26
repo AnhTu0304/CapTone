@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowRight,
   Check,
@@ -23,6 +24,7 @@ import { useAuth } from '../../context/AuthContext';
 import authService from '../../services/authService';
 
 export const RegisterPage = ({ onNavigate }) => {
+  const { t } = useTranslation('auth');
   const { register, loginWithGoogle, verifyEmail, resendVerification } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -71,9 +73,9 @@ export const RegisterPage = ({ onNavigate }) => {
     if (/[A-Z]/.test(pass)) score += 1;
     if (/[^A-Za-z0-9]/.test(pass)) score += 1;
 
-    if (score <= 1) return { score: 1, label: 'Mật khẩu yếu', color: '#EF4444' };
-    if (score === 2 || score === 3) return { score: 2, label: 'Mật khẩu trung bình', color: '#F59E0B' };
-    return { score: 3, label: 'Mật khẩu mạnh', color: '#10B981' };
+    if (score <= 1) return { score: 1, label: t('register.strength.weak'), color: '#EF4444' };
+    if (score === 2 || score === 3) return { score: 2, label: t('register.strength.medium'), color: '#F59E0B' };
+    return { score: 3, label: t('register.strength.strong'), color: '#10B981' };
   };
 
   const strength = calculatePasswordStrength(password);
@@ -81,33 +83,33 @@ export const RegisterPage = ({ onNavigate }) => {
   const validate = () => {
     const errs = {};
     if (!fullName.trim()) {
-      errs.fullName = 'Vui lòng nhập họ và tên';
+      errs.fullName = t('register.validation.fullNameRequired');
     } else if (fullName.trim().length < 2) {
-      errs.fullName = 'Họ và tên phải có ít nhất 2 ký tự';
+      errs.fullName = t('register.validation.fullNameMin');
     }
 
     if (!email.trim()) {
-      errs.email = 'Vui lòng nhập email công việc';
+      errs.email = t('register.validation.emailRequired');
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errs.email = 'Vui lòng nhập địa chỉ email hợp lệ';
+      errs.email = t('register.validation.emailInvalid');
     }
 
     if (!password) {
-      errs.password = 'Vui lòng nhập mật khẩu';
+      errs.password = t('register.validation.passwordRequired');
     } else if (password.length < 8) {
-      errs.password = 'Mật khẩu phải có ít nhất 8 ký tự';
+      errs.password = t('register.validation.passwordMin');
     } else if (strength.score < 2) {
-      errs.password = 'Mật khẩu quá yếu. Vui lòng thêm chữ số hoặc chữ in hoa.';
+      errs.password = t('register.validation.passwordWeak');
     }
 
     if (!confirmPassword) {
-      errs.confirmPassword = 'Vui lòng xác nhận mật khẩu';
+      errs.confirmPassword = t('register.validation.confirmRequired');
     } else if (password !== confirmPassword) {
-      errs.confirmPassword = 'Mật khẩu xác nhận không khớp';
+      errs.confirmPassword = t('register.validation.confirmMismatch');
     }
 
     if (!agreedToTerms) {
-      errs.terms = 'Bạn cần đồng ý với Điều khoản dịch vụ và Chính sách bảo mật';
+      errs.terms = t('register.validation.termsRequired');
     }
 
     setErrors(errs);
@@ -135,7 +137,7 @@ export const RegisterPage = ({ onNavigate }) => {
       setResendCooldown(60);
       setSubmitted(true);
     } catch (err) {
-      setErrors({ submit: err.message || 'Đăng ký tài khoản không thành công. Vui lòng thử lại.' });
+      setErrors({ submit: err.message || t('register.errors.registerFailed') });
     } finally {
       setLoading(false);
     }
@@ -160,7 +162,7 @@ export const RegisterPage = ({ onNavigate }) => {
           clearInterval(interval);
           setLoading(false);
           setErrors({
-            submit: 'Không thể kết nối dịch vụ Google. Vui lòng tắt trình chặn quảng cáo nếu có và tải lại trang.',
+            submit: t('register.errors.googleConnectFailed'),
           });
         }
       }, 200);
@@ -174,13 +176,13 @@ export const RegisterPage = ({ onNavigate }) => {
         callback: async (response) => {
           if (response.error) {
             setLoading(false);
-            setErrors({ submit: 'Đăng ký Google không thành công: ' + response.error });
+            setErrors({ submit: t('register.errors.googleFailedPrefix') + response.error });
             return;
           }
 
           if (!response.access_token) {
             setLoading(false);
-            setErrors({ submit: 'Không nhận được mã xác thực từ Google' });
+            setErrors({ submit: t('register.errors.googleNoToken') });
             return;
           }
 
@@ -190,7 +192,7 @@ export const RegisterPage = ({ onNavigate }) => {
             await authFn(response.access_token);
             handleLink(null, '/portal');
           } catch (err) {
-            setErrors({ submit: err.message || 'Đăng ký Google không thành công. Vui lòng thử lại.' });
+            setErrors({ submit: err.message || t('register.errors.googleRetry') });
           } finally {
             setLoading(false);
           }
@@ -200,18 +202,17 @@ export const RegisterPage = ({ onNavigate }) => {
           if (err?.type === 'popup_closed') return;
           if (err?.type === 'popup_blocked_by_browser') {
             setErrors({
-              submit:
-                'Trình duyệt đã chặn cửa sổ đăng nhập Google. Vui lòng nhấn vào biểu tượng ổ khóa trên thanh địa chỉ để cho phép popup và thử lại.',
+              submit: t('register.errors.googlePopupBlocked'),
             });
             return;
           }
-          setErrors({ submit: err?.message || 'Không thể mở cửa sổ Google. Vui lòng kiểm tra chặn popup trên trình duyệt.' });
+          setErrors({ submit: err?.message || t('register.errors.googlePopupFailed') });
         },
       });
 
       tokenClient.requestAccessToken({ prompt: 'select_account' });
     } catch (err) {
-      setErrors({ submit: 'Không thể khởi tạo phiên đăng ký Google: ' + err.message });
+      setErrors({ submit: t('register.errors.googleInitFailedPrefix') + err.message });
     }
   };
 
@@ -310,7 +311,7 @@ export const RegisterPage = ({ onNavigate }) => {
   const handleVerifyOtp = async (codeToVerify) => {
     const fullCode = (typeof codeToVerify === 'string' ? codeToVerify : otp.join('')).trim();
     if (fullCode.length !== 6) {
-      setOtpError('Vui lòng nhập đầy đủ 6 chữ số mã OTP');
+      setOtpError(t('register.otp.missingSixDigits'));
       return;
     }
 
@@ -327,7 +328,7 @@ export const RegisterPage = ({ onNavigate }) => {
         handleLink(null, targetPath);
       }, 900);
     } catch (err) {
-      setOtpError(err.message || 'Mã xác thực không chính xác hoặc đã hết hạn. Vui lòng kiểm tra lại.');
+      setOtpError(err.message || t('register.otp.invalidOtp'));
     } finally {
       setVerifyingOtp(false);
     }
@@ -346,10 +347,10 @@ export const RegisterPage = ({ onNavigate }) => {
       } else {
         await authService.resendVerification();
       }
-      setResendStatus('Đã gửi lại mã OTP mới thành công! Vui lòng kiểm tra hộp thư.');
+      setResendStatus(t('register.otp.resendSuccess'));
       setResendCooldown(60);
     } catch (err) {
-      setResendStatus('Đã gửi lại mã xác thực tới email của bạn. Vui lòng kiểm tra hộp thư.');
+      setResendStatus(t('register.otp.resendFallback'));
       setResendCooldown(60);
     } finally {
       setResendingOtp(false);
@@ -365,17 +366,17 @@ export const RegisterPage = ({ onNavigate }) => {
       {!submitted && (
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <h1 style={AUTH_HEADING_STYLE}>
-            Tạo tài khoản mới
+            {t('register.title')}
           </h1>
           <p style={{ fontSize: '0.875rem', color: '#4B5563', fontFamily: 'var(--font-body)', margin: 0 }}>
-            Đã có tài khoản?{' '}
+            {t('register.hasAccount')}{' '}
             <a
               href="/login"
               className="auth-link"
               onClick={(e) => handleLink(e, '/login')}
               style={{ fontWeight: 500 }}
             >
-              Đăng nhập
+              {t('register.loginLink')}
             </a>
           </p>
         </div>
@@ -414,11 +415,11 @@ export const RegisterPage = ({ onNavigate }) => {
               fontSize: '1.45rem',
             }}
           >
-            Nhập mã xác thực OTP
+            {t('register.otp.title')}
           </h2>
 
           <p style={{ margin: '0 0 12px 0', color: '#4B5563', fontSize: '0.875rem', lineHeight: 1.5 }}>
-            Chúng tôi đã gửi mã xác thực gồm 6 chữ số đến email:
+            {t('register.otp.sentTo')}
           </p>
 
           <div
@@ -439,7 +440,7 @@ export const RegisterPage = ({ onNavigate }) => {
           </div>
 
           <p style={{ margin: '0 0 20px 0', color: '#6B7280', fontSize: '0.8125rem', lineHeight: 1.4 }}>
-            Vui lòng kiểm tra hộp thư (hoặc mục Spam) và nhập mã OTP 6 số bên dưới để kích hoạt tài khoản.
+            {t('register.otp.instructions')}
           </p>
 
           <div
@@ -461,7 +462,7 @@ export const RegisterPage = ({ onNavigate }) => {
                 value={digit}
                 onChange={(e) => handleOtpChange(idx, e)}
                 onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                aria-label={`Mã OTP số ${idx + 1}`}
+                aria-label={t('register.otp.digitAria', { index: idx + 1 })}
                 style={{
                   width: '44px',
                   height: '50px',
@@ -519,7 +520,7 @@ export const RegisterPage = ({ onNavigate }) => {
               }}
             >
               <CheckCircle2 size={16} color="#059669" />
-              <span>Xác thực OTP thành công! Đang chuyển hướng...</span>
+              <span>{t('register.otp.verifiedSuccess')}</span>
             </div>
           )}
 
@@ -549,16 +550,16 @@ export const RegisterPage = ({ onNavigate }) => {
             {verifyingOtp ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                <span>Đang xác thực OTP...</span>
+                <span>{t('register.otp.verifying')}</span>
               </>
             ) : otpSuccess ? (
               <>
                 <Check size={16} />
-                <span>Đã xác thực thành công</span>
+                <span>{t('register.otp.verifiedBtn')}</span>
               </>
             ) : (
               <>
-                <span>Xác nhận mã OTP</span>
+                <span>{t('register.otp.verifyBtn')}</span>
                 <ArrowRight size={16} />
               </>
             )}
@@ -571,7 +572,7 @@ export const RegisterPage = ({ onNavigate }) => {
 
             {resendCooldown > 0 ? (
               <span style={{ color: '#6B7280' }}>
-                Chưa nhận được mã? Gửi lại sau <strong style={{ color: '#111827' }}>{resendCooldown}s</strong>
+                {t('register.otp.resendCountdownPrefix')}<strong style={{ color: '#111827' }}>{resendCooldown}s</strong>
               </span>
             ) : (
               <button
@@ -589,7 +590,7 @@ export const RegisterPage = ({ onNavigate }) => {
                   padding: 0,
                 }}
               >
-                {resendingOtp ? 'Đang gửi lại mã...' : 'Chưa nhận được mã? Gửi lại mã OTP'}
+                {resendingOtp ? t('register.otp.resending') : t('register.otp.resendBtn')}
               </button>
             )}
           </div>
@@ -615,7 +616,7 @@ export const RegisterPage = ({ onNavigate }) => {
               }}
             >
               <ArrowLeft size={14} />
-              <span>Đổi địa chỉ email khác</span>
+              <span>{t('register.otp.changeEmail')}</span>
             </button>
           </div>
         </div>
@@ -639,7 +640,7 @@ export const RegisterPage = ({ onNavigate }) => {
 
           <div>
             <label htmlFor="register-name" style={AUTH_LABEL_STYLE}>
-              Họ và tên
+              {t('register.fullNameLabel')}
             </label>
             <input
               id="register-name"
@@ -649,7 +650,7 @@ export const RegisterPage = ({ onNavigate }) => {
                 setFullName(e.target.value);
                 if (errors.fullName) setErrors((prev) => ({ ...prev, fullName: '' }));
               }}
-              placeholder="Nguyễn Văn A"
+              placeholder={t('register.fullNamePlaceholder')}
               style={{
                 ...AUTH_INPUT_STYLE,
                 border: errors.fullName ? '1px solid #EF4444' : '1px solid #D1D5DB',
@@ -672,7 +673,7 @@ export const RegisterPage = ({ onNavigate }) => {
 
           <div>
             <label htmlFor="register-email" style={AUTH_LABEL_STYLE}>
-              Email công việc
+              {t('register.emailLabel')}
             </label>
             <input
               id="register-email"
@@ -682,7 +683,7 @@ export const RegisterPage = ({ onNavigate }) => {
                 setEmail(e.target.value);
                 if (errors.email) setErrors((prev) => ({ ...prev, email: '' }));
               }}
-              placeholder="ten@congty.com"
+              placeholder={t('register.emailPlaceholder')}
               style={{
                 ...AUTH_INPUT_STYLE,
                 border: errors.email ? '1px solid #EF4444' : '1px solid #D1D5DB',
@@ -705,7 +706,7 @@ export const RegisterPage = ({ onNavigate }) => {
 
           <div>
             <label htmlFor="register-password" style={AUTH_LABEL_STYLE}>
-              Mật khẩu
+              {t('register.passwordLabel')}
             </label>
             <div style={{ position: 'relative' }}>
               <input
@@ -733,7 +734,7 @@ export const RegisterPage = ({ onNavigate }) => {
               />
               <button
                 type="button"
-                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                aria-label={showPassword ? t('register.hidePassword') : t('register.showPassword')}
                 onClick={() => setShowPassword(!showPassword)}
                 style={{
                   position: 'absolute',
@@ -781,7 +782,7 @@ export const RegisterPage = ({ onNavigate }) => {
 
           <div>
             <label htmlFor="register-confirm-password" style={AUTH_LABEL_STYLE}>
-              Xác nhận mật khẩu
+              {t('register.confirmPasswordLabel')}
             </label>
             <div style={{ position: 'relative' }}>
               <input
@@ -809,7 +810,7 @@ export const RegisterPage = ({ onNavigate }) => {
               />
               <button
                 type="button"
-                aria-label={showConfirmPassword ? 'Ẩn mật khẩu xác nhận' : 'Hiện mật khẩu xác nhận'}
+                aria-label={showConfirmPassword ? t('register.hideConfirmPassword') : t('register.showConfirmPassword')}
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 style={{
                   position: 'absolute',
@@ -862,21 +863,21 @@ export const RegisterPage = ({ onNavigate }) => {
                 }}
               />
               <span>
-                Tôi đồng ý với{' '}
+                {t('register.agreePrefix')}{' '}
                 <a
                   href="/terms"
                   className="auth-link"
                   onClick={(e) => handleLink(e, '/terms')}
                 >
-                  Điều khoản dịch vụ
+                  {t('register.termsLink')}
                 </a>{' '}
-                và{' '}
+                {t('register.and')}{' '}
                 <a
                   href="/privacy"
                   className="auth-link"
                   onClick={(e) => handleLink(e, '/privacy')}
                 >
-                  Chính sách bảo mật
+                  {t('register.privacyLink')}
                 </a>
               </span>
             </label>
@@ -906,17 +907,17 @@ export const RegisterPage = ({ onNavigate }) => {
               {loading ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  <span>Đang tạo tài khoản...</span>
+                  <span>{t('register.submitting')}</span>
                 </>
               ) : (
                 <>
-                  <span>Bắt đầu miễn phí</span>
+                  <span>{t('register.submit')}</span>
                   <ArrowRight size={17} strokeWidth={2.2} />
                 </>
               )}
             </button>
 
-            <GoogleAuthButton label="Đăng ký với Google" onClick={handleGoogleSignUp} disabled={loading} />
+            <GoogleAuthButton label={t('register.googleBtn')} onClick={handleGoogleSignUp} disabled={loading} />
           </div>
         </form>
       )}

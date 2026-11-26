@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Activity, 
   Layers, 
@@ -12,30 +13,20 @@ import {
 } from 'lucide-react';
 
 export const DashboardPreview = ({ className = '' }) => {
-  const sidebarItems = [
-    { label: 'Tổng quan', icon: Activity, active: true },
-    { label: 'Môi trường', icon: Layers, active: false },
-    { label: 'Giám sát', icon: Cpu, active: false },
-    { label: 'Sự cố', icon: AlertCircle, active: false },
-    { label: 'Dự đoán AI', icon: Sparkles, active: false },
-    { label: 'Tự phục hồi', icon: Zap, active: false },
-    { label: 'Cài đặt', icon: Settings, active: false },
-  ];
+  const { t } = useTranslation('home');
+  const sidebarIcons = [Activity, Layers, Cpu, AlertCircle, Sparkles, Zap, Settings];
+  const sidebarLabels = t('dashboardPreview.sidebar', { returnObjects: true });
+  const sidebarItems = (Array.isArray(sidebarLabels) ? sidebarLabels : []).map((label, idx) => ({
+    label,
+    icon: sidebarIcons[idx] || Activity,
+    active: idx === 0,
+  }));
 
-  const metrics = [
-    { label: 'Độ khả dụng', value: '98,7%', change: '↑ 2,4%', isGood: true },
-    { label: 'Mức sử dụng CPU', value: '42%', change: '↓ 6,2%', isGood: true },
-    { label: 'Mức sử dụng bộ nhớ', value: '68%', change: '↓ 4,1%', isGood: true },
-    { label: 'Số Pod đang chạy', value: '24', change: '↑ 2,0%', isGood: true },
-    { label: 'Sự cố đang diễn ra', value: '0', change: '↓ 100%', isGood: true },
-  ];
+  const rawMetrics = t('dashboardPreview.metrics', { returnObjects: true });
+  const metrics = Array.isArray(rawMetrics) ? rawMetrics : [];
 
-  const activities = [
-    { title: 'Tự phục hồi hoàn tất', time: '2m trước', type: 'healing' },
-    { title: 'Phát hiện dự đoán AI', time: '12m trước', type: 'ai' },
-    { title: 'Sự cố mới đã giải quyết', time: '45m trước', type: 'resolved' },
-    { title: 'Agent trực tuyến', time: '1h trước', type: 'online' },
-  ];
+  const rawActivities = t('dashboardPreview.activities', { returnObjects: true });
+  const activities = Array.isArray(rawActivities) ? rawActivities : [];
 
   return (
     <div
@@ -104,7 +95,7 @@ export const DashboardPreview = ({ className = '' }) => {
             }}
           >
             <Search size={14} />
-            <span>Tìm kiếm Pod, namespace...</span>
+            <span>{t('dashboardPreview.searchPlaceholder')}</span>
           </div>
 
           <div
@@ -125,7 +116,7 @@ export const DashboardPreview = ({ className = '' }) => {
             }}
           >
             <span style={{ width: '6px', height: '6px', backgroundColor: '#000000' }}></span>
-            <span>Trực tuyến (Bình thường)</span>
+            <span>{t('dashboardPreview.statusOnline')}</span>
           </div>
 
           <div style={{ width: '28px', height: '28px', borderRadius: '0px', backgroundColor: '#2A2838', border: '1px solid #555368', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>
@@ -180,7 +171,7 @@ export const DashboardPreview = ({ className = '' }) => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <h3 style={{ fontSize: '1.0625rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, fontFamily: 'var(--font-display)' }}>
-                Tổng quan hệ thống
+                {t('dashboardPreview.systemOverview')}
               </h3>
               <span
                 style={{
@@ -196,11 +187,11 @@ export const DashboardPreview = ({ className = '' }) => {
                   border: '1px solid var(--border-default)',
                 }}
               >
-                Agent trực tuyến
+                {t('dashboardPreview.agentOnline')}
               </span>
             </div>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              Cập nhật: 10s trước
+              {t('dashboardPreview.updatedAgo')}
             </span>
           </div>
 
@@ -267,7 +258,7 @@ export const DashboardPreview = ({ className = '' }) => {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
-                  Mức sử dụng tài nguyên
+                  {t('dashboardPreview.resourceUsage')}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--color-primary)', fontWeight: 600 }}>
@@ -276,7 +267,7 @@ export const DashboardPreview = ({ className = '' }) => {
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--color-primary)', fontWeight: 600 }}>
                     <span style={{ width: '7px', height: '7px', borderRadius: '0px', backgroundColor: 'var(--color-accent)' }}></span>
-                    Bộ nhớ
+                    {t('dashboardPreview.memoryLabel')}
                   </span>
                 </div>
               </div>
@@ -365,7 +356,7 @@ export const DashboardPreview = ({ className = '' }) => {
               }}
             >
               <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
-                Hoạt động gần đây
+                {t('dashboardPreview.recentActivity')}
               </span>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -422,8 +413,8 @@ export const DashboardPreview = ({ className = '' }) => {
                 <Sparkles size={14} />
               </div>
               <div>
-                <span style={{ fontWeight: 700, color: '#92400E', fontFamily: 'var(--font-display)' }}>Dự đoán AI: </span>
-                <span style={{ color: '#78350F', fontFamily: 'var(--font-body)' }}>Mức sử dụng bộ nhớ có thể vượt ngưỡng an toàn trong ~18 phút</span>
+                <span style={{ fontWeight: 700, color: '#92400E', fontFamily: 'var(--font-display)' }}>{t('dashboardPreview.aiPredictionPrefix')}</span>
+                <span style={{ color: '#78350F', fontFamily: 'var(--font-body)' }}>{t('dashboardPreview.aiPredictionMsg')}</span>
               </div>
             </div>
 
@@ -440,7 +431,7 @@ export const DashboardPreview = ({ className = '' }) => {
                   textTransform: 'uppercase',
                 }}
               >
-                Rủi ro: Trung bình
+                {t('dashboardPreview.riskMedium')}
               </span>
               <ChevronRight size={16} color="#B45309" />
             </div>

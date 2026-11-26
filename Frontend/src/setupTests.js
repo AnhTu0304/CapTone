@@ -3,6 +3,20 @@
 // expect(element).toHaveTextContent(/react/i)
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
+import i18n, { LANG_STORAGE_KEY } from './i18n';
+
+beforeEach(() => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(LANG_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  if (i18n.language !== 'vi') {
+    i18n.changeLanguage('vi');
+  }
+});
 
 // Stub getContext and scrollTo for jsdom to suppress not-implemented warnings
 if (typeof window !== 'undefined') {

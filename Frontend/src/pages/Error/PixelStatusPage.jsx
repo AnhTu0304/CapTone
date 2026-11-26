@@ -1,9 +1,11 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '../../context/ToastContext';
 import './PixelStatusPage.css';
 
 export const PixelStatusPage = ({
   code,
+  statusKey,
   statusLabel,
   isTextStatus = false,
   title,
@@ -18,17 +20,22 @@ export const PixelStatusPage = ({
   warnTitle = null,
   warnMessage = null,
 }) => {
+  const { t } = useTranslation('error');
   const { warning } = useToast();
   const lastWarnedPathRef = useRef(null);
+
+  const resolvedTitle = title || (statusKey ? t(`statuses.${statusKey}.title`) : '');
+  const resolvedMessage = message || (statusKey ? t(`statuses.${statusKey}.message`) : '');
+  const resolvedImageAlt = imageAlt || (statusKey ? t(`statuses.${statusKey}.imageAlt`) : resolvedTitle);
 
   useEffect(() => {
     if (!warnPath || lastWarnedPathRef.current === warnPath) return;
     lastWarnedPathRef.current = warnPath;
     warning(
-      warnMessage || `Đường dẫn "${warnPath}" không tồn tại trên hệ thống hoặc đã bị di chuyển.`,
-      warnTitle || `Cảnh báo chuyển trang — ${code || '404'}`
+      warnMessage || t('defaultWarnMessage', { path: warnPath }),
+      warnTitle || t('defaultWarnTitle', { code: code || '404' })
     );
-  }, [warnPath, warnTitle, warnMessage, code, warning]);
+  }, [warnPath, warnTitle, warnMessage, code, warning, t]);
 
   const displayCode = statusLabel || code;
   const stageStyle = backgroundSrc
@@ -56,15 +63,15 @@ export const PixelStatusPage = ({
             aria-live="polite"
             data-testid={`${testId}-note`}
           >
-            <h1 className="pixel-scenic-note-title">{title}</h1>
-            <p className="pixel-scenic-note-message">{message}</p>
+            <h1 className="pixel-scenic-note-title">{resolvedTitle}</h1>
+            <p className="pixel-scenic-note-message">{resolvedMessage}</p>
           </div>
         </div>
 
         <div className="pixel-scenic-right">
           <img
             src={imageSrc}
-            alt={imageAlt || title}
+            alt={resolvedImageAlt || resolvedTitle}
             className="pixel-scenic-artwork"
             data-testid={`${testId}-artwork`}
           />

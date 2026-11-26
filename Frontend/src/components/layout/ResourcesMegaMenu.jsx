@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   BookOpen,
   Scale,
@@ -10,6 +11,7 @@ import {
 import './ResourcesMegaMenu.css';
 
 export const ResourcesMegaMenu = ({ isOpen, onClose, onNavigate, menuRef }) => {
+  const { t } = useTranslation('common');
   if (!isOpen) return null;
 
   const handleItemClick = (e, path, isExternal = false) => {
@@ -27,48 +29,48 @@ export const ResourcesMegaMenu = ({ isOpen, onClose, onNavigate, menuRef }) => {
   const menuItems = [
     {
       id: 'docs',
-      title: 'Tài Liệu Hướng Dẫn',
-      description: 'Hướng dẫn cài đặt, cấu hình tác tử và tài liệu nền tảng.',
+      title: t('megaMenu.items.docs.title'),
+      description: t('megaMenu.items.docs.description'),
       icon: BookOpen,
       route: '/guide',
       isExternal: false,
     },
     {
       id: 'terms',
-      title: 'Điều Khoản & Điều Kiện',
-      description: 'Điều khoản sử dụng và chính sách dịch vụ nền tảng.',
+      title: t('megaMenu.items.terms.title'),
+      description: t('megaMenu.items.terms.description'),
       icon: Scale,
       route: '/terms',
       isExternal: false,
     },
     {
       id: 'contact',
-      title: 'Liên Hệ Tư Vấn',
-      description: 'Kết nối trực tiếp với đội ngũ phát triển và kỹ sư SelfHeal.',
+      title: t('megaMenu.items.contact.title'),
+      description: t('megaMenu.items.contact.description'),
       icon: Mail,
       route: '/contact',
       isExternal: false,
     },
     {
       id: 'security',
-      title: 'Bảo Mật Hệ Thống',
-      description: 'Kiến trúc an ninh đa tầng, kiểm soát truy cập và bảo vệ hạ tầng K8s.',
+      title: t('megaMenu.items.security.title'),
+      description: t('megaMenu.items.security.description'),
       icon: ShieldCheck,
       route: '/security',
       isExternal: false,
     },
     {
       id: 'privacy',
-      title: 'Chính Sách Bảo Mật',
-      description: 'Quy định thu thập, xử lý và bảo vệ dữ liệu cá nhân & thông tin doanh nghiệp.',
+      title: t('megaMenu.items.privacy.title'),
+      description: t('megaMenu.items.privacy.description'),
       icon: Lock,
       route: '/privacy',
       isExternal: false,
     },
     {
       id: 'about',
-      title: 'Giới Thiệu SelfHeal',
-      description: 'Tìm hiểu về sứ mệnh, kiến trúc tự phục hồi và đội ngũ phát triển.',
+      title: t('megaMenu.items.about.title'),
+      description: t('megaMenu.items.about.description'),
       icon: Info,
       route: '/about',
       isExternal: false,
@@ -81,7 +83,7 @@ export const ResourcesMegaMenu = ({ isOpen, onClose, onNavigate, menuRef }) => {
       className="resources-mega-menu-overlay"
       id="resources-mega-menu"
       role="region"
-      aria-label="Menu Tài nguyên SelfHeal"
+      aria-label={t('megaMenu.ariaLabel')}
     >
       <div className="resources-mega-menu-container">
         <div className="resources-mega-menu-grid">

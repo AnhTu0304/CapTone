@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ResetPasswordPage } from './index';
 import authService from '../../services/authService';
+import i18n from '../../i18n';
 
 jest.mock('../../services/authService', () => ({
   __esModule: true,
@@ -15,6 +16,7 @@ describe('ResetPasswordPage Component (SD-05 Real API Wiring)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     window.history.replaceState({}, '', '/reset-password');
+    i18n.changeLanguage('en');
   });
 
   test('shows expired/invalid view immediately when reset token is missing from URL', () => {

@@ -1,0 +1,41 @@
+{
+  "hero": {
+    "title": "Contact Consultation",
+    "subtitle": "Thank you for your interest in SelfHeal. Please fill out the form below and our engineering team will get back to you promptly."
+  },
+  "validation": {
+    "requiredFields": "Please complete all required fields (*)",
+    "invalidEmail": "Please enter a valid email address"
+  },
+  "success": {
+    "title": "Thank you!",
+    "descBefore": "Your inquiry has been submitted successfully. A SelfHeal engineer will reach out via ",
+    "descAfter": " within 24 business hours.",
+    "anotherBtn": "Send another inquiry"
+  },
+  "form": {
+    "firstNameLabel": "FIRST NAME",
+    "firstNamePlaceholder": "Alex",
+    "lastNameLabel": "LAST NAME",
+    "lastNamePlaceholder": "Morgan",
+    "workEmailLabel": "WORK EMAIL",
+    "workEmailPlaceholder": "name@company.com",
+    "phoneLabel": "PHONE NUMBER (OPTIONAL)",
+    "phonePlaceholder": "+1 (555) 123-4567",
+    "companyLabel": "COMPANY / ORGANIZATION",
+    "companyPlaceholder": "Acme Inc.",
+    "teamSizeLabel": "ENGINEERING TEAM SIZE?",
+    "teamSizePlaceholder": "Select engineering team size",
+    "teamSizeOptions": {
+      "1-10": "1 - 10 engineers",
+      "11-50": "11 - 50 engineers",
+      "51-200": "51 - 200 engineers",
+      "201-500": "201 - 500 engineers",
+      "500+": "500+ engineers"
+    },
+    "notesLabel": "HOW CAN WE HELP BEFORE OUR CALL?",
+    "notesPlaceholder": "Tell us about your engineering team, current Kubernetes cluster scale, and your self-healing automation goals...",
+    "submit": "Submit Consultation Request",
+    "submitting": "Sending..."
+  }
+}

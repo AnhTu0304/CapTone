@@ -1,5 +1,6 @@
 import Logo from '../../../components/common/Logo';
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Activity,
   Layers,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 
 export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) => {
+  const { t } = useTranslation('home');
   const [approved, setApproved] = useState(false);
   const [showModal, setShowModal] = useState(true);
 
@@ -100,7 +102,7 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
           {/* Agent Status */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 9px', backgroundColor: '#ECFDF5', borderRadius: '999px', border: '1px solid #A7F3D0' }}>
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#059669', display: 'inline-block' }} />
-            <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#059669' }}>Tác tử eBPF: 1.2ms</span>
+            <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#059669' }}>{t('heroDashboardLive.ebpfAgent')}</span>
           </div>
 
           {/* Role badge */}
@@ -125,19 +127,13 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
           }}
         >
           <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8', letterSpacing: '0.06em', padding: '4px 8px', textTransform: 'uppercase' }}>
-            Menu Vận Hành
+            {t('heroDashboardLive.opsMenu')}
           </div>
 
-          {[
-            { label: 'Tổng quan cụm', icon: Activity, active: true },
-            { label: 'Hạ tầng & Pods', icon: Server, active: false },
-            { label: 'Giám sát viễn trắc', icon: Cpu, active: false },
-            { label: 'Dự báo rủi ro AI', icon: Zap, active: false },
-            { label: 'Tự phục hồi MAPE-K', icon: ShieldCheck, active: false },
-            { label: 'Sự cố & Phân tích RCA', icon: AlertTriangle, active: false },
-            { label: 'Cài đặt nền tảng', icon: Settings, active: false },
-          ].map((item, idx) => {
-            const Icon = item.icon;
+          {[Activity, Server, Cpu, Zap, ShieldCheck, AlertTriangle, Settings].map((Icon, idx) => {
+            const labels = t('heroDashboardLive.sidebar', { returnObjects: true });
+            const label = Array.isArray(labels) ? labels[idx] : '';
+            const active = idx === 0;
             return (
               <div
                 key={idx}
@@ -148,17 +144,17 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
                   padding: '7px 10px',
                   borderRadius: '6px',
                   fontSize: '0.75rem',
-                  fontWeight: item.active ? 700 : 500,
-                  backgroundColor: item.active ? '#ECFDF5' : 'transparent',
-                  color: item.active ? '#059669' : '#64748B',
-                  border: item.active ? '1px solid #A7F3D0' : '1px solid transparent',
+                  fontWeight: active ? 700 : 500,
+                  backgroundColor: active ? '#ECFDF5' : 'transparent',
+                  color: active ? '#059669' : '#64748B',
+                  border: active ? '1px solid #A7F3D0' : '1px solid transparent',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                 }}
               >
-                <Icon size={14} color={item.active ? '#059669' : '#94A3B8'} />
+                <Icon size={14} color={active ? '#059669' : '#94A3B8'} />
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {item.label}
+                  {label}
                 </span>
               </div>
             );
@@ -183,27 +179,22 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
               <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981', boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)' }} />
               <div>
                 <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0F172A' }}>
-                  Cụm Kubernetes: Bình Thường (Healthy 100%)
+                  {t('heroDashboardLive.clusterStatus')}
                 </div>
                 <div style={{ fontSize: '0.6875rem', color: '#64748B' }}>
-                  Độ khả dụng 98,7% &bull; Uptime 99.98% &bull; MTTR 1.4s &bull; 0 sự cố gián đoạn dịch vụ
+                  {t('heroDashboardLive.clusterSub')}
                 </div>
               </div>
             </div>
 
             <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#059669', backgroundColor: '#ECFDF5', padding: '3px 8px', borderRadius: '4px', border: '1px solid #A7F3D0' }}>
-              MAPE-K Hoạt Động
+              {t('heroDashboardLive.mapekActive')}
             </span>
           </div>
 
           {/* 4 Telemetry Metric Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-            {[
-              { label: 'Tải CPU Cụm', val: '42%', sub: '↓ 6.2% so với đỉnh', color: '#059669' },
-              { label: 'Bộ Nhớ RAM', val: '68%', sub: '16.4 / 24.0 GB', color: '#059669' },
-              { label: 'Mạng I/O', val: '1.2 GB/s', sub: 'Không nghẽn gói', color: '#2563EB' },
-              { label: 'Pods Đang Chạy', val: '84 / 84', sub: '3 Nodes vật lý', color: '#059669' },
-            ].map((m, idx) => (
+            {(Array.isArray(t('heroDashboardLive.cards', { returnObjects: true })) ? t('heroDashboardLive.cards', { returnObjects: true }) : []).map((m, idx) => (
               <div
                 key={idx}
                 style={{
@@ -235,10 +226,10 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0F172A' }}>
-                Viễn Trắc Tải Đa Biến & Vòng Lặp Tự Trị (MAPE-K Live Stream)
+                {t('heroDashboardLive.telemetryTitle')}
               </span>
               <span style={{ fontSize: '0.6875rem', color: '#059669', fontWeight: 700 }}>
-                ● Real-time (1.2s ping)
+                {t('heroDashboardLive.realtimePing')}
               </span>
             </div>
 
@@ -313,13 +304,13 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <FileCode size={16} color="#10B981" />
               <span style={{ fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '-0.01em' }}>
-                Xem Trước Thay Đổi Cấu Hình Kubernetes YAML Diff
+                {t('heroDashboardLive.yamlModalTitle')}
               </span>
             </div>
             <button
               type="button"
               onClick={() => setShowModal(false)}
-              aria-label="Đóng xem trước"
+              aria-label={t('heroDashboardLive.closePreviewAria')}
               style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', display: 'flex', padding: 2 }}
             >
               <X size={16} />
@@ -329,7 +320,7 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
           {/* Modal Content */}
           <div style={{ padding: '12px 14px', backgroundColor: '#FFFFFF' }}>
             <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '8px' }}>
-              Tệp cấu hình: <strong style={{ fontFamily: 'var(--font-mono)', color: '#0F172A' }}>node-maintenance-cordon.yaml</strong>
+              {t('heroDashboardLive.configFilePrefix')}<strong style={{ fontFamily: 'var(--font-mono)', color: '#0F172A' }}>node-maintenance-cordon.yaml</strong>
             </div>
 
             {/* Side-by-Side Diff Panels */}
@@ -337,7 +328,7 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
               {/* Left: BEFORE (Red) */}
               <div>
                 <div style={{ color: '#DC2626', fontWeight: 700, fontSize: '0.6875rem', marginBottom: '4px' }}>
-                  &bull; HIỆN TẠI TRONG CỤM (BEFORE)
+                  {t('heroDashboardLive.beforeLabel')}
                 </div>
                 <div
                   style={{
@@ -363,7 +354,7 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
               {/* Right: AFTER (Green) */}
               <div>
                 <div style={{ color: '#059669', fontWeight: 700, fontSize: '0.6875rem', marginBottom: '4px' }}>
-                  &bull; SAU KHI PHÊ DUYỆT (AFTER)
+                  {t('heroDashboardLive.afterLabel')}
                 </div>
                 <div
                   style={{
@@ -419,7 +410,7 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
                   cursor: 'pointer',
                 }}
               >
-                Hủy bỏ
+                {t('heroDashboardLive.cancel')}
               </button>
 
               {approved ? (
@@ -439,7 +430,7 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
                     }}
                   >
                     <Check size={14} color="#059669" />
-                    <span>Đã Ký Duyệt & Đang Tự Phục Hồi</span>
+                    <span>{t('heroDashboardLive.approvedHealing')}</span>
                   </div>
                   <button
                     type="button"
@@ -454,7 +445,7 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
                       cursor: 'pointer',
                     }}
                   >
-                    Đặt lại
+                    {t('heroDashboardLive.reset')}
                   </button>
                 </div>
               ) : (
@@ -478,7 +469,7 @@ export const HeroDashboardLive = ({ glarePos = { x: 50, y: 50 }, onApprove }) =>
                   }}
                 >
                   <Check size={14} />
-                  <span>Xác Nhận Ký Duyệt & Thực Thi</span>
+                  <span>{t('heroDashboardLive.confirmApprove')}</span>
                 </button>
               )}
             </div>

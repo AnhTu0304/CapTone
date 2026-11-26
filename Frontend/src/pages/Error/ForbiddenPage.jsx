@@ -4,15 +4,16 @@ import PixelStatusPage from './PixelStatusPage';
 import { STATUS_PAGE_CONFIGS } from './statusConfigs';
 
 export const ForbiddenPage = ({
-  title = STATUS_PAGE_CONFIGS['403'].title,
-  message = STATUS_PAGE_CONFIGS['403'].message,
+  title,
+  message,
   embedded = false,
 }) => {
-  const cfg = STATUS_PAGE_CONFIGS['403'];
+  const { title: _t, message: _m, imageAlt: _a, ...rest } = STATUS_PAGE_CONFIGS['403'];
 
   return (
     <PixelStatusPage
-      {...cfg}
+      {...rest}
+      statusKey="403"
       title={title}
       message={message}
       embedded={embedded}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import HomePage from '../pages/Home';
 import GuidePage from '../pages/Guide';
 import FeaturesPage from '../pages/Features';
@@ -129,6 +130,7 @@ export const RouteRenderer = ({
   currentPath = '/',
   onNavigate,
 }) => {
+  const { t } = useTranslation(['error', 'common']);
   // Normalize path
   const path = currentPath.toLowerCase().split('?')[0].split('#')[0] || '/';
 
@@ -167,7 +169,7 @@ export const RouteRenderer = ({
           fontSize: '0.875rem',
         }}
       >
-        Đang xác thực phiên làm việc...
+        {t('common:app.authGuardLoading')}
       </div>
     );
   }
@@ -178,8 +180,8 @@ export const RouteRenderer = ({
         <UnauthorizedPage
           onNavigate={onNavigate}
           warnPath={currentPath}
-          warnTitle="Cảnh báo xác thực — 401"
-          warnMessage={`Bạn cần đăng nhập để truy cập "${currentPath}".`}
+          warnTitle={t('error:routes.warnAuthTitle')}
+          warnMessage={t('error:routes.warnAuthMessage', { path: currentPath })}
         />
       </PublicLayout>
     );
@@ -274,10 +276,10 @@ export const RouteRenderer = ({
           <ForbiddenPage
             onNavigate={onNavigate}
             warnPath={currentPath}
-            warnTitle="Cảnh báo phân quyền — 403"
-            warnMessage="Khu vực Quản trị Hệ thống (/admin) chỉ dành riêng cho Quản trị viên Nền tảng (Admin / Super Admin). Vui lòng sử dụng Bàn điều khiển Doanh nghiệp (/dashboard)."
-            title="403 — Không Có Quyền Truy Cập Quản Trị"
-            message="Khu vực Quản trị Hệ thống (/admin) chỉ dành riêng cho Quản trị viên Nền tảng (Admin / Super Admin). Tài khoản người dùng và thành viên tổ chức vui lòng thao tác tại Bàn điều khiển Doanh nghiệp."
+            warnTitle={t('error:routes.warnForbiddenTitle')}
+            warnMessage={t('error:routes.warnForbiddenMessage')}
+            title={t('error:routes.forbiddenTitle')}
+            message={t('error:routes.forbiddenMessage')}
           />
         </PublicLayout>
       );
@@ -491,7 +493,7 @@ export const RouteRenderer = ({
           <NotFoundPage
             onNavigate={onNavigate}
             warnPath={currentPath}
-            message={`Đường dẫn "${currentPath}" không tồn tại trên hệ thống hoặc đã được di chuyển sang vị trí khác.`}
+            message={t('error:routes.notFoundMessage', { path: currentPath })}
           />
         </PublicLayout>
       );

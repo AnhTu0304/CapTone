@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/dist/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
@@ -10,6 +11,7 @@ if (typeof window !== 'undefined') {
 }
 
 export const AboutPage = ({ onNavigate }) => {
+  const { t } = useTranslation('about');
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const notebookContainerRef = useRef(null);
@@ -284,9 +286,9 @@ export const AboutPage = ({ onNavigate }) => {
   return (
     <div className="about-page-root" data-testid="about-page">
       <header className="about-top-hero" data-testid="about-top-hero">
-        <h1 className="about-hero-title">Về Dự án SelfHeal</h1>
+        <h1 className="about-hero-title">{t('hero.title')}</h1>
         <p className="about-hero-subtitle">
-          Nghiên cứu kiến trúc tự phục hồi hạ tầng Kubernetes chủ động dựa trên trí tuệ nhân tạo dành cho doanh nghiệp vừa và nhỏ.
+          {t('hero.subtitle')}
         </p>
       </header>
 
@@ -305,130 +307,94 @@ export const AboutPage = ({ onNavigate }) => {
         <main className="about-content-container">
           {/* Section 01 – Our Story */}
           <section className="about-section" data-testid="about-section-story">
-            <h2 className="about-headline">Vận hành hạ tầng thông minh bắt đầu từ tư duy chủ động.</h2>
+            <h2 className="about-headline">{t('story.heading')}</h2>
             <p className="about-description">
-              SelfHeal ra đời nhằm thay đổi cách doanh nghiệp vận hành hạ tầng Kubernetes: chuyển dịch từ phản ứng bị động sang phát hiện rủi ro sớm và phục hồi chủ động.
+              {t('story.desc')}
             </p>
             <p className="about-body-text">
-              Trong kỷ nguyên Cloud-Native, Kubernetes đã trở thành tiêu chuẩn công nghiệp cho việc triển khai ứng dụng. Tuy nhiên, việc vận hành các cụm máy chủ phân tán đặt ra những thách thức khổng lồ về độ phức tạp. Phần lớn các công cụ giám sát hiện nay chỉ gửi cảnh báo sau khi sự cố hoặc cạn kiệt tài nguyên đã xảy ra, khiến kỹ sư luôn rơi vào thế &quot;chữa cháy&quot; bị động.
+              {t('story.p1')}
             </p>
             <p className="about-body-text">
-              SelfHeal được khởi xướng từ ý tưởng kết hợp ba trụ cột: khả năng quan sát toàn diện (Observability), trí tuệ nhân tạo (AI) và tự động hóa phục hồi có kiểm soát (Self-Healing Automation). Mục tiêu của chúng tôi là giúp các doanh nghiệp vừa và nhỏ (SMEs)—những đơn vị thường không có đội ngũ DevOps/SRE chuyên trách—dễ dàng tiếp cận khả năng quản trị hạ tầng thông minh, an toàn và bền bỉ hơn.
+              {t('story.p2')}
             </p>
           </section>
 
           {/* Section 02 – The Problem */}
           <section className="about-section" data-testid="about-section-problem">
-            <h2 className="about-headline">Sự cố hạ tầng không nên trở thành nguyên nhân gián đoạn kinh doanh.</h2>
+            <h2 className="about-headline">{t('problem.heading')}</h2>
             <p className="about-description">
-              Doanh nghiệp vừa và nhỏ thường phải đối mặt với áp lực duy trì độ tin cậy của cụm Kubernetes trong điều kiện nguồn lực hạn chế.
+              {t('problem.desc')}
             </p>
-            <p className="about-body-text">
-              <strong>Giám sát bị động (Reactive Monitoring):</strong> Cảnh báo thường chỉ kích hoạt khi dịch vụ đã ngừng hoạt động, khiến thời gian gián đoạn kéo dài và ảnh hưởng trực tiếp đến người dùng cuối.
-            </p>
-            <p className="about-body-text">
-              <strong>Cạn kiệt tài nguyên bất ngờ:</strong> CPU hoặc bộ nhớ RAM tăng đột biến ngoài dự tính dẫn đến lỗi OOMKilled hoặc nghẽn nút mà không có dấu hiệu cảnh báo sớm.
-            </p>
-            <p className="about-body-text">
-              <strong>Sập Pod và gián đoạn dịch vụ:</strong> Lỗi cấu hình hoặc vòng lặp CrashLoopBackOff làm đứt gãy luồng xử lý ứng dụng của doanh nghiệp.
-            </p>
-            <p className="about-body-text">
-              <strong>Thiếu hụt nhân lực DevOps/SRE:</strong> Các doanh nghiệp SMEs hiếm khi có đủ nhân sự chuyên trách túc trực 24/7 để theo dõi và xử lý sự cố hạ tầng.
-            </p>
-            <p className="about-body-text">
-              <strong>Điều tra &amp; phục hồi chậm trễ:</strong> Việc lần tìm nguyên nhân gốc qua hàng nghìn dòng log phân tán làm tiêu tốn thời gian quý báu trước khi đưa ra quyết định khắc phục.
-            </p>
+            {(Array.isArray(t('problem.items', { returnObjects: true })) ? t('problem.items', { returnObjects: true }) : []).map((item, idx) => (
+              <p key={idx} className="about-body-text">
+                <strong>{item.label}</strong>{item.text}
+              </p>
+            ))}
           </section>
 
           {/* Section 03 – Our Mission */}
           <section className="about-section" data-testid="about-section-mission">
-            <h2 className="about-headline">Xây dựng hạ tầng thông minh hơn, chủ động hơn và bền bỉ hơn.</h2>
+            <h2 className="about-headline">{t('mission.heading')}</h2>
             <p className="about-description">
-              SelfHeal hướng tới việc giảm tải gánh nặng vận hành, hỗ trợ phát hiện rủi ro sớm và nâng cao khả năng phục hồi liên tục cho cụm Kubernetes.
+              {t('mission.desc')}
             </p>
-            <p className="about-body-text">
-              <strong>Sứ mệnh (Mission):</strong> Cung cấp giải pháp phát hiện sớm rủi ro, hỗ trợ phân tích nguyên nhân gốc và tự động hóa các bước khắc phục sự cố tiêu chuẩn cho cụm Kubernetes của doanh nghiệp vừa và nhỏ.
-            </p>
-            <p className="about-body-text">
-              <strong>Tầm nhìn (Vision):</strong> Định hướng phát triển một hệ thống tự quản trị hạ tầng đáng tin cậy, nơi AI đóng vai trò như một trợ lý vận hành đắc lực, đồng hành cùng kỹ sư để bảo vệ sự ổn định của hệ thống.
-            </p>
-            <p className="about-body-text">
-              <strong>Giá trị cốt lõi (Value):</strong> Giảm thiểu thời gian gián đoạn dịch vụ, giải phóng nguồn lực cho đội ngũ phát triển tập trung vào sản phẩm, và thiết lập hàng rào bảo vệ vững chắc cho cụm máy chủ.
-            </p>
+            {(Array.isArray(t('mission.items', { returnObjects: true })) ? t('mission.items', { returnObjects: true }) : []).map((item, idx) => (
+              <p key={idx} className="about-body-text">
+                <strong>{item.label}</strong>{item.text}
+              </p>
+            ))}
           </section>
 
           {/* Section 04 – How SelfHeal Works */}
           <section className="about-section" data-testid="about-section-how-it-works">
-            <h2 className="about-headline">Từ tín hiệu hạ tầng đến phục hồi thông minh.</h2>
+            <h2 className="about-headline">{t('howItWorks.heading')}</h2>
             <p className="about-description">
-              Quy trình 3 giai đoạn khép kín giúp giám sát liên tục, dự báo xu hướng suy thoái và kích hoạt hành động khắc phục có kiểm soát.
+              {t('howItWorks.desc')}
             </p>
-            <p className="about-body-text">
-              <strong>01. Quan sát (Observe):</strong> Thu thập số liệu Kubernetes metrics, telemetry và sự kiện hệ thống theo thời gian thực; giám sát tình trạng sức khỏe của Nodes, Pods, Workloads và phát hiện sớm các tín hiệu vi sai, hành vi bất thường.
-            </p>
-            <p className="about-body-text">
-              <strong>02. Dự báo (Predict):</strong> Phân tích dữ liệu vận hành theo chuỗi thời gian của tài nguyên tiêu thụ; ứng dụng mô hình AI mạng nơ-ron hồi quy GRU để hỗ trợ dự đoán suy thoái và phân tích nguyên nhân gốc (RCA).
-            </p>
-            <p className="about-body-text">
-              <strong>03. Phục hồi (Recover):</strong> Đề xuất hoặc thực hiện các biện pháp khắc phục phù hợp (restart Pod, scale replicas, rollback deployment); áp dụng cơ chế Phê duyệt Con người (Human-in-the-Loop) và xác minh lại trạng thái hệ thống sau phục hồi.
-            </p>
+            {(Array.isArray(t('howItWorks.items', { returnObjects: true })) ? t('howItWorks.items', { returnObjects: true }) : []).map((item, idx) => (
+              <p key={idx} className="about-body-text">
+                <strong>{item.label}</strong>{item.text}
+              </p>
+            ))}
           </section>
 
           {/* Section 05 – Our Principles */}
           <section className="about-section" data-testid="about-section-principles">
-            <h2 className="about-headline">Tự động hóa cần trí tuệ. Trí tuệ cần sự kiểm soát.</h2>
+            <h2 className="about-headline">{t('principles.heading')}</h2>
             <p className="about-description">
-              Mọi tính năng của SelfHeal được xây dựng xoay quanh 4 nguyên tắc kỹ thuật không thể thỏa hiệp.
+              {t('principles.desc')}
             </p>
-            <p className="about-body-text">
-              <strong>1. Trí tuệ định hướng bởi AI (AI-driven Intelligence):</strong> Sử dụng học máy để phân tích dữ liệu telemetry phức tạp và hỗ trợ dự báo rủi ro mà con người khó nhận biết thủ công.
-            </p>
-            <p className="about-body-text">
-              <strong>2. An toàn là trên hết (Safety First):</strong> Đảm bảo các hành động phục hồi luôn nằm trong giới hạn an toàn nghiêm ngặt nhằm ngăn chặn sự cố dây chuyền.
-            </p>
-            <p className="about-body-text">
-              <strong>3. Con người làm trung tâm (Human-centered):</strong> Tự động hóa không thay thế con người. Kỹ sư luôn giữ quyền kiểm soát tối cao, có thể xem xét bản diff tác động và phê duyệt trước khi hành động được thực thi.
-            </p>
-            <p className="about-body-text">
-              <strong>4. Thiết kế cho khả năng mở rộng (Built for Scalability):</strong> Hướng đến khả năng mở rộng linh hoạt, thích ứng sâu với chuẩn Cloud-Native và quy mô tăng trưởng của các cụm Kubernetes.
-            </p>
+            {(Array.isArray(t('principles.items', { returnObjects: true })) ? t('principles.items', { returnObjects: true }) : []).map((item, idx) => (
+              <p key={idx} className="about-body-text">
+                <strong>{item.label}</strong>{item.text}
+              </p>
+            ))}
           </section>
 
           {/* Section 06 – Technology & Architecture */}
           <section className="about-section" data-testid="about-section-technology">
-            <h2 className="about-headline">Được xây dựng trên nền tảng các công nghệ hạ tầng hiện đại.</h2>
+            <h2 className="about-headline">{t('technology.heading')}</h2>
             <p className="about-description">
-              Sự kết hợp giữa các giải pháp tiêu chuẩn công nghiệp Cloud-Native và công nghệ trí tuệ nhân tạo tiên tiến.
+              {t('technology.desc')}
             </p>
-            <p className="about-body-text">
-              <strong>Hạ tầng &amp; Đóng gói (Kubernetes, Docker):</strong> Nền tảng điều phối container cốt lõi cho mọi workload và cụm máy chủ phân tán, đảm bảo tính nhất quán giữa các môi trường vận hành.
-            </p>
-            <p className="about-body-text">
-              <strong>Khả năng quan sát (Prometheus, OpenTelemetry):</strong> Thu thập và lưu trữ chuỗi dữ liệu số liệu thời gian thực với hiệu năng cao, cung cấp telemetry phân tán toàn diện trên toàn cụm.
-            </p>
-            <p className="about-body-text">
-              <strong>Trí tuệ nhân tạo &amp; Ứng dụng (Python, GRU, ReactJS, Node.js):</strong> Mô hình mạng nơ-ron hồi quy GRU phục vụ suy luận dự báo suy thoái, kết hợp giao diện web phản hồi nhanh và backend điều phối an toàn.
-            </p>
+            {(Array.isArray(t('technology.items', { returnObjects: true })) ? t('technology.items', { returnObjects: true }) : []).map((item, idx) => (
+              <p key={idx} className="about-body-text">
+                <strong>{item.label}</strong>{item.text}
+              </p>
+            ))}
           </section>
 
           {/* Section 07 – Meet the Team */}
           <section className="about-section" data-testid="about-section-team">
-            <h2 className="about-headline">Được phát triển bởi đội ngũ đam mê hạ tầng thông minh.</h2>
+            <h2 className="about-headline">{t('team.heading')}</h2>
             <p className="about-description">
-              Dự án nghiên cứu và phát triển sản phẩm với sự phối hợp chặt chẽ giữa các chuyên môn kỹ thuật điện toán đám mây và trí tuệ nhân tạo.
+              {t('team.desc')}
             </p>
-            <p className="about-body-text">
-              <strong>Quản lý Dự án &amp; Scrum:</strong> Định hướng lộ trình nghiên cứu, điều phối các sprint phát triển và đảm bảo sản phẩm giải quyết đúng bài toán của doanh nghiệp.
-            </p>
-            <p className="about-body-text">
-              <strong>Kỹ thuật Backend &amp; Tích hợp Hệ thống:</strong> Thiết kế API Gateway, kết nối tác tử K8s Agent, đồng bộ telemetry và xây dựng luồng tự động hóa an toàn.
-            </p>
-            <p className="about-body-text">
-              <strong>Trí tuệ Nhân tạo &amp; Học máy:</strong> Xây dựng pipeline xử lý dữ liệu thời gian thực, nghiên cứu và tối ưu hóa mô hình mạng nơ-ron GRU phục vụ dự đoán sự cố.
-            </p>
-            <p className="about-body-text">
-              <strong>Frontend &amp; Trải nghiệm Người dùng:</strong> Phát triển giao diện quản trị trực quan, xây dựng bảng điều khiển telemetry và cổng phê duyệt Human-in-the-Loop liền mạch.
-            </p>
+            {(Array.isArray(t('team.items', { returnObjects: true })) ? t('team.items', { returnObjects: true }) : []).map((item, idx) => (
+              <p key={idx} className="about-body-text">
+                <strong>{item.label}</strong>{item.text}
+              </p>
+            ))}
           </section>
 
           {/* Section 08 – Final CTA Notebook */}
@@ -445,9 +411,9 @@ export const AboutPage = ({ onNavigate }) => {
                 aria-hidden="true"
               />
               <div className="about-notebook-content">
-                <h2 className="about-cta-headline">Sẵn sàng thay đổi tư duy về độ tin cậy của hạ tầng?</h2>
+                <h2 className="about-cta-headline">{t('cta.headline')}</h2>
                 <p className="about-cta-desc">
-                  Khám phá cách SelfHeal hỗ trợ doanh nghiệp giám sát, dự đoán rủi ro và phục hồi cụm Kubernetes chủ động hơn.
+                  {t('cta.desc')}
                 </p>
                 <div className="about-cta-group">
                   <button
@@ -455,9 +421,9 @@ export const AboutPage = ({ onNavigate }) => {
                     className="about-btn-primary"
                     onClick={() => handleNavigate('/login')}
                     data-testid="about-cta-explore-btn"
-                    title="Khám phá SelfHeal"
+                    title={t('cta.explore')}
                   >
-                    <span>Khám phá SelfHeal</span>
+                    <span>{t('cta.explore')}</span>
                     <ArrowRight size={18} strokeWidth={2.2} />
                   </button>
                   <button
@@ -465,10 +431,10 @@ export const AboutPage = ({ onNavigate }) => {
                     className="about-btn-secondary"
                     onClick={() => handleNavigate('/contact')}
                     data-testid="about-cta-contact-btn"
-                    title="Liên hệ Đội ngũ"
+                    title={t('cta.contact')}
                   >
                     <BookOpen size={18} strokeWidth={2.2} color="#2A2A2A" />
-                    <span>Liên hệ Đội ngũ</span>
+                    <span>{t('cta.contact')}</span>
                   </button>
                 </div>
               </div>

@@ -1,0 +1,241 @@
+{
+  "hero": {
+    "heading": "AI Self Healing",
+    "description": "AI predicts emerging incidents and autonomously heals your services — with human oversight whenever needed.",
+    "startNow": "Get started",
+    "viewGuide": "View guide",
+    "sublink": "onboard with your agent →"
+  },
+  "socialProof": {
+    "sectionAria": "Core tool ecosystem and platform overview",
+    "toolsAria": "Core integrated tooling",
+    "quote": "SelfHeal is an autonomous AI platform that monitors and forecasts infrastructure risks with transparent human control.",
+    "cta": "Explore system architecture"
+  },
+  "featureStrip": {
+    "ariaLabel": "Agent Bridge Section",
+    "tag": "[ AGENT ]",
+    "heading": "How the Agent connects to your infrastructure",
+    "description": "The SelfHeal Agent bridges your Kubernetes clusters directly with our autonomous control plane.",
+    "learnMore": "Learn more"
+  },
+  "howItWorks": {
+    "ariaLabel": "How SelfHeal works",
+    "badgeTop": "HOW IT WORKS",
+    "steps": [
+      {
+        "label": "Step 1",
+        "title": "Multi-Dimensional Telemetry & Observation",
+        "desc": "Continuously collects and monitors Kubernetes infrastructure signals to surface anomalies early.",
+        "videoAria": "Animation of multi-dimensional Kubernetes observability and collection"
+      },
+      {
+        "label": "Step 2",
+        "title": "AI Degradation Prediction Models",
+        "desc": "Analyzes operational time-series telemetry to forecast risks and detect failures before outages hit.",
+        "videoAria": "Animation of AI degradation prediction model for Kubernetes"
+      },
+      {
+        "label": "Step 3",
+        "title": "Controlled Autonomous Remediation",
+        "desc": "Executes safe remediation playbooks automatically with built-in human approval and oversight.",
+        "videoAria": "Animation of controlled autonomous Kubernetes remediation"
+      }
+    ],
+    "predictionTitle": "Predict Failures Early",
+    "predictionDesc": "From real-time observability to AI-powered forecasting and autonomous recovery",
+    "badgeBottom": "THREE STAGES PROTECTING YOUR PRODUCTION INFRASTRUCTURE."
+  },
+  "adaptationLearning": {
+    "ariaLabel": "Continuous remediation and learning from past incidents",
+    "badge": "[ Adaptation & Learning ]",
+    "heading": "A system that adapts & learns after every incident",
+    "subtitle": "From custom infrastructure policies to continuous feedback memory, SelfHeal understands your cluster deeper after every recovery cycle.",
+    "card1": {
+      "mockupTitle": "Define recovery rule",
+      "mockupSub": "Specify remediation policy and target service scope.",
+      "step1": "Describe recovery rule",
+      "textarea": "Automatically trigger Rolling Restart when HTTP 5xx error rate exceeds 5% for 2 consecutive minutes on deployment order-service.",
+      "step2": "Target service scope",
+      "tag": "[ Custom Rules ]",
+      "title": "Your rules, your control",
+      "desc": "Define explicit operational context per K8s cluster and enforce strict safety boundaries consistently.",
+      "cta": "Configure rules"
+    },
+    "card2": {
+      "userMsg": "When restarting order-service, always wait 30s for Redis cache warm-up before rerouting traffic.",
+      "agentMsg": "Saved this lesson to policy memory! I'll apply a 30s warm-up delay to future remediation cycles automatically.",
+      "tag": "[ Memory & Learning ]",
+      "title": "Continuous learning from real incidents",
+      "desc": "SelfHeal continuously analyzes engineer feedback and live interventions, refining operational knowledge so past mistakes don't repeat.",
+      "cta": "Explore learning loop"
+    }
+  },
+  "onboardingWorkflow": {
+    "ariaLabel": "4-step SelfHeal setup and launch workflow",
+    "badge": "[ Workflow ]",
+    "heading": "Setup & Launch Workflow in 4 Steps",
+    "subtitle": "Purpose-built for Kubernetes engineers, SelfHeal integrates seamlessly into your infrastructure in minutes with zero downtime.",
+    "cta": "Get started",
+    "bandPill": "SETUP & OPERATIONAL WORKFLOW STEPS",
+    "steps": {
+      "step1": {
+        "orgHeader": "Organization / Workspace",
+        "ready": "Ready",
+        "title": "Create organization & environment",
+        "desc": "Provision an isolated team workspace, register Kubernetes clusters, and configure secure environment policies."
+      },
+      "step2": {
+        "title": "Connect SelfHeal Agent",
+        "desc": "Deploy the lightweight agent via Helm chart or DaemonSet to stream real-time eBPF telemetry and pod metrics."
+      },
+      "step3": {
+        "header": "SRE & DevOps Team",
+        "title": "Invite team members",
+        "desc": "Add teammates to your workspace with transparent RBAC roles to monitor cluster health and coordinate recovery."
+      },
+      "step4": {
+        "title": "Manage users & AI policies",
+        "desc": "Configure deterministic self-healing policies, permission matrices, and Human-in-the-Loop (HITL) safety gates."
+      }
+    }
+  },
+  "humanControl": {
+    "ariaLabel": "Intelligent autonomy, human control",
+    "badge": "[ Policy & Verification ]",
+    "heading": "Intelligent Autonomy, Human Control",
+    "subtitle": "SelfHeal operates autonomously within strict safety guardrails and pauses automatically for your approval on high-risk actions.",
+    "cta": "Explore Human-in-the-Loop",
+    "stage": {
+      "awaitingBadge": "Awaiting SRE Approval",
+      "approvedBadge": "Action Approved By SRE",
+      "tagApproved": "Remediation Approved",
+      "tagAlert": "K8s Anomaly Alert",
+      "podStatus": "Pod Status:",
+      "clusterNode": "Cluster Node:",
+      "proposedAction": "Proposed Action:",
+      "restartAction": "Restart affected Pod",
+      "bubble": "Restart Pod?"
+    }
+  },
+  "faq": {
+    "ariaLabel": "Frequently asked questions",
+    "title": "FAQ",
+    "items": [
+      {
+        "q": "How does SelfHeal work with Kubernetes?",
+        "a": "SelfHeal deploys as an ultra-lightweight DaemonSet or Helm chart, collecting real-time eBPF telemetry and pod metrics with minimal overhead to detect degradation before service outages."
+      },
+      {
+        "q": "Can SelfHeal be self-hosted on private infrastructure?",
+        "a": "Yes. SelfHeal fully supports on-premises and private VPC deployments. All telemetry, audit logs, and forecasting models stay securely inside your private network."
+      },
+      {
+        "q": "How does Human-in-the-Loop (HITL) protect production?",
+        "a": "Any high-impact action—such as rolling cluster restarts or resource scaling—requires explicit engineer sign-off before execution, keeping humans in final authority."
+      },
+      {
+        "q": "Which Kubernetes versions and cloud platforms are supported?",
+        "a": "SelfHeal supports any Kubernetes cluster from v1.22+ on AWS EKS, Google GKE, Azure AKS, K3s, as well as bare-metal and hybrid cloud environments."
+      },
+      {
+        "q": "Is there a free plan or SME package available?",
+        "a": "Yes. SelfHeal offers a free Community tier for clusters under 15 nodes and an Enterprise tier with full AI forecasting, 3D RCA insights, and 24/7 SLA support."
+      },
+      {
+        "q": "Are system logs and telemetry metrics kept secure?",
+        "a": "Strictly secure. SelfHeal follows Least Privilege principles, analyzing operational metrics and telemetry metadata only without ever reading customer business payloads."
+      }
+    ],
+    "notFound": "Didn't find the answer you need? ",
+    "contactUs": "Contact us."
+  },
+  "connectCluster": {
+    "ariaLabel": "Connect your Kubernetes environment with SelfHeal",
+    "title": "SelfHeal builds your autonomous healing layer so you can focus on shipping great software.",
+    "guideBtn": "View guide",
+    "startBtn": "Get started"
+  },
+  "healBot": {
+    "ariaLabel": "HealBot Kubernetes Guardian mascot evolution animation",
+    "alts": {
+      "egg_idle": "HealBot egg rocking as infrastructure initializes",
+      "egg_cracking": "HealBot egg cracking as anomaly signal is detected",
+      "chick_hatching": "HealBot hatching from shell and spreading wings",
+      "guardian": "HealBot Guardian flapping wings and activating defense shield",
+      "dissolve": "HealBot syncing state and preparing next cycle"
+    }
+  },
+  "illustrations": {
+    "aiPredictiveAria": "AI degradation forecasting model with K8s telemetry streams converging on neural core",
+    "telemetryStreamAria": "Continuous Kubernetes eBPF telemetry and metrics streaming to server"
+  },
+  "dashboardPreview": {
+    "sidebar": [
+      "Overview",
+      "Environments",
+      "Monitoring",
+      "Incidents",
+      "AI Predictions",
+      "Self-Healing",
+      "Settings"
+    ],
+    "metrics": [
+      { "label": "Availability", "value": "98.7%", "change": "↑ 2.4%", "isGood": true },
+      { "label": "CPU Usage", "value": "42%", "change": "↓ 6.2%", "isGood": true },
+      { "label": "Memory Usage", "value": "68%", "change": "↓ 4.1%", "isGood": true },
+      { "label": "Running Pods", "value": "24", "change": "↑ 2.0%", "isGood": true },
+      { "label": "Active Incidents", "value": "0", "change": "↓ 100%", "isGood": true }
+    ],
+    "activities": [
+      { "title": "Self-healing completed", "time": "2m ago", "type": "healing" },
+      { "title": "AI prediction detected", "time": "12m ago", "type": "ai" },
+      { "title": "Incident resolved", "time": "45m ago", "type": "resolved" },
+      { "title": "Agent online", "time": "1h ago", "type": "online" }
+    ],
+    "searchPlaceholder": "Search Pods, namespaces...",
+    "statusOnline": "Online (Healthy)",
+    "systemOverview": "System Overview",
+    "agentOnline": "Agent Online",
+    "updatedAgo": "Updated: 10s ago",
+    "resourceUsage": "Resource Utilization",
+    "memoryLabel": "Memory",
+    "recentActivity": "Recent Activity",
+    "aiPredictionPrefix": "AI Prediction: ",
+    "aiPredictionMsg": "Memory usage may exceed safety threshold in ~18 minutes",
+    "riskMedium": "Risk: Medium"
+  },
+  "heroDashboardLive": {
+    "ebpfAgent": "eBPF Agent: 1.2ms",
+    "opsMenu": "Operations Menu",
+    "sidebar": [
+      "Cluster Overview",
+      "Infra & Pods",
+      "Telemetry Monitor",
+      "AI Risk Forecast",
+      "MAPE-K Healing",
+      "Incidents & RCA",
+      "Platform Settings"
+    ],
+    "clusterStatus": "Kubernetes Cluster: Healthy (100%)",
+    "clusterSub": "Availability 98.7% • Uptime 99.98% • MTTR 1.4s • 0 service disruptions",
+    "mapekActive": "MAPE-K Active",
+    "cards": [
+      { "label": "Cluster CPU", "val": "42%", "sub": "↓ 6.2% vs peak", "color": "#059669" },
+      { "label": "RAM Memory", "val": "68%", "sub": "16.4 / 24.0 GB", "color": "#059669" },
+      { "label": "Network I/O", "val": "1.2 GB/s", "sub": "Zero packet loss", "color": "#2563EB" },
+      { "label": "Running Pods", "val": "84 / 84", "sub": "3 Physical Nodes", "color": "#059669" }
+    ],
+    "telemetryTitle": "Multivariate Telemetry & Autonomous Loop (MAPE-K Live Stream)",
+    "realtimePing": "● Real-time (1.2s ping)",
+    "yamlModalTitle": "Preview Kubernetes YAML Configuration Diff",
+    "closePreviewAria": "Close preview",
+    "configFilePrefix": "Config file: ",
+    "beforeLabel": "• CURRENT IN CLUSTER (BEFORE)",
+    "afterLabel": "• AFTER APPROVAL (AFTER)",
+    "cancel": "Cancel",
+    "approvedHealing": "Approved & Self-Healing Active",
+    "reset": "Reset",
+    "confirmApprove": "Approve & Execute"
+  }
+}

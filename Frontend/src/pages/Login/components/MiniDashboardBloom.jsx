@@ -1,16 +1,9 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Activity, CheckCircle2, Shield, Cpu, RefreshCw } from 'lucide-react';
 
-/**
- * MiniDashboardBloom
- * 
- * Bảng điều khiển Kubernetes 3D bung nở ra sau khi 7 bước tiếp cận hoàn tất.
- * Tái hiện phiên bản tối ưu của 3D Dashboard ở Hero section:
- * - Thanh tiêu đề Navy #3D3B4F với đèn trạng thái nhấp nháy
- * - Chỉ số sức khỏe cluster thời gian thực (99.98% Healthy)
- * - Danh sách Pods và tiến trình tự phục hồi MAPE-K
- */
 export const MiniDashboardBloom = ({ isVisible, onReplay }) => {
+  const { t } = useTranslation('auth');
   if (!isVisible) return null;
 
   return (
@@ -103,10 +96,10 @@ export const MiniDashboardBloom = ({ isVisible, onReplay }) => {
               <CheckCircle2 size={16} color="#059669" />
               <div>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.8125rem', fontWeight: 700, color: '#059669', lineHeight: 1.2 }}>
-                  HẠ TẦNG KẾT NỐI HOÀN TẤT
+                  {t('onboarding3d.miniDashboard.connectedBanner')}
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>
-                  MAPE-K Autonomic Loop Đang Hoạt Động
+                  {t('onboarding3d.miniDashboard.mapekRunning')}
                 </div>
               </div>
             </div>
@@ -127,17 +120,17 @@ export const MiniDashboardBloom = ({ isVisible, onReplay }) => {
             <div style={{ padding: '8px', backgroundColor: 'var(--color-canvas)', border: '1px solid var(--border-default)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', marginBottom: '4px' }}>
                 <Activity size={12} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.625rem', fontWeight: 600 }}>TELEMETRY</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.625rem', fontWeight: 600 }}>{t('onboarding3d.miniDashboard.telemetry')}</span>
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-primary)' }}>
-                10s Poll
+                {t('onboarding3d.miniDashboard.telemetryPoll')}
               </div>
             </div>
 
             <div style={{ padding: '8px', backgroundColor: 'var(--color-canvas)', border: '1px solid var(--border-default)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', marginBottom: '4px' }}>
                 <Cpu size={12} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.625rem', fontWeight: 600 }}>PODS</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.625rem', fontWeight: 600 }}>{t('onboarding3d.miniDashboard.pods')}</span>
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem', fontWeight: 700, color: '#059669' }}>
                 48/48 OK
@@ -147,10 +140,10 @@ export const MiniDashboardBloom = ({ isVisible, onReplay }) => {
             <div style={{ padding: '8px', backgroundColor: 'var(--color-canvas)', border: '1px solid var(--border-default)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', marginBottom: '4px' }}>
                 <Shield size={12} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.625rem', fontWeight: 600 }}>TỰ PHỤC HỒI</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.625rem', fontWeight: 600 }}>{t('onboarding3d.miniDashboard.selfHealing')}</span>
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-primary)' }}>
-                Sẵn sàng
+                {t('onboarding3d.miniDashboard.readyStatus')}
               </div>
             </div>
           </div>
@@ -208,7 +201,7 @@ export const MiniDashboardBloom = ({ isVisible, onReplay }) => {
             }}
           >
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              Tự động lặp chu trình onboarding...
+              {t('onboarding3d.miniDashboard.replayHint')}
             </span>
             <button
               type="button"
@@ -228,7 +221,7 @@ export const MiniDashboardBloom = ({ isVisible, onReplay }) => {
               }}
             >
               <RefreshCw size={10} />
-              <span>Xem lại 7 bước</span>
+              <span>{t('onboarding3d.miniDashboard.replayBtn')}</span>
             </button>
           </div>
         </div>

@@ -1,0 +1,75 @@
+{
+  "hero": {
+    "title": "Security Practices & Policy",
+    "subtitle": "Explore SelfHeal's multi-layered security architecture, technical controls, and Kubernetes infrastructure protection mechanisms"
+  },
+  "lastUpdated": "Last updated: November 14, 2026",
+  "intro": "This page outlines the technical controls, security architecture, and governance processes designed to protect customer data and infrastructure at SelfHeal. We enforce defense-in-depth across application code, network layers, databases, and the K8s Agent operating directly inside your enterprise Kubernetes clusters.",
+  "sections": {
+    "overview": {
+      "heading": "Security Built Into Every Layer of SelfHeal",
+      "p1": "SelfHeal approaches infrastructure security using a Defense-in-Depth model. Every layer in the architecture—including the Frontend UI, API Gateway, PostgreSQL database, AI anomaly forecasting models, and Kubernetes Agent—is hardened with strict safety boundaries.",
+      "p2": "We are committed to safeguarding enterprise application integrity, enforcing least-privilege access, securing operational telemetry, and ensuring every remediation action remains under controlled engineer oversight and approval."
+    },
+    "app": {
+      "heading": "Protecting Every Interaction (Application Security)",
+      "intro": "SelfHeal's web application tier and API Gateway are built with active defenses against common web vulnerabilities:",
+      "sqliHeading": "SQL Injection Prevention & Input Validation",
+      "sqliBody": "All database queries use strict Parameterized Queries via the PostgreSQL driver, eliminating arbitrary SQL injection risks. Every incoming API request is validated and normalized via Zod Schema Validation before reaching business logic handlers.",
+      "headersHeading": "Secure Headers, CORS & Rate Limiting",
+      "headersP1": "Helmet is integrated to enforce hardened HTTP security headers that mitigate Cross-Site Scripting (XSS) and clickjacking attacks. Cross-Origin Resource Sharing (CORS) follows a strict allowlist policy, blocking requests from unauthorized origins.",
+      "headersP2": "Sensitive endpoints (such as login and account verification) are guarded by Rate Limiting to block brute-force attacks, returning Retry-After headers when thresholds are exceeded. Centralized error handling prevents internal stack traces or system internals from leaking externally."
+    },
+    "auth": {
+      "heading": "Every Action Starts with Verified Access",
+      "intro": "SelfHeal enforces strong identity verification so only authorized users and services can access cluster resources:",
+      "jwtHeading": "Token Authentication & Password Hashing",
+      "jwtBody": "User sessions are secured with time-bound JSON Web Tokens (JWT), strong secret signing, and token revocation support. All user passwords are one-way hashed using industry-standard Bcrypt with salt rounds and are never stored in plaintext.",
+      "rbacHeading": "Role-Based Access Control (RBAC) & Tenant Isolation",
+      "rbacBody": "Permissions are governed by a granular RBAC matrix (Admin, SRE/DevOps, Viewer), separating metric visibility, token provisioning, and remediation approval rights. Data across organizations and environments is strictly isolated at the database layer (Tenant Isolation), eliminating cross-tenant data access risks."
+    },
+    "k8s": {
+      "heading": "Your Infrastructure Stays Under Strict Control",
+      "intro": "The SelfHeal Kubernetes Agent connects directly to your enterprise clusters and is engineered around strict safety defaults:",
+      "rbacHeading": "Least Privilege RBAC",
+      "rbacBody": "The Agent never requests or requires superuser cluster-admin privileges. It runs with a ServiceAccount granted read-only permissions (get, list, watch) over the resources needed for telemetry and log collection. Self-healing actions (pod restarts, deployment scaling) are disabled by default (ENABLE_HEALING_ACTIONS=false) and only enabled when you explicitly grant scoped write (patch) permissions.",
+      "pssHeading": "Process Hardening & Pod Security Standards",
+      "pssBody": "The Agent container runs as an unprivileged user appuser (UID 10001, GID 10001), enables a read-only root filesystem, disables privilege escalation (allowPrivilegeEscalation: false), and drops all Linux capabilities (capabilities.drop: [\"ALL\"]). This complies with Kubernetes Restricted Pod Security Standards.",
+      "inboundHeading": "Zero Inbound Ports & Secure Token Lifecycle",
+      "inboundBody": "The Agent initiates outbound-only connections to the Main Backend over WebSocket over TLS (wss://). Your Kubernetes clusters never need to open inbound firewall ports or expose public IPs. Agent identity tokens are stored in Kubernetes Secrets, SHA-256 hashed in the database, and can be revoked immediately upon any suspected compromise."
+    },
+    "data": {
+      "heading": "Your Operational Data Deserves Protection",
+      "intro": "We protect enterprise telemetry across its entire lifecycle with transparent data boundaries:",
+      "transitHeading": "Encryption in Transit",
+      "transitBody": "All traffic between user browsers, API Backend, AI inference services, and the Kubernetes Agent is strictly encrypted over TLS/HTTPS and WSS, preventing eavesdropping and Man-in-the-Middle interception.",
+      "redactionHeading": "Sensitive Data Redaction & Collection Scope",
+      "redactionBody": "Automated logging pipelines detect and mask ([REDACTED]) sensitive fields such as auth keys, passwords, and tokens in operational logs. SelfHeal only collects performance metrics (CPU, Memory, Network) and Kubernetes cluster status events; the platform never inspects or stores your business application payload data."
+    },
+    "ai": {
+      "heading": "Automation with Safety Built Into Every Decision",
+      "intro": "SelfHeal applies AI to improve operational resilience while keeping safety and human authority first:",
+      "hitlHeading": "Human-in-the-Loop (HITL) Approval",
+      "hitlBody": "Recommendations from AI models (GRU / RCA Engine) never trigger high-impact cluster changes blindly. Operations that affect availability (restarting Pods, scaling Deployments, or rolling back releases) require explicit confirmation through the operator approval workflow.",
+      "auditHeading": "Post-Healing Verification & Audit Trails",
+      "auditBody": "Every remediation action—whether manually triggered or policy-automated—is recorded in detailed audit trails (approver, timestamp, target workload, configuration diff). Immediately after execution, the Agent verifies workload health checks to confirm service stability."
+    },
+    "monitoring": {
+      "heading": "Full Observability to Stay Ahead of Risk",
+      "intro": "Continuous monitoring provides end-to-end visibility and rapid incident response:",
+      "telemetryHeading": "Telemetry Collection & Multi-Channel Alerting",
+      "telemetryBody": "OpenTelemetry and Prometheus integrations collect low-latency time-series metrics per Node and Pod. When resource degradation or CrashLoopBackOff patterns emerge, alerts are dispatched immediately to configured notification channels.",
+      "investigationHeading": "Streamlined Investigation & System Logs",
+      "investigationBody": "During incidents, engineers can trace root causes rapidly via Kubernetes Events streams and ML correlation insights, cutting investigation time from hours to minutes without requiring direct SSH access to cluster nodes."
+    },
+    "vulnerability": {
+      "heading": "Security Demands Continuous Improvement",
+      "intro": "We maintain ongoing security reviews throughout the product development lifecycle:",
+      "cveHeading": "Dependency Auditing & Container Image Scanning",
+      "cveBody": "Source code and dependencies across Frontend, Backend, and Agent are continuously audited for known vulnerabilities (CVEs). Docker container images are minimized using stripped-down base images with unnecessary debugging utilities removed prior to release.",
+      "disclosureHeading": "Vulnerability Disclosure Channel",
+      "disclosureBefore": "If you discover a security issue or have questions regarding SelfHeal's security architecture, please reach out to our security team at: ",
+      "disclosureAfter": ". Our security engineers commit to acknowledging, triaging, and responding promptly to all constructive reports."
+    }
+  }
+}

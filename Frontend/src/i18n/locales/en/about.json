@@ -1,0 +1,142 @@
+{
+  "hero": {
+    "title": "About SelfHeal",
+    "subtitle": "Researching an AI-driven proactive self-healing Kubernetes infrastructure architecture tailored for small and medium enterprises."
+  },
+  "story": {
+    "heading": "Intelligent infrastructure operations start with proactive thinking.",
+    "desc": "SelfHeal was created to transform how enterprises operate Kubernetes: shifting from reactive firefighting to early risk detection and proactive recovery.",
+    "p1": "In the Cloud-Native era, Kubernetes has become the standard for application deployment. However, operating distributed clusters introduces immense complexity. Most monitoring tools fire alerts only after outages or resource exhaustion have already hit, leaving engineers constantly firefighting.",
+    "p2": "SelfHeal unites three foundational pillars: deep Observability, Artificial Intelligence (AI), and Controlled Self-Healing Automation. Our goal is to empower SMEs—which often lack dedicated 24/7 SRE teams—with intelligent, safe, and resilient cluster governance."
+  },
+  "problem": {
+    "heading": "Infrastructure failures shouldn't halt business growth.",
+    "desc": "Small and medium enterprises face constant pressure to preserve Kubernetes reliability under lean engineering resources.",
+    "items": [
+      {
+        "label": "Reactive Monitoring:",
+        "text": " Traditional alerts fire after services go down, prolonging downtime and directly impacting end users."
+      },
+      {
+        "label": "Sudden Resource Exhaustion:",
+        "text": " Unforeseen CPU or RAM spikes cause OOMKilled crashes or node pressure without early warning signs."
+      },
+      {
+        "label": "Pod Crashes & Service Disruption:",
+        "text": " Misconfigurations or CrashLoopBackOff loops disrupt critical enterprise workflows."
+      },
+      {
+        "label": "DevOps/SRE Staffing Constraints:",
+        "text": " SMEs rarely have dedicated personnel available 24/7 to monitor and triage cluster incidents."
+      },
+      {
+        "label": "Slow Diagnosis & Recovery:",
+        "text": " Hunting root causes across thousands of distributed log lines wastes precious minutes before safe remediation begins."
+      }
+    ]
+  },
+  "mission": {
+    "heading": "Building smarter, proactive, and more resilient infrastructure.",
+    "desc": "SelfHeal reduces operational toil, surfaces emerging risks early, and strengthens continuous resilience across Kubernetes clusters.",
+    "items": [
+      {
+        "label": "Mission:",
+        "text": " Deliver early risk forecasting, automated Root-Cause Analysis, and standardized incident remediation for SME Kubernetes clusters."
+      },
+      {
+        "label": "Vision:",
+        "text": " Pioneer trustworthy autonomous infrastructure where AI serves as a reliable operational co-pilot protecting system stability alongside engineers."
+      },
+      {
+        "label": "Core Value:",
+        "text": " Cut service downtime dramatically, free product engineers to ship features, and enforce strict safety guardrails around cluster operations."
+      }
+    ]
+  },
+  "howItWorks": {
+    "heading": "From cluster signals to intelligent recovery.",
+    "desc": "A closed-loop 3-stage pipeline that monitors continuously, forecasts degradation trends, and executes controlled remediation.",
+    "items": [
+      {
+        "label": "01. Observe:",
+        "text": " Collects real-time Kubernetes metrics, telemetry, and cluster events; tracks Node, Pod, and Workload health to catch subtle anomalies early."
+      },
+      {
+        "label": "02. Predict:",
+        "text": " Analyzes resource consumption time series using GRU recurrent neural network models to forecast degradation and perform Root-Cause Analysis (RCA)."
+      },
+      {
+        "label": "03. Recover:",
+        "text": " Recommends or executes safe remediation actions (Pod restarts, replica scaling, deployment rollbacks) guarded by Human-in-the-Loop (HITL) approval and post-recovery verification."
+      }
+    ]
+  },
+  "principles": {
+    "heading": "Automation needs intelligence. Intelligence needs control.",
+    "desc": "Every capability in SelfHeal is built around 4 non-negotiable engineering principles.",
+    "items": [
+      {
+        "label": "1. AI-driven Intelligence:",
+        "text": " Applies machine learning to decode complex telemetry streams and surface risks before humans can spot them manually."
+      },
+      {
+        "label": "2. Safety First:",
+        "text": " Confines every remediation action within strict guardrails to prevent cascading failures."
+      },
+      {
+        "label": "3. Human-centered:",
+        "text": " Automation augments engineers rather than replacing them. Operators retain ultimate control with YAML impact diffs and approval gates."
+      },
+      {
+        "label": "4. Built for Scalability:",
+        "text": " Architected for seamless growth across Cloud-Native ecosystems and expanding Kubernetes cluster footprints."
+      }
+    ]
+  },
+  "technology": {
+    "heading": "Built on modern Cloud-Native infrastructure standards.",
+    "desc": "Combining industry-proven Cloud-Native tooling with applied machine learning intelligence.",
+    "items": [
+      {
+        "label": "Infrastructure & Packaging (Kubernetes, Docker):",
+        "text": " Core container orchestration across distributed clusters ensuring consistent behavior across environments."
+      },
+      {
+        "label": "Observability (Prometheus, OpenTelemetry):",
+        "text": " High-performance time-series metric collection and distributed telemetry across every cluster node."
+      },
+      {
+        "label": "AI & Application Stack (Python, GRU, ReactJS, Node.js):",
+        "text": " GRU neural network inference engine paired with a responsive web console and hardened API orchestration backend."
+      }
+    ]
+  },
+  "team": {
+    "heading": "Built by engineers passionate about resilient infrastructure.",
+    "desc": "A collaborative research and engineering initiative combining cloud-native systems and applied AI expertise.",
+    "items": [
+      {
+        "label": "Project Management & Scrum:",
+        "text": " Guides product roadmap, coordinates development sprints, and keeps solutions aligned with real operational pain points."
+      },
+      {
+        "label": "Backend Engineering & Systems Integration:",
+        "text": " Architects the API Gateway, K8s Agent connectivity, telemetry ingestion pipelines, and safe automation workflows."
+      },
+      {
+        "label": "Artificial Intelligence & Machine Learning:",
+        "text": " Engineers real-time metric pipelines and optimizes GRU neural network models for degradation forecasting."
+      },
+      {
+        "label": "Frontend & User Experience:",
+        "text": " Crafts intuitive observability dashboards, interactive telemetry visualizations, and seamless Human-in-the-Loop approval portals."
+      }
+    ]
+  },
+  "cta": {
+    "headline": "Ready to rethink infrastructure reliability?",
+    "desc": "Discover how SelfHeal helps teams monitor, forecast risks, and recover Kubernetes clusters proactively.",
+    "explore": "Explore SelfHeal",
+    "contact": "Contact Team"
+  }
+}

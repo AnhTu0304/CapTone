@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   UserPlus, 
   Building2, 
@@ -16,17 +17,18 @@ import ConnectingArrow from './ConnectingArrow';
 import MiniDashboardBloom from './MiniDashboardBloom';
 import StepDetailCard from './StepDetailCard';
 
-/**
- * OnboardingSequence3D
- * 
- * Bộ điều phối chu trình 3D kỹ thuật cho cột bên trái (Login & Register):
- * 1. Chạy tuần tự 7 bước tiếp cận trong hình lục giác 3D với tín hiệu photon chuyển động.
- * 2. Tương tác chuột toàn diện: hover nổi khối Z, con trỏ pointer, click xem mô tả cơ chế hoạt động.
- * 3. Hộp thoại StepDetailCard với animation GSAP mượt mà và điều hướng 7 bước.
- * 4. Tự động tạm dừng khi tương tác và cho phép tiếp tục chu trình bất kỳ lúc nào.
- * 5. Gôm tụ về tâm (Convergence) và nở Dashboard 3D K8s thời gian thực (Dashboard Bloom).
- */
+const STEP_LAYOUT = [
+  { num: 1, icon: UserPlus, x: -160, y: -150 },
+  { num: 2, icon: Building2, x: 0, y: -165 },
+  { num: 3, icon: Layers, x: 160, y: -150 },
+  { num: 4, icon: Server, x: 135, y: 0 },
+  { num: 5, icon: Key, x: -5, y: 10 },
+  { num: 6, icon: Terminal, x: -145, y: 15 },
+  { num: 7, icon: Activity, x: 0, y: 165 },
+];
+
 export const OnboardingSequence3D = () => {
+  const { t } = useTranslation('auth');
   const containerRef = useRef(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [currentStep, setCurrentStep] = useState(1);
@@ -35,122 +37,11 @@ export const OnboardingSequence3D = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [isHoveringNode, setIsHoveringNode] = useState(false);
 
-  // Dữ liệu chi tiết 7 Bước Onboarding chuẩn hóa hệ thống Self-Healing K8s
-  const steps = [
-    {
-      num: 1,
-      title: 'Tạo tài khoản',
-      category: 'IDENTITY & IAM',
-      icon: UserPlus,
-      x: -160,
-      y: -150,
-      summary: 'Khởi tạo danh tính quản trị viên hệ thống với giao thức xác thực bảo mật đa yếu tố SSO/MFA.',
-      howItWorks: [
-        'Xác thực qua Google Workspace SSO, GitHub hoặc Enterprise SAML 2.0.',
-        'Kích hoạt bảo mật đa yếu tố (MFA / WebAuthn FIDO2) bảo vệ phiên làm việc.',
-        'Cấp phát cặp khóa mã hóa ban đầu và thiết lập quyền IAM Role tối thiểu (Least Privilege).',
-      ],
-      techSpecs: ['OAuth2 / OIDC', 'RSA-4096 / Ed25519', 'Zero-Trust IAM', 'Session JWT'],
-      benefit: 'Bảo vệ danh tính quản trị viên tuyệt đối trước nguy cơ tấn công chiếm quyền điều khiển hạ tầng.',
-    },
-    {
-      num: 2,
-      title: 'Tạo tổ chức',
-      category: 'MULTI-TENANCY',
-      icon: Building2,
-      x: 0,
-      y: -165,
-      summary: 'Thiết lập Tenant độc lập, phân nhóm làm việc SRE/DevOps và định cấu hình hạn mức tài nguyên.',
-      howItWorks: [
-        'Khởi tạo Workspace cô lập hoàn toàn về mặt logic và dữ liệu (Multi-tenant Architecture).',
-        'Mời thành viên đội ngũ kỹ thuật và gán vai trò RBAC chi tiết (Admin, SRE, Operator, Viewer).',
-        'Cấu hình hạn mức tài nguyên (Resource Quotas) và tích hợp kênh cảnh báo Slack, Teams, PagerDuty.',
-      ],
-      techSpecs: ['Tenant Data Isolation', 'Granular RBAC', 'Immudb Audit Logs', 'Webhook Web-Bus'],
-      benefit: 'Phân quyền rành mạch giữa các nhóm kỹ sư, tránh thao tác nhầm lẫn hoặc chồng chéo hạ tầng.',
-    },
-    {
-      num: 3,
-      title: 'Tạo môi trường',
-      category: 'SCOPING & SLA',
-      icon: Layers,
-      x: 160,
-      y: -150,
-      summary: 'Phân tách logic giữa Production, Staging và Dev với chính sách tự phục hồi độc lập.',
-      howItWorks: [
-        'Tạo các không gian môi trường chuyên biệt để phân tách vòng đời ứng dụng.',
-        'Gán chính sách tự phục hồi (Self-Healing SLA/SLO Profiles) phù hợp với mức độ quan trọng.',
-        'Áp dụng quy tắc bảo vệ nghiêm ngặt cho Production (xác thực kép khi auto-scaling hay rollback).',
-      ],
-      techSpecs: ['K8s Namespaces', 'Network Policies Isolation', 'SLA Target 99.99%', 'ConfigMap Profiles'],
-      benefit: 'Đảm bảo môi trường Production luôn đạt độ sẵn sàng tối đa trong khi Dev/Staging được tự do thử nghiệm.',
-    },
-    {
-      num: 4,
-      title: 'Đăng ký K8s',
-      category: 'CLUSTER CONNECTIVITY',
-      icon: Server,
-      x: 135,
-      y: 0,
-      summary: 'Kết nối an toàn đến API Server của cụm Kubernetes (EKS, GKE, AKS, On-Premise bare-metal).',
-      howItWorks: [
-        'Thiết lập kênh kết nối mTLS an toàn tới Endpoint API Server của Kubernetes Cluster.',
-        'Tự động quét phiên bản cluster (hỗ trợ v1.24 - v1.32+) và kiểm tra các CRDs cần thiết.',
-        'Cấp quyền ServiceAccount dạng Scoped ClusterRole chỉ đọc telemetry và điều phối tự phục hồi.',
-      ],
-      techSpecs: ['Kubernetes API v1', 'mTLS 1.3 Encryption', 'ClusterRole Scoped', 'Hybrid Cloud Support'],
-      benefit: 'Tương thích 100% với mọi nền tảng Kubernetes hiện đại mà không xâm lấn nhân hệ điều hành.',
-    },
-    {
-      num: 5,
-      title: 'Tạo Token Agent',
-      category: 'AUTHENTICATION',
-      icon: Key,
-      x: -5,
-      y: 10,
-      summary: 'Sinh mã Token dùng một lần có mã hóa ký số để xác thực Agent khi liên kết với Control Plane.',
-      howItWorks: [
-        'Control Plane sinh cặp khóa phiên tạm thời (Ephemeral Keypair) và mã Token JWT mã hóa ký số.',
-        'Mã Token được khóa chặt theo Cluster ID và Environment ID tương ứng.',
-        'Token chỉ cấp quyền đẩy dữ liệu telemetry và nhận chỉ thị tự sửa lỗi, chặn đứng mọi giả mạo.',
-      ],
-      techSpecs: ['Ed25519 Signature', 'Short-lived JWT', 'One-time Provisioning', 'Zero-Secret Leakage'],
-      benefit: 'Chống tấn công giả mạo nguồn dữ liệu và loại trừ hoàn toàn nguy cơ lộ mật khẩu cụm máy chủ.',
-    },
-    {
-      num: 6,
-      title: 'Cài đặt Agent',
-      category: 'OPERATOR & DAEMONSET',
-      icon: Terminal,
-      x: -145,
-      y: 15,
-      summary: 'Triển khai SelfHeal Agent qua Helm Chart / DaemonSet nhẹ với công nghệ eBPF Probe.',
-      howItWorks: [
-        'Thực thi lệnh triển khai nhanh `helm install selfheal-agent` hoặc áp dụng DaemonSet manifest.',
-        'Agent tự động gắn kết vào Kubelet, Container Runtime (CRI) và eBPF tracepoints ở mức nhân Linux.',
-        'Bắt đầu thu thập số liệu CPU, Memory, I/O, Network drops và sự kiện pod với độ trễ micro-giây.',
-      ],
-      techSpecs: ['Helm 3 / DaemonSet', 'eBPF Kernel Probes', '<50MB RAM Footprint', '<0.8% CPU Overhead'],
-      benefit: 'Vận hành siêu nhẹ, không tiêu hao tài nguyên máy chủ và không yêu cầu khởi động lại các Pod.',
-    },
-    {
-      num: 7,
-      title: 'Bắt đầu giám sát',
-      category: 'AUTONOMIC MAPE-K',
-      icon: Activity,
-      x: 0,
-      y: 165,
-      summary: 'Kích hoạt vòng lặp MAPE-K AI Engine tự động phát hiện sự cố và chữa lành pod/node tức thì.',
-      howItWorks: [
-        'Monitor: Liên tục quét log, metric, trace từ mọi Pod và Node theo chu kỳ 10 giây.',
-        'Analyze: AI Engine phân tích tương quan lỗi (CrashLoopBackOff, OOMKilled, Pod Eviction, Disk Pressure).',
-        'Plan & Execute: Tự động kích hoạt kịch bản khắc phục (Restart pod, scale out, điều hướng traffic) trong <2s.',
-        'Knowledge: Lưu trữ RCA (Root-Cause Analysis) vào bộ tri thức để chủ động ngăn chặn sự cố tái diễn.',
-      ],
-      techSpecs: ['MAPE-K Autonomic Loop', 'MTTR < 2 Seconds', 'Zero-Downtime Pod Healing', 'Automated RCA'],
-      benefit: 'Giảm 90% thời gian MTTR, xóa bỏ gánh nặng trực ca đêm cho SRE và giữ hệ thống đạt 99.99% uptime.',
-    },
-  ];
+  const translatedSteps = t('onboarding3d.steps', { returnObjects: true });
+  const steps = STEP_LAYOUT.map((meta, idx) => ({
+    ...(Array.isArray(translatedSteps) && translatedSteps[idx] ? translatedSteps[idx] : {}),
+    ...meta,
+  }));
 
   // Mouse parallax tracking
   const handleMouseMove = (e) => {
@@ -289,7 +180,7 @@ export const OnboardingSequence3D = () => {
           <button
             type="button"
             onClick={handleTogglePause}
-            title={isPaused ? "Tiếp tục chạy tự động" : "Tạm dừng tự động"}
+            title={isPaused ? t('onboarding3d.resumeTitle') : t('onboarding3d.pauseTitle')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -306,7 +197,7 @@ export const OnboardingSequence3D = () => {
             }}
           >
             {isPaused ? <Play size={10} fill="#059669" /> : <Pause size={10} fill="currentColor" />}
-            <span>{isPaused ? 'TẠM DỪNG' : 'TỰ ĐỘNG'}</span>
+            <span>{isPaused ? t('onboarding3d.paused') : t('onboarding3d.auto')}</span>
           </button>
 
           {/* Current Step Status Tag */}
@@ -339,12 +230,12 @@ export const OnboardingSequence3D = () => {
               }}
             />
             {selectedStep !== null
-              ? `CHI TIẾT: BƯỚC 0${selectedStep}/07`
+              ? t('onboarding3d.statusDetail', { step: selectedStep })
               : phase === 'dashboard'
-                ? 'GIAI ĐOẠN: DASHBOARD'
+                ? t('onboarding3d.statusDashboard')
                 : phase === 'converging'
-                  ? 'ĐANG GÔM TỤ...'
-                  : `BƯỚC 0${currentStep}/07`}
+                  ? t('onboarding3d.statusConverging')
+                  : t('onboarding3d.statusStep', { step: currentStep })}
           </div>
         </div>
 
@@ -365,7 +256,7 @@ export const OnboardingSequence3D = () => {
           }}
         >
           <Info size={11} color="#059669" />
-          <span>Click vào bất kỳ bước nào để xem chi tiết cơ chế hoạt động</span>
+          <span>{t('onboarding3d.hint')}</span>
         </div>
       </div>
 

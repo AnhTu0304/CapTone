@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowRight, BookOpen } from 'lucide-react';
 import ChickenMascot from '../../components/mascot/ChickenMascot';
 import SocialProofSection from './components/SocialProofSection';
@@ -6,6 +7,7 @@ import FeatureStrip from './components/FeatureStrip';
 import './HeroSection.css';
 
 export const HeroSection = ({ onNavigate }) => {
+  const { t } = useTranslation('home');
   const handleLinkClick = (e, path) => {
     e.preventDefault();
     if (onNavigate) {
@@ -24,11 +26,11 @@ export const HeroSection = ({ onNavigate }) => {
             {/* ================= LEFT COLUMN ================= */}
             <div className="hero-left-col">
               <h1 className="hero-heading font-anybody text-slate font-bold tracking-tight animate-hero-fade-up">
-                AI Self Healing
+                {t('hero.heading')}
               </h1>
 
               <p className="hero-description font-dm-sans">
-                AI dự đoán các sự cố tiềm ẩn và tự động khôi phục dịch vụ — với sự giám sát của con người khi cần thiết.
+                {t('hero.description')}
               </p>
 
               <div className="hero-cta-group">
@@ -36,9 +38,9 @@ export const HeroSection = ({ onNavigate }) => {
                   href="/login"
                   onClick={(e) => handleLinkClick(e, '/login')}
                   className="hero-btn-primary"
-                  title="Bắt đầu ngay"
+                  title={t('hero.startNow')}
                 >
-                  <span>Bắt đầu ngay</span>
+                  <span>{t('hero.startNow')}</span>
                   <ArrowRight size={18} strokeWidth={2.2} />
                 </a>
 
@@ -46,10 +48,10 @@ export const HeroSection = ({ onNavigate }) => {
                   href="/guide"
                   onClick={(e) => handleLinkClick(e, '/guide')}
                   className="hero-btn-secondary"
-                  title="Xem hướng dẫn"
+                  title={t('hero.viewGuide')}
                 >
                   <BookOpen size={18} strokeWidth={2.2} color="#000000" />
-                  <span>Xem hướng dẫn</span>
+                  <span>{t('hero.viewGuide')}</span>
                 </a>
               </div>
 
@@ -59,7 +61,7 @@ export const HeroSection = ({ onNavigate }) => {
                   onClick={(e) => handleLinkClick(e, '/guide')}
                   className="hero-sublink"
                 >
-                  onboard with your agent &rarr;
+                  {t('hero.sublink')}
                 </a>
               </div>
             </div>

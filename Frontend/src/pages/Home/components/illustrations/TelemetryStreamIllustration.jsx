@@ -1,12 +1,8 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
-/**
- * TelemetryStreamIllustration
- * SVG animation representing continuous Kubernetes eBPF telemetry,
- * pod metrics, and event streaming into the central SelfHeal machine.
- * Matching Greptile Cybernetic CAD blueprint architecture.
- */
 export const TelemetryStreamIllustration = ({ className = '' }) => {
+  const { t } = useTranslation('home');
   return (
     <svg
       className={`telemetry-stream-svg ${className}`.trim()}
@@ -14,7 +10,7 @@ export const TelemetryStreamIllustration = ({ className = '' }) => {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
-      aria-label="Thu thập dữ liệu và eBPF telemetry liên tục truyền về máy chủ"
+      aria-label={t('illustrations.telemetryStreamAria')}
     >
       <defs>
         {/* Core Glowing Radials */}

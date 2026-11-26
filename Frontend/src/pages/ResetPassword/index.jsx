@@ -1,9 +1,11 @@
 import Logo from '../../components/common/Logo';
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowRight, Check, CheckCircle2, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 import authService from '../../services/authService';
 
 export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
+  const { t } = useTranslation('auth');
   const token = useMemo(() => {
     if (propToken) return String(propToken).trim();
     if (typeof window !== 'undefined') {
@@ -36,9 +38,9 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
     if (criteria.hasUpper) score += 1;
     if (criteria.hasSpecial) score += 1;
 
-    if (score <= 1) return { score: 1, label: 'Weak', color: '#EF4444' };
-    if (score === 2 || score === 3) return { score: 2, label: 'Medium', color: '#F59E0B' };
-    return { score: 3, label: 'Strong', color: '#10B981' };
+    if (score <= 1) return { score: 1, label: t('resetPassword.strength.weak'), color: '#EF4444' };
+    if (score === 2 || score === 3) return { score: 2, label: t('resetPassword.strength.medium'), color: '#F59E0B' };
+    return { score: 3, label: t('resetPassword.strength.strong'), color: '#10B981' };
   };
 
   const strength = calculateStrength();
@@ -47,15 +49,15 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
   const validate = () => {
     const errs = {};
     if (!password) {
-      errs.password = 'New password is required';
+      errs.password = t('resetPassword.validation.passwordRequired');
     } else if (!allCriteriaMet) {
-      errs.password = 'Password does not meet all security requirements';
+      errs.password = t('resetPassword.validation.passwordRequirements');
     }
 
     if (!confirmPassword) {
-      errs.confirmPassword = 'Confirmation password is required';
+      errs.confirmPassword = t('resetPassword.validation.confirmRequired');
     } else if (password !== confirmPassword) {
-      errs.confirmPassword = 'Passwords do not match';
+      errs.confirmPassword = t('resetPassword.validation.confirmMismatch');
     }
 
     setErrors(errs);
@@ -76,7 +78,7 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
       await authService.resetPassword(token, password);
       setSubmitted(true);
     } catch (err) {
-      const msg = err?.message || 'Unable to reset password. Please try again.';
+      const msg = err?.message || t('resetPassword.validation.resetFailed');
       if (/hết hạn|không hợp lệ|expired|invalid/i.test(msg)) {
         setIsTokenExpired(true);
       } else {
@@ -142,7 +144,7 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
               marginBottom: '8px',
             }}
           >
-            Reset Link Expired or Invalid
+            {t('resetPassword.expired.title')}
           </h2>
 
           <p
@@ -154,7 +156,7 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
               marginBottom: '24px',
             }}
           >
-            This password recovery link has either already been used or has expired. Please request a new link to proceed.
+            {t('resetPassword.expired.description')}
           </p>
 
           <button
@@ -178,7 +180,7 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
               marginBottom: '14px',
             }}
           >
-            <span>Request New Reset Link</span>
+            <span>{t('resetPassword.expired.cta')}</span>
             <ArrowRight size={17} />
           </button>
         </div>
@@ -211,7 +213,7 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
               marginBottom: '8px',
             }}
           >
-            Password Reset Successfully
+            {t('resetPassword.success.title')}
           </h2>
 
           <p
@@ -223,7 +225,7 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
               marginBottom: '24px',
             }}
           >
-            Your password has been securely updated. You can now log into your account with your new credentials.
+            {t('resetPassword.success.description')}
           </p>
 
           <button
@@ -246,7 +248,7 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
               gap: '8px',
             }}
           >
-            <span>Return to Sign In</span>
+            <span>{t('resetPassword.success.cta')}</span>
             <ArrowRight size={17} strokeWidth={2.2} />
           </button>
         </div>
@@ -265,10 +267,10 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
                 lineHeight: 1.2,
               }}
             >
-              Reset your password
+              {t('resetPassword.form.title')}
             </h1>
             <p style={{ fontSize: '0.875rem', color: '#6B7280', fontFamily: 'var(--font-body)', margin: 0 }}>
-              Create a new strong password for your SelfHeal account.
+              {t('resetPassword.form.subtitle')}
             </p>
           </div>
 
@@ -286,7 +288,7 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
                   fontFamily: 'var(--font-body)',
                 }}
               >
-                New password
+                {t('resetPassword.form.newPasswordLabel')}
               </label>
               <div style={{ position: 'relative' }}>
                 <input
@@ -340,7 +342,7 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
                     <div style={{ flex: 1, height: '4px', backgroundColor: strength.score >= 3 ? strength.color : '#E5E7EB', borderRadius: '2px' }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', fontFamily: 'var(--font-mono)' }}>
-                    <span style={{ color: '#6B7280' }}>Strength:</span>
+                    <span style={{ color: '#6B7280' }}>{t('resetPassword.strengthLabel')}</span>
                     <span style={{ color: strength.color, fontWeight: 700 }}>{strength.label}</span>
                   </div>
                 </div>
@@ -366,7 +368,7 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
                   fontFamily: 'var(--font-body)',
                 }}
               >
-                Confirm new password
+                {t('resetPassword.form.confirmPasswordLabel')}
               </label>
               <div style={{ position: 'relative' }}>
                 <input
@@ -427,14 +429,14 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
               }}
             >
               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', fontFamily: 'var(--font-mono)', marginBottom: '8px', textTransform: 'uppercase' }}>
-                Password Requirements:
+                {t('resetPassword.form.requirementsTitle')}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {[
-                  { met: criteria.length, text: 'At least 8 characters' },
-                  { met: criteria.hasNumber, text: 'At least 1 number' },
-                  { met: criteria.hasUpper, text: 'At least 1 uppercase letter' },
-                  { met: criteria.hasSpecial, text: 'At least 1 special symbol (@, #, $, %...)' },
+                  { met: criteria.length, text: t('resetPassword.form.reqLength') },
+                  { met: criteria.hasNumber, text: t('resetPassword.form.reqNumber') },
+                  { met: criteria.hasUpper, text: t('resetPassword.form.reqUpper') },
+                  { met: criteria.hasSpecial, text: t('resetPassword.form.reqSpecial') },
                 ].map((req, idx) => (
                   <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8125rem' }}>
                     <div
@@ -500,11 +502,11 @@ export const ResetPasswordPage = ({ onNavigate, resetToken: propToken }) => {
               {loading ? (
                 <>
                   <Loader2 size={18} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                  <span>Updating password...</span>
+                  <span>{t('resetPassword.form.submitting')}</span>
                 </>
               ) : (
                 <>
-                  <span>Reset Password</span>
+                  <span>{t('resetPassword.form.submit')}</span>
                   <ArrowRight size={17} strokeWidth={2.2} />
                 </>
               )}

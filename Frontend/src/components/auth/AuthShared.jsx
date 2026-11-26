@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import './AuthShared.css';
 
 export const AUTH_HEADING_STYLE = {
@@ -102,6 +103,7 @@ export const GoogleAuthButton = ({ label, onClick, disabled }) => (
 );
 
 export const AuthLegalFooter = ({ onNavigate }) => {
+  const { t } = useTranslation('auth');
   const handleLink = (e, path) => {
     e.preventDefault();
     if (onNavigate) {
@@ -123,21 +125,21 @@ export const AuthLegalFooter = ({ onNavigate }) => {
         lineHeight: 1.6,
       }}
     >
-      Bằng việc tiếp tục, bạn đồng ý với{' '}
+      {t('legalFooter.prefix')}{' '}
       <a
         href="/terms"
         className="auth-link-legal"
         onClick={(e) => handleLink(e, '/terms')}
       >
-        Điều khoản dịch vụ
+        {t('legalFooter.terms')}
       </a>{' '}
-      và{' '}
+      {t('legalFooter.and')}{' '}
       <a
         href="/privacy"
         className="auth-link-legal"
         onClick={(e) => handleLink(e, '/privacy')}
       >
-        Chính sách bảo mật
+        {t('legalFooter.privacy')}
       </a>
       .
     </p>

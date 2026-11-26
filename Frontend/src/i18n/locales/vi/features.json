@@ -1,0 +1,83 @@
+{
+  "hero": {
+    "title": "Năng Lực Tính Năng & Vòng Lặp Tự Phục Hồi",
+    "subtitle": "Hạ tầng Kubernetes của bạn được bảo vệ 24/7 qua quy trình 6 chặng tự động hóa: từ phát hiện tức thời, dự báo sớm AI, chẩn đoán nguyên nhân gốc đến phục hồi tự hành với sự kiểm soát tối cao từ con người."
+  },
+  "lifecycle": {
+    "title": "6 Trụ Cột Năng Lực Vận Hành Tự Động",
+    "desc": "Được thiết kế dựa trên kiến trúc điều khiển MAPE-K (Monitor - Analyze - Plan - Execute - Knowledge) dành riêng cho các đội ngũ kỹ thuật doanh nghiệp vừa và nhỏ (SMEs)."
+  },
+  "steps": {
+    "detect": {
+      "badge": "CHẶNG 01 // Phát Hiện",
+      "title": "Quét Radar Hạ Tầng & Thu Thập Telemetry Tức Thì",
+      "desc": "Hệ thống liên tục thu thập số liệu đo từ xa độ trễ cực thấp (< 1.2ms) qua tầng eBPF kernel và Prometheus scraper. Quét radar định kỳ 10 giây phát hiện tức thời tình trạng tắc nghẽn của Pods, Nodes và thông lượng mạng mà không gây suy giảm hiệu năng cụm.",
+      "bullets": [
+        "Thu thập 100% chỉ số bão hòa CPU, RAM RSS, Disk I/O và độ trễ Ingress.",
+        "Kết nối một chiều qua luồng Outbound TLS bảo mật (0 cổng mở Inbound).",
+        "Tương thích toàn diện với EKS, GKE, AKS, K3s và cụm máy chủ vật lý kubeadm."
+      ]
+    },
+    "predict": {
+      "badge": "CHẶNG 02 // Dự Đoán",
+      "title": "Dự Báo Suy Thoái Sớm 15–30 Phút Bằng Mạng Nơ-ron GRU",
+      "desc": "Mô hình học máy chuỗi thời gian GRU (Gated Recurrent Unit) liên tục phân tích xu hướng biến thiên của hàng trăm tham số telemetry, phát hiện sớm quỹ đạo suy giảm chất lượng dịch vụ trước khi sự cố OOMKilled hoặc nghẽn CPU xảy ra.",
+      "cardMsg": "Dự báo suy giảm tài nguyên: Nguy cơ OOMKilled trong 14m 20s (Độ tin cậy 94.6%)",
+      "bullets": [
+        "Dự báo trước xu hướng rò rỉ bộ nhớ (Memory Leak) và nghẽn hàng đợi request.",
+        "Thuật toán lọc nhiễu tự động triệt tiêu cảnh báo giả từ biến động mạng tạm thời.",
+        "Điểm số cảnh báo rủi ro được cập nhật liên tục với độ tin cậy vượt trội > 94%."
+      ]
+    },
+    "diagnose": {
+      "badge": "CHẶNG 03 // Chuẩn Đoán",
+      "title": "Tự Động Phân Tích Nguyên Nhân Gốc Rễ Đa Chiều (RCA)",
+      "desc": "Thay vì yêu cầu kỹ sư đọc hàng nghìn dòng log phân tán, thuật toán RCA tự động tương quan chéo giữa biến cố Kubernetes (CrashLoopBackOff, Evicted), mã thoát container (Exit Code 137/1) và độ lệch cấu hình GitOps để chỉ ra điểm lỗi cốt lõi duy nhất.",
+      "cardMsg": "Phân lập nguyên nhân cốt lõi: Container ExitCode 137 tại checkout-service (98.4%)",
+      "bullets": [
+        "Cô lập chính xác microservice gây lỗi trên đồ thị phụ thuộc DAG.",
+        "Trích xuất thông tin lỗi ngữ cảnh từ container stderr và hệ thống CoreDNS.",
+        "Cung cấp điểm tin cậy chẩn đoán (Confidence Score) kèm khuyến nghị khắc phục cụ thể."
+      ]
+    },
+    "verify": {
+      "badge": "CHẶNG 04 // Xác Minh",
+      "title": "Xem Trước Kubernetes YAML Diff & Phê Duyệt An Toàn (HITL)",
+      "desc": "Nguyên tắc cốt lõi: AI Đề Xuất - Con Người Quyết Định - Tác Tử Thực Thi. Mọi hành động can thiệp hạ tầng nhạy cảm đều cung cấp giao diện trực quan so sánh cấu hình Before vs After cùng bán kính tác động, yêu cầu xác nhận chủ động từ kỹ sư trước khi chạy.",
+      "cardMsg": "Yêu cầu phê duyệt con người trước khi điều chỉnh Memory: 256Mi → 512Mi",
+      "bullets": [
+        "Xem trước trực quan bản diff tài nguyên (Resource limits, Replicas, Cordon).",
+        "Phê duyệt 1 nhấp chuột qua Bảng điều khiển Web hoặc webhook Slack/Teams.",
+        "Chế độ Phê duyệt Kép (Dual Operator Sign-Off) cho cụm máy chủ Production trọng yếu."
+      ]
+    },
+    "recover": {
+      "badge": "CHẶNG 05 // Hồi Phục",
+      "title": "Khôi Phục Tự Hành Dưới 2 Giây Không Gián Đoạn Dịch Vụ",
+      "desc": "Ngay sau khi kế hoạch được phê duyệt hoặc thỏa mãn chính sách tự động hóa, bộ điều phối Kubernetes Agent thực thi lệnh điều khiển qua Kubernetes API: khởi động lại pod, co giãn replica hoặc rollback phiên bản container một cách an toàn và êm dịu.",
+      "cardMsg": "Tự phục hồi hoàn tất trong 1.8s: Khởi tạo Replica mới thành công, 0 gián đoạn",
+      "bullets": [
+        "Tự động tái tạo Pod mới trước khi chấm dứt Pod lỗi (Rolling Replacement).",
+        "Tự động hoàn nguyên (rollback) về ReplicaSet ổn định gần nhất khi deploy lỗi.",
+        "Dọn dẹp tài nguyên từ các pod mồ côi và rò rỉ bộ nhớ đệm nhanh chóng."
+      ]
+    },
+    "audit": {
+      "badge": "CHẶNG 06 // Bảo Vệ & Kiểm Toán",
+      "title": "Bảo Mật Cụm Đạt Chuẩn & Nhật Ký Kiểm Toán Bất Biến",
+      "desc": "SelfHeal được thiết kế an toàn từ gốc với nguyên tắc đặc quyền tối thiểu (Least Privilege). Tác tử K8s Agent không yêu cầu quyền cluster-admin, và mọi hành động tự phục hồi đều được đóng dấu băm mã hóa, ghi nhận vào Audit Log bất biến lưu trong PostgreSQL.",
+      "cardMsg": "Nhật ký kiểm toán bất biến: Ký số SHA-256 xác thực bởi sre_operator",
+      "bullets": [
+        "Xác thực định danh đa yếu tố và token mã hóa riêng biệt cho từng cụm máy chủ.",
+        "Nhật ký kiểm toán bất biến ghi nhận chi tiết User ID, địa chỉ IP, hành động và YAML diff.",
+        "Phân quyền RBAC nghiêm ngặt: Phân tách rõ ràng vai trò Owner, SRE Operator và Auditor."
+      ]
+    }
+  },
+  "cta": {
+    "headline": "Sẵn sàng thay đổi tư duy về độ tin cậy của hạ tầng?",
+    "desc": "Khám phá cách SelfHeal hỗ trợ doanh nghiệp giám sát, dự đoán rủi ro và phục hồi cụm Kubernetes chủ động hơn.",
+    "explore": "Khám phá SelfHeal",
+    "contact": "Liên hệ Đội ngũ"
+  }
+}

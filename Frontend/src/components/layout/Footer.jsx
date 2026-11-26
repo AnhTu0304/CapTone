@@ -1,8 +1,10 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import logoPng from '../../assets/Logo-transparent.png';
 import './Footer.css';
 
 export const Footer = ({ onNavigate }) => {
+  const { t } = useTranslation('common');
   const handleLinkClick = (e, path) => {
     if (path.startsWith('http')) return;
 
@@ -37,7 +39,7 @@ export const Footer = ({ onNavigate }) => {
     <footer
       className="footer-greptile"
       data-testid="footer-greptile"
-      aria-label="Footer hệ thống SelfHeal"
+      aria-label={t('footer.ariaLabel')}
     >
       {/* ================= TOP DOUBLE-DASHED DIVIDER ================= */}
       <div className="footer-divider-dashed" aria-hidden="true" />
@@ -108,26 +110,26 @@ export const Footer = ({ onNavigate }) => {
         <div className="footer-divider-double-v" aria-hidden="true" />
 
         {/* ================= COLUMN 2: PLATFORM (~25%) ================= */}
-        <nav className="footer-col-nav footer-col-platform" aria-label="Nền tảng">
-          <span className="footer-col-title">NỀN TẢNG</span>
+        <nav className="footer-col-nav footer-col-platform" aria-label={t('footer.platform.aria')}>
+          <span className="footer-col-title">{t('footer.platform.title')}</span>
           <div className="footer-links-group">
             <a href="#overview" onClick={(e) => handleLinkClick(e, '#overview')} className="footer-link">
-              TỔNG QUAN
+              {t('footer.platform.overview')}
             </a>
             <a href="#monitoring" onClick={(e) => handleLinkClick(e, '#monitoring')} className="footer-link">
-              GIÁM SÁT HẠ TẦNG
+              {t('footer.platform.monitoring')}
             </a>
             <a href="#prediction" onClick={(e) => handleLinkClick(e, '#prediction')} className="footer-link">
-              DỰ ĐOÁN BẰNG AI
+              {t('footer.platform.prediction')}
             </a>
             <a href="/features#rca" onClick={(e) => handleLinkClick(e, '/features#rca')} className="footer-link">
-              PHÂN TÍCH NGUYÊN NHÂN GỐC
+              {t('footer.platform.rca')}
             </a>
             <a href="#self-healing" onClick={(e) => handleLinkClick(e, '#self-healing')} className="footer-link">
-              CƠ CHẾ TỰ PHỤC HỒI
+              {t('footer.platform.selfHealing')}
             </a>
             <a href="#human-approval" onClick={(e) => handleLinkClick(e, '#human-approval')} className="footer-link">
-              PHÊ DUYỆT CỦA CON NGƯỜI
+              {t('footer.platform.humanApproval')}
             </a>
           </div>
         </nav>
@@ -136,20 +138,20 @@ export const Footer = ({ onNavigate }) => {
         <div className="footer-divider-double-v" aria-hidden="true" />
 
         {/* ================= COLUMN 3: RESOURCES (~27%) ================= */}
-        <nav className="footer-col-nav footer-col-resources" aria-label="Tài nguyên">
-          <span className="footer-col-title">TÀI NGUYÊN</span>
+        <nav className="footer-col-nav footer-col-resources" aria-label={t('footer.resources.aria')}>
+          <span className="footer-col-title">{t('footer.resources.title')}</span>
           <div className="footer-links-group">
             <a href="/guide" onClick={(e) => handleLinkClick(e, '/guide')} className="footer-link">
-              TÀI LIỆU HƯỚNG DẪN
+              {t('footer.resources.guide')}
             </a>
             <a href="/login" onClick={(e) => handleLinkClick(e, '/login')} className="footer-link">
-              BẮT ĐẦU NGAY
+              {t('footer.resources.getStarted')}
             </a>
             <a href="/dashboard/agents" onClick={(e) => handleLinkClick(e, '/dashboard/agents')} className="footer-link">
-              CÀI ĐẶT TÁC TỬ
+              {t('footer.resources.installAgent')}
             </a>
             <a href="/about" onClick={(e) => handleLinkClick(e, '/about')} className="footer-link">
-              GIỚI THIỆU DỰ ÁN
+              {t('footer.resources.about')}
             </a>
           </div>
         </nav>
@@ -158,26 +160,26 @@ export const Footer = ({ onNavigate }) => {
         <div className="footer-divider-double-v" aria-hidden="true" />
 
         {/* ================= COLUMN 4: SUPPORT & SOCIALS (~25%) ================= */}
-        <div className="footer-col-nav footer-col-support" aria-label="Hỗ trợ và Mạng xã hội">
-          <span className="footer-col-title">HỖ TRỢ</span>
+        <div className="footer-col-nav footer-col-support" aria-label={t('footer.support.aria')}>
+          <span className="footer-col-title">{t('footer.support.title')}</span>
           <div className="footer-links-group">
             <a href="/about#contact" onClick={(e) => handleLinkClick(e, '/about#contact')} className="footer-link">
-              LIÊN HỆ
+              {t('footer.support.contact')}
             </a>
             <a href="#faq" onClick={(e) => handleLinkClick(e, '#faq')} className="footer-link">
-              CÂU HỎI THƯỜNG GẶP
+              {t('footer.support.faq')}
             </a>
             <a href="/portal/help" onClick={(e) => handleLinkClick(e, '/portal/help')} className="footer-link">
-              GỬI PHẢN HỒI
+              {t('footer.support.feedback')}
             </a>
             <a href="/security" onClick={(e) => handleLinkClick(e, '/security')} className="footer-link">
-              BẢO MẬT HỆ THỐNG
+              {t('footer.support.security')}
             </a>
             <a href="/privacy" onClick={(e) => handleLinkClick(e, '/privacy')} className="footer-link">
-              CHÍNH SÁCH BẢO MẬT
+              {t('footer.support.privacy')}
             </a>
             <a href="/terms" onClick={(e) => handleLinkClick(e, '/terms')} className="footer-link">
-              ĐIỀU KHOẢN DỊCH VỤ
+              {t('footer.support.terms')}
             </a>
             <a
               href="https://github.com/phamthaisang1710/captone/issues"
@@ -185,12 +187,12 @@ export const Footer = ({ onNavigate }) => {
               rel="noopener noreferrer"
               className="footer-link"
             >
-              BÁO CÁO SỰ CỐ
+              {t('footer.support.reportIssue')}
             </a>
           </div>
 
           <div className="footer-social-wrapper">
-            <span className="footer-col-title">MẠNG XÃ HỘI</span>
+            <span className="footer-col-title">{t('footer.support.socialsTitle')}</span>
             <div className="footer-social-icons">
               {/* GitHub */}
               <a
@@ -229,15 +231,15 @@ export const Footer = ({ onNavigate }) => {
       {/* ================= COPYRIGHT BOTTOM BAR ================= */}
       <div className="footer-bottom-bar">
         <div className="footer-bottom-meta">
-          <span>KIẾN TRÚC HỆ THỐNG SELFHEAL</span>
+          <span>{t('footer.bottom.arch')}</span>
           <span style={{ opacity: 0.4 }}>|</span>
-          <span className="footer-bottom-meta-accent">TỰ CHỦ HẠ TẦNG KUBERNETES</span>
+          <span className="footer-bottom-meta-accent">{t('footer.bottom.k8s')}</span>
           <span style={{ opacity: 0.4 }}>•</span>
-          <span>CHUẨN K8S 1.28+</span>
+          <span>{t('footer.bottom.spec')}</span>
         </div>
 
         <div className="footer-bottom-copyright">
-          &copy; {new Date().getFullYear()} SELFHEAL. BẢO LƯU MỌI QUYỀN.
+          {t('footer.bottom.copyright', { year: new Date().getFullYear() })}
         </div>
       </div>
     </footer>

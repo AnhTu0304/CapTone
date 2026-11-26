@@ -1,0 +1,65 @@
+{
+  "defaultWarnTitle": "Cảnh báo chuyển trang — {{code}}",
+  "defaultWarnMessage": "Đường dẫn \"{{path}}\" không tồn tại trên hệ thống hoặc đã bị di chuyển.",
+  "routes": {
+    "warnAuthTitle": "Cảnh báo xác thực — 401",
+    "warnAuthMessage": "Bạn cần đăng nhập để truy cập \"{{path}}\".",
+    "warnForbiddenTitle": "Cảnh báo phân quyền — 403",
+    "warnForbiddenMessage": "Khu vực Quản trị Hệ thống (/admin) chỉ dành riêng cho Quản trị viên Nền tảng (Admin / Super Admin). Vui lòng sử dụng Bàn điều khiển Doanh nghiệp (/dashboard).",
+    "forbiddenTitle": "403 — Không Có Quyền Truy Cập Quản Trị",
+    "forbiddenMessage": "Khu vực Quản trị Hệ thống (/admin) chỉ dành riêng cho Quản trị viên Nền tảng (Admin / Super Admin). Tài khoản người dùng và thành viên tổ chức vui lòng thao tác tại Bàn điều khiển Doanh nghiệp.",
+    "notFoundMessage": "Đường dẫn \"{{path}}\" không tồn tại trên hệ thống hoặc đã được di chuyển sang vị trí khác."
+  },
+  "statuses": {
+    "401": {
+      "title": "Phiên đăng nhập đã hết hạn.",
+      "message": "Thẻ xác thực không còn hiệu lực. Vui lòng đăng nhập lại bằng tài khoản của bạn để tiếp tục.",
+      "imageAlt": "Robot SelfHeal quét thẻ đăng nhập hết hạn"
+    },
+    "403": {
+      "title": "Không có quyền truy cập.",
+      "message": "Tài khoản của bạn không có quyền truy cập trang hoặc tài nguyên này theo chính sách phân quyền (RBAC).",
+      "imageAlt": "Robot SelfHeal đứng trước cánh cửa bảo mật bị khóa"
+    },
+    "404": {
+      "title": "Đây không phải trang bạn đang tìm kiếm.",
+      "message": "Tài nguyên hoặc đường dẫn này không tồn tại trên hệ thống hoặc đã được di chuyển sang vị trí khác.",
+      "imageAlt": "Robot SelfHeal cầm kính lúp tìm kiếm trang bị thất lạc"
+    },
+    "500": {
+      "title": "Máy chủ đang gặp trục trặc nội bộ.",
+      "message": "Hệ thống vừa phát sinh sự cố bất thường. Tác tử AI SelfHeal đang thu thập log để tự động chẩn đoán.",
+      "imageAlt": "Robot SelfHeal kiểm tra tủ máy chủ gặp trục trặc"
+    },
+    "503": {
+      "title": "Dịch vụ tạm thời gián đoạn.",
+      "message": "Cụm máy chủ đang được phục hồi tự hành hoặc tạm quá tải. Vui lòng quay lại sau ít phút.",
+      "imageAlt": "Robot SelfHeal cầm cờ lê sửa chữa máy chủ"
+    },
+    "429": {
+      "title": "Quá nhiều yêu cầu cùng lúc.",
+      "message": "Hệ thống đang tạm giới hạn tần suất truy cập (Rate Limit) để bảo vệ độ ổn định cho cụm dịch vụ.",
+      "imageAlt": "Robot SelfHeal bị bao quanh bởi quá nhiều gói tin request"
+    },
+    "agent-offline": {
+      "title": "Đang cố gắng kết nối lại với Agent.",
+      "message": "Chưa nhận được tín hiệu heartbeat từ SelfHeal Agent trên cụm Kubernetes. Vui lòng kiểm tra Pod hoặc kết nối mạng.",
+      "imageAlt": "Robot SelfHeal cố gắng kết nối lại dây tín hiệu Agent"
+    },
+    "cluster-lost": {
+      "title": "Mất đồng bộ kết nối tới các Node.",
+      "message": "Cụm Kubernetes tạm thời không phản hồi. Hệ thống đang tìm cách liên kết lại tới API Server.",
+      "imageAlt": "Robot SelfHeal tìm cách kết nối lại các node Kubernetes rời rạc"
+    },
+    "monitoring": {
+      "title": "Đang kiểm tra luồng telemetry trực tiếp.",
+      "message": "SelfHeal Bot đang giám sát liên tục chỉ số CPU, RAM và độ trễ cụm Kubernetes theo thời gian thực.",
+      "imageAlt": "Robot SelfHeal kiểm tra màn hình sóng telemetry"
+    },
+    "maintenance": {
+      "title": "Hệ thống đang được bảo trì định kỳ.",
+      "message": "Đội ngũ kỹ thuật và SelfHeal Bot đang nâng cấp hạ tầng. Dịch vụ sẽ hoạt động trở lại ngay sau ít phút.",
+      "imageAlt": "Robot SelfHeal đội mũ kỹ sư đang bảo trì hệ thống"
+    }
+  }
+}

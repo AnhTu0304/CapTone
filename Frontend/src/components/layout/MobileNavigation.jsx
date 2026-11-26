@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, ArrowRight, LayoutDashboard, LogOut, ChevronDown, BookOpen, Scale, Mail, ShieldCheck, Share2, Info } from 'lucide-react';
 import Logo from '../common/Logo';
 import { useAuth } from '../../context/AuthContext';
@@ -9,16 +10,17 @@ export const MobileNavigation = ({
   currentPath = '/',
   onNavigate,
 }) => {
+  const { t } = useTranslation('common');
   const { user, isAuthenticated, logout, getInitials, getPrimaryRole } = useAuth();
   const [docsExpanded, setDocsExpanded] = useState(false);
 
   if (!isOpen) return null;
 
   const navLinks = [
-    { label: 'Hướng dẫn', path: '/guide' },
-    { label: 'Tính năng', path: '/features' },
-    { label: 'Giới thiệu', path: '/about' },
-    { label: 'Tài liệu', path: '/docs' },
+    { key: 'guide', label: t('mobileNav.nav.guide'), path: '/guide' },
+    { key: 'features', label: t('mobileNav.nav.features'), path: '/features' },
+    { key: 'about', label: t('mobileNav.nav.about'), path: '/about' },
+    { key: 'docs', label: t('mobileNav.nav.docs'), path: '/docs' },
   ];
 
   return (
@@ -56,7 +58,7 @@ export const MobileNavigation = ({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close menu"
+          aria-label={t('mobileNav.ariaClose')}
           style={{
             background: 'none',
             border: 'none',
@@ -109,12 +111,12 @@ export const MobileNavigation = ({
                 {docsExpanded && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px 0 16px 12px' }}>
                     {[
-                      { label: 'Tài liệu hướng dẫn', path: '/guide', icon: BookOpen },
-                      { label: 'Điều khoản & Điều kiện', path: '/terms', icon: Scale },
-                      { label: 'Liên hệ tư vấn', path: '/contact', icon: Mail },
-                      { label: 'Bảo mật & Quyền riêng tư', path: '/privacy', icon: ShieldCheck },
-                      { label: 'Mạng xã hội & Cộng đồng', path: 'https://github.com/phamthaisang1710/captone', isExternal: true, icon: Share2 },
-                      { label: 'Giới thiệu SelfHeal', path: '/about', icon: Info },
+                      { key: 'guide', label: t('mobileNav.docsItems.guide'), path: '/guide', icon: BookOpen },
+                      { key: 'terms', label: t('mobileNav.docsItems.terms'), path: '/terms', icon: Scale },
+                      { key: 'contact', label: t('mobileNav.docsItems.contact'), path: '/contact', icon: Mail },
+                      { key: 'privacy', label: t('mobileNav.docsItems.privacy'), path: '/privacy', icon: ShieldCheck },
+                      { key: 'community', label: t('mobileNav.docsItems.community'), path: 'https://github.com/phamthaisang1710/captone', isExternal: true, icon: Share2 },
+                      { key: 'about', label: t('mobileNav.docsItems.about'), path: '/about', icon: Info },
                     ].map((sub) => {
                       const SubIcon = sub.icon;
                       if (sub.isExternal) {
@@ -243,7 +245,7 @@ export const MobileNavigation = ({
                     textOverflow: 'ellipsis',
                   }}
                 >
-                  {user.full_name || 'Người dùng'}
+                  {user.full_name || t('header.auth.defaultUser')}
                 </div>
                 <div
                   style={{
@@ -295,7 +297,7 @@ export const MobileNavigation = ({
               }}
             >
               <LayoutDashboard size={16} color="var(--color-accent)" />
-              <span>Vào Bảng điều khiển</span>
+              <span>{t('header.auth.goToDashboard')}</span>
             </a>
 
             {/* Logout Button */}
@@ -322,7 +324,7 @@ export const MobileNavigation = ({
               }}
             >
               <LogOut size={16} />
-              <span>Đăng xuất</span>
+              <span>{t('header.auth.logout')}</span>
             </button>
           </>
         ) : (
@@ -346,7 +348,7 @@ export const MobileNavigation = ({
                 backgroundColor: 'var(--bg-secondary)',
               }}
             >
-              Đăng nhập
+              {t('header.auth.login')}
             </a>
             <a
               href="/register"
@@ -370,7 +372,7 @@ export const MobileNavigation = ({
                 border: '1px solid var(--color-accent)',
               }}
             >
-              <span>Đăng ký</span>
+              <span>{t('header.auth.register')}</span>
               <ArrowRight size={16} />
             </a>
           </>

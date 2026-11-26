@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/dist/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
@@ -17,6 +18,7 @@ if (typeof window !== 'undefined') {
 }
 
 export const FeaturesPage = ({ onNavigate }) => {
+  const { t } = useTranslation('features');
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const notebookContainerRef = useRef(null);
@@ -266,10 +268,10 @@ export const FeaturesPage = ({ onNavigate }) => {
     <div className="features-page-root" data-testid="features-page">
       <header className="features-top-hero" data-testid="features-top-hero">
         <h1 className="features-hero-title">
-          Năng Lực Tính Năng &amp; Vòng Lặp Tự Phục Hồi
+          {t('hero.title')}
         </h1>
         <p className="features-hero-subtitle">
-          Hạ tầng Kubernetes của bạn được bảo vệ 24/7 qua quy trình 6 chặng tự động hóa: từ phát hiện tức thời, dự báo sớm AI, chẩn đoán nguyên nhân gốc đến phục hồi tự hành với sự kiểm soát tối cao từ con người.
+          {t('hero.subtitle')}
         </p>
       </header>
 
@@ -287,32 +289,26 @@ export const FeaturesPage = ({ onNavigate }) => {
 
         <main className="features-content-container">
           <div className="features-lifecycle-header">
-            <h2 className="features-lifecycle-title">6 Trụ Cột Năng Lực Vận Hành Tự Động</h2>
+            <h2 className="features-lifecycle-title">{t('lifecycle.title')}</h2>
             <p className="features-lifecycle-desc">
-              Được thiết kế dựa trên kiến trúc điều khiển MAPE-K (Monitor - Analyze - Plan - Execute - Knowledge) dành riêng cho các đội ngũ kỹ thuật doanh nghiệp vừa và nhỏ (SMEs).
+              {t('lifecycle.desc')}
             </p>
           </div>
 
           <section id="step-detect" className="features-section features-step-row" data-testid="features-section-detect">
             <div className="features-step-text-col">
-              <span className="features-step-badge features-step-badge--detect">CHẶNG 01 // Phát Hiện</span>
-              <h3 className="features-step-title">Quét Radar Hạ Tầng &amp; Thu Thập Telemetry Tức Thì</h3>
+              <span className="features-step-badge features-step-badge--detect">{t('steps.detect.badge')}</span>
+              <h3 className="features-step-title">{t('steps.detect.title')}</h3>
               <p className="features-step-desc">
-                Hệ thống liên tục thu thập số liệu đo từ xa độ trễ cực thấp (&lt; 1.2ms) qua tầng eBPF kernel và Prometheus scraper. Quét radar định kỳ 10 giây phát hiện tức thời tình trạng tắc nghẽn của Pods, Nodes và thông lượng mạng mà không gây suy giảm hiệu năng cụm.
+                {t('steps.detect.desc')}
               </p>
               <ul className="features-step-list">
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Thu thập 100% chỉ số bão hòa CPU, RAM RSS, Disk I/O và độ trễ Ingress.</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Kết nối một chiều qua luồng Outbound TLS bảo mật (0 cổng mở Inbound).</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Tương thích toàn diện với EKS, GKE, AKS, K3s và cụm máy chủ vật lý kubeadm.</span>
-                </li>
+                {(Array.isArray(t('steps.detect.bullets', { returnObjects: true })) ? t('steps.detect.bullets', { returnObjects: true }) : []).map((bullet, idx) => (
+                  <li key={idx} className="features-step-item">
+                    <CheckCircle2 size={18} className="features-step-check" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="features-visual-box">
@@ -335,7 +331,7 @@ export const FeaturesPage = ({ onNavigate }) => {
                 avatarImage={gruForecasterAvatar}
                 avatarIcon={<Cpu size={22} />}
                 username="gru.forecaster // time-series"
-                message="Dự báo suy giảm tài nguyên: Nguy cơ OOMKilled trong 14m 20s (Độ tin cậy 94.6%)"
+                message={t('steps.predict.cardMsg')}
                 meshVariant="timeseries"
                 showCard={false}
                 nodeColor="#F43F5E"
@@ -343,48 +339,36 @@ export const FeaturesPage = ({ onNavigate }) => {
               />
             </div>
             <div className="features-step-text-col">
-              <span className="features-step-badge features-step-badge--predict">CHẶNG 02 // Dự Đoán</span>
-              <h3 className="features-step-title">Dự Báo Suy Thoái Sớm 15–30 Phút Bằng Mạng Nơ-ron GRU</h3>
+              <span className="features-step-badge features-step-badge--predict">{t('steps.predict.badge')}</span>
+              <h3 className="features-step-title">{t('steps.predict.title')}</h3>
               <p className="features-step-desc">
-                Mô hình học máy chuỗi thời gian GRU (Gated Recurrent Unit) liên tục phân tích xu hướng biến thiên của hàng trăm tham số telemetry, phát hiện sớm quỹ đạo suy giảm chất lượng dịch vụ trước khi sự cố OOMKilled hoặc nghẽn CPU xảy ra.
+                {t('steps.predict.desc')}
               </p>
               <ul className="features-step-list">
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Dự báo trước xu hướng rò rỉ bộ nhớ (Memory Leak) và nghẽn hàng đợi request.</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Thuật toán lọc nhiễu tự động triệt tiêu cảnh báo giả từ biến động mạng tạm thời.</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Điểm số cảnh báo rủi ro được cập nhật liên tục với độ tin cậy vượt trội &gt; 94%.</span>
-                </li>
+                {(Array.isArray(t('steps.predict.bullets', { returnObjects: true })) ? t('steps.predict.bullets', { returnObjects: true }) : []).map((bullet, idx) => (
+                  <li key={idx} className="features-step-item">
+                    <CheckCircle2 size={18} className="features-step-check" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
               </ul>
             </div>
           </section>
 
           <section id="step-diagnose" className="features-section features-step-row" data-testid="features-section-diagnose">
             <div className="features-step-text-col">
-              <span className="features-step-badge features-step-badge--diagnose">CHẶNG 03 // Chuẩn Đoán</span>
-              <h3 className="features-step-title">Tự Động Phân Tích Nguyên Nhân Gốc Rễ Đa Chiều (RCA)</h3>
+              <span className="features-step-badge features-step-badge--diagnose">{t('steps.diagnose.badge')}</span>
+              <h3 className="features-step-title">{t('steps.diagnose.title')}</h3>
               <p className="features-step-desc">
-                Thay vì yêu cầu kỹ sư đọc hàng nghìn dòng log phân tán, thuật toán RCA tự động tương quan chéo giữa biến cố Kubernetes (CrashLoopBackOff, Evicted), mã thoát container (Exit Code 137/1) và độ lệch cấu hình GitOps để chỉ ra điểm lỗi cốt lõi duy nhất.
+                {t('steps.diagnose.desc')}
               </p>
               <ul className="features-step-list">
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Cô lập chính xác microservice gây lỗi trên đồ thị phụ thuộc DAG.</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Trích xuất thông tin lỗi ngữ cảnh từ container stderr và hệ thống CoreDNS.</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Cung cấp điểm tin cậy chẩn đoán (Confidence Score) kèm khuyến nghị khắc phục cụ thể.</span>
-                </li>
+                {(Array.isArray(t('steps.diagnose.bullets', { returnObjects: true })) ? t('steps.diagnose.bullets', { returnObjects: true }) : []).map((bullet, idx) => (
+                  <li key={idx} className="features-step-item">
+                    <CheckCircle2 size={18} className="features-step-check" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="features-visual-box">
@@ -393,7 +377,7 @@ export const FeaturesPage = ({ onNavigate }) => {
                 avatarImage={rcaDiagnosticCore}
                 avatarIcon={<Search size={22} />}
                 username="rca.engine // graph-diagnostics"
-                message="Phân lập nguyên nhân cốt lõi: Container ExitCode 137 tại checkout-service (98.4%)"
+                message={t('steps.diagnose.cardMsg')}
                 meshVariant="causal-dag"
                 showCard={false}
                 nodeColor="#EF4444"
@@ -409,7 +393,7 @@ export const FeaturesPage = ({ onNavigate }) => {
                 avatarImage={hitlApprovalSeal}
                 avatarIcon={<UserCheck size={22} />}
                 username="hitl.guardrail // approval-gate"
-                message="Yêu cầu phê duyệt con người trước khi điều chỉnh Memory: 256Mi → 512Mi"
+                message={t('steps.verify.cardMsg')}
                 meshVariant="yaml-diff-gate"
                 showCard={false}
                 nodeColor="#A855F7"
@@ -417,48 +401,36 @@ export const FeaturesPage = ({ onNavigate }) => {
               />
             </div>
             <div className="features-step-text-col">
-              <span className="features-step-badge features-step-badge--verify">CHẶNG 04 // Xác Minh</span>
-              <h3 className="features-step-title">Xem Trước Kubernetes YAML Diff &amp; Phê Duyệt An Toàn (HITL)</h3>
+              <span className="features-step-badge features-step-badge--verify">{t('steps.verify.badge')}</span>
+              <h3 className="features-step-title">{t('steps.verify.title')}</h3>
               <p className="features-step-desc">
-                Nguyên tắc cốt lõi: AI Đề Xuất - Con Người Quyết Định - Tác Tử Thực Thi. Mọi hành động can thiệp hạ tầng nhạy cảm đều cung cấp giao diện trực quan so sánh cấu hình Before vs After cùng bán kính tác động, yêu cầu xác nhận chủ động từ kỹ sư trước khi chạy.
+                {t('steps.verify.desc')}
               </p>
               <ul className="features-step-list">
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Xem trước trực quan bản diff tài nguyên (Resource limits, Replicas, Cordon).</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Phê duyệt 1 nhấp chuột qua Bảng điều khiển Web hoặc webhook Slack/Teams.</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Chế độ Phê duyệt Kép (Dual Operator Sign-Off) cho cụm máy chủ Production trọng yếu.</span>
-                </li>
+                {(Array.isArray(t('steps.verify.bullets', { returnObjects: true })) ? t('steps.verify.bullets', { returnObjects: true }) : []).map((bullet, idx) => (
+                  <li key={idx} className="features-step-item">
+                    <CheckCircle2 size={18} className="features-step-check" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
               </ul>
             </div>
           </section>
 
           <section id="step-recover" className="features-section features-step-row" data-testid="features-section-recover">
             <div className="features-step-text-col">
-              <span className="features-step-badge features-step-badge--recover">CHẶNG 05 // Hồi Phục</span>
-              <h3 className="features-step-title">Khôi Phục Tự Hành Dưới 2 Giây Không Gián Đoạn Dịch Vụ</h3>
+              <span className="features-step-badge features-step-badge--recover">{t('steps.recover.badge')}</span>
+              <h3 className="features-step-title">{t('steps.recover.title')}</h3>
               <p className="features-step-desc">
-                Ngay sau khi kế hoạch được phê duyệt hoặc thỏa mãn chính sách tự động hóa, bộ điều phối Kubernetes Agent thực thi lệnh điều khiển qua Kubernetes API: khởi động lại pod, co giãn replica hoặc rollback phiên bản container một cách an toàn và êm dịu.
+                {t('steps.recover.desc')}
               </p>
               <ul className="features-step-list">
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Tự động tái tạo Pod mới trước khi chấm dứt Pod lỗi (Rolling Replacement).</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Tự động hoàn nguyên (rollback) về ReplicaSet ổn định gần nhất khi deploy lỗi.</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Dọn dẹp tài nguyên từ các pod mồ côi và rò rỉ bộ nhớ đệm nhanh chóng.</span>
-                </li>
+                {(Array.isArray(t('steps.recover.bullets', { returnObjects: true })) ? t('steps.recover.bullets', { returnObjects: true }) : []).map((bullet, idx) => (
+                  <li key={idx} className="features-step-item">
+                    <CheckCircle2 size={18} className="features-step-check" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="features-visual-box">
@@ -467,7 +439,7 @@ export const FeaturesPage = ({ onNavigate }) => {
                 avatarImage={k8sRollingAgent}
                 avatarIcon={<Zap size={22} />}
                 username="k8s.agent // rolling-remedy"
-                message="Tự phục hồi hoàn tất trong 1.8s: Khởi tạo Replica mới thành công, 0 gián đoạn"
+                message={t('steps.recover.cardMsg')}
                 meshVariant="rolling-switchboard"
                 showCard={false}
                 nodeColor="#00F2FE"
@@ -483,7 +455,7 @@ export const FeaturesPage = ({ onNavigate }) => {
                 avatarImage={auditVaultCore}
                 avatarIcon={<ShieldCheck size={22} />}
                 username="audit.vault // immutable-log"
-                message="Nhật ký kiểm toán bất biến: Ký số SHA-256 xác thực bởi sre_operator"
+                message={t('steps.audit.cardMsg')}
                 meshVariant="audit-ledger"
                 showCard={false}
                 nodeColor="#14B8A6"
@@ -491,24 +463,18 @@ export const FeaturesPage = ({ onNavigate }) => {
               />
             </div>
             <div className="features-step-text-col">
-              <span className="features-step-badge features-step-badge--audit">CHẶNG 06 // Bảo Vệ & Kiểm Toán</span>
-              <h3 className="features-step-title">Bảo Mật Cụm Đạt Chuẩn &amp; Nhật Ký Kiểm Toán Bất Biến</h3>
+              <span className="features-step-badge features-step-badge--audit">{t('steps.audit.badge')}</span>
+              <h3 className="features-step-title">{t('steps.audit.title')}</h3>
               <p className="features-step-desc">
-                SelfHeal được thiết kế an toàn từ gốc với nguyên tắc đặc quyền tối thiểu (Least Privilege). Tác tử K8s Agent không yêu cầu quyền cluster-admin, và mọi hành động tự phục hồi đều được đóng dấu băm mã hóa, ghi nhận vào Audit Log bất biến lưu trong PostgreSQL.
+                {t('steps.audit.desc')}
               </p>
               <ul className="features-step-list">
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Xác thực định danh đa yếu tố và token mã hóa riêng biệt cho từng cụm máy chủ.</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Nhật ký kiểm toán bất biến ghi nhận chi tiết User ID, địa chỉ IP, hành động và YAML diff.</span>
-                </li>
-                <li className="features-step-item">
-                  <CheckCircle2 size={18} className="features-step-check" />
-                  <span>Phân quyền RBAC nghiêm ngặt: Phân tách rõ ràng vai trò Owner, SRE Operator và Auditor.</span>
-                </li>
+                {(Array.isArray(t('steps.audit.bullets', { returnObjects: true })) ? t('steps.audit.bullets', { returnObjects: true }) : []).map((bullet, idx) => (
+                  <li key={idx} className="features-step-item">
+                    <CheckCircle2 size={18} className="features-step-check" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
               </ul>
             </div>
           </section>
@@ -526,9 +492,9 @@ export const FeaturesPage = ({ onNavigate }) => {
                 aria-hidden="true"
               />
               <div className="features-notebook-content">
-                <h2 className="features-cta-headline">Sẵn sàng thay đổi tư duy về độ tin cậy của hạ tầng?</h2>
+                <h2 className="features-cta-headline">{t('cta.headline')}</h2>
                 <p className="features-cta-desc">
-                  Khám phá cách SelfHeal hỗ trợ doanh nghiệp giám sát, dự đoán rủi ro và phục hồi cụm Kubernetes chủ động hơn.
+                  {t('cta.desc')}
                 </p>
                 <div className="features-cta-group">
                   <button
@@ -536,9 +502,9 @@ export const FeaturesPage = ({ onNavigate }) => {
                     className="features-btn-primary"
                     onClick={() => onNavigate && onNavigate('/login')}
                     data-testid="features-cta-explore-btn"
-                    title="Khám phá SelfHeal"
+                    title={t('cta.explore')}
                   >
-                    <span>Khám phá SelfHeal</span>
+                    <span>{t('cta.explore')}</span>
                     <ArrowRight size={18} strokeWidth={2.2} />
                   </button>
                   <button
@@ -546,10 +512,10 @@ export const FeaturesPage = ({ onNavigate }) => {
                     className="features-btn-secondary"
                     onClick={() => onNavigate && onNavigate('/contact')}
                     data-testid="features-cta-contact-btn"
-                    title="Liên hệ Đội ngũ"
+                    title={t('cta.contact')}
                   >
                     <BookOpen size={18} strokeWidth={2.2} color="#2A2A2A" />
-                    <span>Liên hệ Đội ngũ</span>
+                    <span>{t('cta.contact')}</span>
                   </button>
                 </div>
               </div>

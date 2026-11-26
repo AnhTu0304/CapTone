@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowRight, ArrowLeft, Mail, Loader2, RefreshCw } from 'lucide-react';
 import Logo from '../../components/common/Logo';
 import authService from '../../services/authService';
@@ -11,6 +12,7 @@ import {
 } from '../../components/auth/AuthShared';
 
 export const ForgotPasswordPage = ({ onNavigate }) => {
+  const { t } = useTranslation('auth');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -33,12 +35,12 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
     setError('');
 
     if (!email.trim()) {
-      setError('Vui lòng nhập địa chỉ email công việc');
+      setError(t('forgotPassword.errors.emailRequired'));
       return;
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Vui lòng nhập địa chỉ email hợp lệ');
+      setError(t('forgotPassword.errors.emailInvalid'));
       return;
     }
 
@@ -48,7 +50,7 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
       setSent(true);
       setResendCooldown(30);
     } catch (err) {
-      setError(err?.message || 'Không thể gửi yêu cầu đặt lại mật khẩu. Vui lòng thử lại.');
+      setError(err?.message || t('forgotPassword.errors.sendFailed'));
     } finally {
       setLoading(false);
     }
@@ -62,7 +64,7 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
       await authService.forgotPassword(email.trim());
       setResendCooldown(30);
     } catch (err) {
-      setError(err?.message || 'Không thể gửi lại email khôi phục lúc này.');
+      setError(err?.message || t('forgotPassword.errors.resendFailed'));
     } finally {
       setResending(false);
     }
@@ -98,7 +100,7 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
               fontSize: '1.65rem',
             }}
           >
-            Kiểm tra hộp thư của bạn
+            {t('forgotPassword.sent.title')}
           </h2>
 
           <p
@@ -110,7 +112,7 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
               marginBottom: '16px',
             }}
           >
-            Chúng tôi đã gửi liên kết đặt lại mật khẩu tới:
+            {t('forgotPassword.sent.sentTo')}
           </p>
 
           <div
@@ -139,7 +141,7 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
               marginBottom: '24px',
             }}
           >
-            Liên kết khôi phục có hiệu lực trong 15 phút và chỉ dùng một lần. Nếu chưa thấy email, vui lòng kiểm tra thêm mục Thư rác (Spam).
+            {t('forgotPassword.sent.note')}
           </p>
 
           <div style={{ marginBottom: '20px' }}>
@@ -162,10 +164,10 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
               <RefreshCw size={13} className={resending ? 'animate-spin' : ''} />
               <span>
                 {resending
-                  ? 'Đang gửi lại email...'
+                  ? t('forgotPassword.sent.resending')
                   : resendCooldown > 0
-                    ? `Gửi lại email sau ${resendCooldown}s`
-                    : 'Chưa nhận được email? Gửi lại'}
+                    ? t('forgotPassword.sent.resendIn', { seconds: resendCooldown })
+                    : t('forgotPassword.sent.resendBtn')}
               </span>
             </button>
           </div>
@@ -184,36 +186,36 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
             }}
           >
             <ArrowLeft size={15} />
-            <span>Quay lại đăng nhập</span>
+            <span>{t('forgotPassword.backToLogin')}</span>
           </a>
         </div>
       ) : (
         <div>
           <div style={{ textAlign: 'center', marginBottom: '36px' }}>
             <h1 style={AUTH_HEADING_STYLE}>
-              Quên mật khẩu?
+              {t('forgotPassword.title')}
             </h1>
             <p style={{ fontSize: '0.875rem', color: '#4B5563', fontFamily: 'var(--font-body)', margin: 0, lineHeight: 1.55 }}>
-              Nhập email công việc gắn với tài khoản để nhận liên kết khôi phục mật khẩu.
+              {t('forgotPassword.subtitle')}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
             <div>
               <label htmlFor="forgot-email" style={AUTH_LABEL_STYLE}>
-                Email công việc
+                {t('forgotPassword.emailLabel')}
               </label>
               <input
                 id="forgot-email"
                 type="email"
                 required
-                aria-label="Email công việc"
+                aria-label={t('forgotPassword.emailLabel')}
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
                   if (error) setError('');
                 }}
-                placeholder="ten@congty.com"
+                placeholder={t('forgotPassword.emailPlaceholder')}
                 style={{
                   ...AUTH_INPUT_STYLE,
                   border: error ? '1px solid #EF4444' : '1px solid #D1D5DB',
@@ -253,11 +255,11 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
               {loading ? (
                 <>
                   <Loader2 size={18} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                  <span>Đang gửi liên kết...</span>
+                  <span>{t('forgotPassword.submitting')}</span>
                 </>
               ) : (
                 <>
-                  <span>Gửi liên kết khôi phục</span>
+                  <span>{t('forgotPassword.submit')}</span>
                   <ArrowRight size={17} strokeWidth={2.2} />
                 </>
               )}
@@ -278,7 +280,7 @@ export const ForgotPasswordPage = ({ onNavigate }) => {
                 }}
               >
                 <ArrowLeft size={15} />
-                <span>Quay lại đăng nhập</span>
+                <span>{t('forgotPassword.backToLogin')}</span>
               </a>
             </div>
           </form>

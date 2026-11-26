@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   User, 
   Mail, 
@@ -14,6 +15,7 @@ import PixelWaveCanvas from './components/PixelWaveCanvas';
 import './ContactPage.css';
 
 export const ContactPage = () => {
+  const { t } = useTranslation('contact');
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -36,12 +38,12 @@ export const ContactPage = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.firstName.trim() || !formData.lastName.trim() || !formData.workEmail.trim() || !formData.companyName.trim()) {
-      setErrorMsg('Vui lòng điền đầy đủ các thông tin bắt buộc (*)');
+      setErrorMsg(t('validation.requiredFields'));
       return;
     }
 
     if (!formData.workEmail.includes('@') || !formData.workEmail.includes('.')) {
-      setErrorMsg('Vui lòng nhập định dạng email hợp lệ');
+      setErrorMsg(t('validation.invalidEmail'));
       return;
     }
 
@@ -74,9 +76,9 @@ export const ContactPage = () => {
 
           {/* Banner Central Typography in Vietnamese */}
           <div className="contact-hero-content">
-            <h1 className="contact-hero-title">Liên Hệ Tư Vấn</h1>
+            <h1 className="contact-hero-title">{t('hero.title')}</h1>
             <p className="contact-hero-subtitle">
-              Cảm ơn bạn đã quan tâm đến SelfHeal. Vui lòng điền thông tin bên dưới, đội ngũ kỹ sư của chúng tôi sẽ liên hệ trong thời gian sớm nhất.
+              {t('hero.subtitle')}
             </p>
           </div>
         </div>
@@ -108,10 +110,11 @@ export const ContactPage = () => {
           {submitted ? (
             <div className="contact-success-card" data-testid="contact-success-state">
               <CheckCircle2 size={48} className="contact-success-icon" />
-              <h2 className="contact-success-title">Cảm ơn bạn!</h2>
+              <h2 className="contact-success-title">{t('success.title')}</h2>
               <p className="contact-success-desc">
-                Thông tin của bạn đã được gửi thành công. Đội ngũ kỹ sư SelfHeal sẽ liên hệ với bạn qua email{' '}
-                <strong>{formData.workEmail}</strong> trong vòng 24 giờ làm việc.
+                {t('success.descBefore')}
+                <strong>{formData.workEmail}</strong>
+                {t('success.descAfter')}
               </p>
               <button
                 type="button"
@@ -129,7 +132,7 @@ export const ContactPage = () => {
                   });
                 }}
               >
-                <span>Gửi yêu cầu khác</span>
+                <span>{t('success.anotherBtn')}</span>
               </button>
             </div>
           ) : (
@@ -145,13 +148,13 @@ export const ContactPage = () => {
                 <div className="contact-field-group">
                   <label htmlFor="firstName" className="contact-label">
                     <User size={13} strokeWidth={2.2} />
-                    <span>TÊN</span>
+                    <span>{t('form.firstNameLabel')}</span>
                   </label>
                   <input
                     id="firstName"
                     name="firstName"
                     type="text"
-                    placeholder="Tú"
+                    placeholder={t('form.firstNamePlaceholder')}
                     value={formData.firstName}
                     onChange={(e) => handleChange('firstName', e.target.value)}
                     className="contact-input"
@@ -162,13 +165,13 @@ export const ContactPage = () => {
                 <div className="contact-field-group">
                   <label htmlFor="lastName" className="contact-label">
                     <User size={13} strokeWidth={2.2} />
-                    <span>HỌ</span>
+                    <span>{t('form.lastNameLabel')}</span>
                   </label>
                   <input
                     id="lastName"
                     name="lastName"
                     type="text"
-                    placeholder="Ngô"
+                    placeholder={t('form.lastNamePlaceholder')}
                     value={formData.lastName}
                     onChange={(e) => handleChange('lastName', e.target.value)}
                     className="contact-input"
@@ -181,13 +184,13 @@ export const ContactPage = () => {
               <div className="contact-field-group">
                 <label htmlFor="workEmail" className="contact-label">
                   <Mail size={13} strokeWidth={2.2} />
-                  <span>EMAIL DOANH NGHIỆP</span>
+                  <span>{t('form.workEmailLabel')}</span>
                 </label>
                 <input
                   id="workEmail"
                   name="workEmail"
                   type="email"
-                  placeholder="tungo342005@gmail.com"
+                  placeholder={t('form.workEmailPlaceholder')}
                   value={formData.workEmail}
                   onChange={(e) => handleChange('workEmail', e.target.value)}
                   className="contact-input"
@@ -199,13 +202,13 @@ export const ContactPage = () => {
               <div className="contact-field-group">
                 <label htmlFor="phoneNumber" className="contact-label">
                   <Phone size={13} strokeWidth={2.2} />
-                  <span>SỐ ĐIỆN THOẠI (TÙY CHỌN)</span>
+                  <span>{t('form.phoneLabel')}</span>
                 </label>
                 <input
                   id="phoneNumber"
                   name="phoneNumber"
                   type="tel"
-                  placeholder="+84 912 345 678"
+                  placeholder={t('form.phonePlaceholder')}
                   value={formData.phoneNumber}
                   onChange={(e) => handleChange('phoneNumber', e.target.value)}
                   className="contact-input"
@@ -217,13 +220,13 @@ export const ContactPage = () => {
               <div className="contact-field-group">
                 <label htmlFor="companyName" className="contact-label">
                   <Building2 size={13} strokeWidth={2.2} />
-                  <span>TÊN DOANH NGHIỆP / CÔNG TY</span>
+                  <span>{t('form.companyLabel')}</span>
                 </label>
                 <input
                   id="companyName"
                   name="companyName"
                   type="text"
-                  placeholder="Acme Inc."
+                  placeholder={t('form.companyPlaceholder')}
                   value={formData.companyName}
                   onChange={(e) => handleChange('companyName', e.target.value)}
                   className="contact-input"
@@ -235,7 +238,7 @@ export const ContactPage = () => {
               <div className="contact-field-group">
                 <label htmlFor="teamSize" className="contact-label">
                   <Users size={13} strokeWidth={2.2} />
-                  <span>QUY MÔ ĐỘI NGŨ KỸ SƯ?</span>
+                  <span>{t('form.teamSizeLabel')}</span>
                 </label>
                 <div className="contact-select-wrapper">
                   <select
@@ -245,12 +248,12 @@ export const ContactPage = () => {
                     onChange={(e) => handleChange('teamSize', e.target.value)}
                     className="contact-select"
                   >
-                    <option value="" disabled>Chọn quy mô đội ngũ</option>
-                    <option value="1-10">1 - 10 kỹ sư</option>
-                    <option value="11-50">11 - 50 kỹ sư</option>
-                    <option value="51-200">51 - 200 kỹ sư</option>
-                    <option value="201-500">201 - 500 kỹ sư</option>
-                    <option value="500+">Trên 500 kỹ sư</option>
+                    <option value="" disabled>{t('form.teamSizePlaceholder')}</option>
+                    <option value="1-10">{t('form.teamSizeOptions.1-10')}</option>
+                    <option value="11-50">{t('form.teamSizeOptions.11-50')}</option>
+                    <option value="51-200">{t('form.teamSizeOptions.51-200')}</option>
+                    <option value="201-500">{t('form.teamSizeOptions.201-500')}</option>
+                    <option value="500+">{t('form.teamSizeOptions.500+')}</option>
                   </select>
                   <ChevronDown size={14} className="contact-select-caret" aria-hidden="true" />
                 </div>
@@ -260,13 +263,13 @@ export const ContactPage = () => {
               <div className="contact-field-group">
                 <label htmlFor="notes" className="contact-label">
                   <HelpCircle size={13} strokeWidth={2.2} />
-                  <span>BẠN CẦN CHÚNG TÔI HỖ TRỢ ĐIỀU GÌ TRƯỚC CUỘC HẸN?</span>
+                  <span>{t('form.notesLabel')}</span>
                 </label>
                 <textarea
                   id="notes"
                   name="notes"
                   rows={4}
-                  placeholder="Hãy chia sẻ về đội ngũ, quy mô hạ tầng Kubernetes hiện tại và mục tiêu bạn muốn tối ưu tự phục hồi..."
+                  placeholder={t('form.notesPlaceholder')}
                   value={formData.notes}
                   onChange={(e) => handleChange('notes', e.target.value)}
                   className="contact-textarea"
@@ -279,15 +282,15 @@ export const ContactPage = () => {
                   type="submit"
                   disabled={loading}
                   className="contact-btn-submit"
-                  aria-label="Gửi Yêu Cầu Tư Vấn"
+                  aria-label={t('form.submit')}
                 >
                   {loading ? (
                     <>
                       <Loader2 size={16} className="contact-btn-spinner" />
-                      <span>Đang gửi...</span>
+                      <span>{t('form.submitting')}</span>
                     </>
                   ) : (
-                    <span>Gửi Yêu Cầu Tư Vấn</span>
+                    <span>{t('form.submit')}</span>
                   )}
                 </button>
               </div>

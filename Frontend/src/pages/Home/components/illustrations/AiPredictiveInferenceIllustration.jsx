@@ -1,13 +1,8 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
-/**
- * AiPredictiveInferenceIllustration
- * High-fidelity animated SVG representing Step 2 of HowItWorks:
- * AI Predictive Degradation Model receiving and ingesting multi-directional
- * telemetry, event logs, and metric packets into a central Gyroscope Neural Core.
- * Hardware-accelerated 60FPS GPU keyframes, matching Cybernetic CAD Blueprint architecture.
- */
 export const AiPredictiveInferenceIllustration = ({ className = '' }) => {
+  const { t } = useTranslation('home');
   return (
     <svg
       className={`ai-predictive-inference-svg ${className}`.trim()}
@@ -15,7 +10,7 @@ export const AiPredictiveInferenceIllustration = ({ className = '' }) => {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
-      aria-label="Mô hình AI dự báo suy thoái với các luồng dữ liệu K8s hội tụ vào đầu não trung tâm"
+      aria-label={t('illustrations.aiPredictiveAria')}
     >
       <defs>
         {/* Core Radial Glow Gradients */}
