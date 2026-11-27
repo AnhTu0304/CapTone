@@ -1,5 +1,8 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import BranchedPipelineSection from './BranchedPipelineSection';
+import BranchedPipelineSection, {
+  Diagram2BranchControls,
+  buildD2BranchesState,
+} from './BranchedPipelineSection';
 import {
   translateIncidentTitle,
   translateSeverity,
@@ -177,13 +180,20 @@ export const AIPipelineFlowCanvas = ({
   // Chuyển đổi giữa Sơ đồ 1 (Tổng quan) và Sơ đồ 2 (Rẽ nhánh chi tiết 01→07)
   const [activeDiagram, setActiveDiagram] = useState('diagram1'); // 'diagram1' | 'diagram2'
   // Trạng thái độc lập cho Sơ đồ 2 (không ảnh hưởng Sơ đồ 1)
-  const [d2TelemetryExpanded, setD2TelemetryExpanded] = useState(false);
-  const [d2RuleExpanded, setD2RuleExpanded] = useState(false);
-  const [d2RisksExpanded, setD2RisksExpanded] = useState(false);
-  const [d2CausesExpanded, setD2CausesExpanded] = useState(false);
-  const [d2ActionsExpanded, setD2ActionsExpanded] = useState(false);
+  const [d2Branches, setD2Branches] = useState(() => buildD2BranchesState(false));
+  const d2TelemetryExpanded = Boolean(d2Branches.telemetry);
+  const d2RuleExpanded = Boolean(d2Branches.rule);
+  const d2RisksExpanded = Boolean(d2Branches.risks);
+  const d2CausesExpanded = Boolean(d2Branches.causes);
+  const d2ActionsExpanded = Boolean(d2Branches.actions);
+  const d2AllBranchesExpanded =
+    d2TelemetryExpanded && d2RuleExpanded && d2RisksExpanded && d2CausesExpanded && d2ActionsExpanded;
+
   const [d2SimulatedCause, setD2SimulatedCause] = useState(null);
   const [d2VerifyOutcome, setD2VerifyOutcome] = useState('auto');
+  const d1AllBranchesExpanded =
+    expandedGroups.telemetry && expandedGroups.rule && expandedGroups.risks && expandedGroups.branches;
+  const activeDiagramAllExpanded = activeDiagram === 'diagram2' ? d2AllBranchesExpanded : d1AllBranchesExpanded;
   const isTelemetryExpanded = !showExtendedPipeline || expandedGroups.telemetry;
   const isRuleExpanded = expandedGroups.rule;
   const isRisksExpanded = !showExtendedPipeline || expandedGroups.risks;
@@ -342,10 +352,10 @@ export const AIPipelineFlowCanvas = ({
     return () => ro.disconnect();
   }, []);
 
-  // Tỷ lệ co giãn tự động để vừa khít 100% khung màn hình theo Sơ đồ đang hiển thị (Sơ đồ 1: 2240x760 | Sơ đồ 2 có 00 Service: 4090x1230)
+  // Tỷ lệ co giãn tự động để vừa khít 100% khung màn hình theo Sơ đồ đang hiển thị (Sơ đồ 1: 2240x760 | Sơ đồ 2 có 00 Service: 4090x1170)
   const isDiagram2Active = showExtendedPipeline && activeDiagram === 'diagram2';
   const baseCanvasW = showExtendedPipeline ? (isDiagram2Active ? 4090 : 2240) : 1000;
-  const baseCanvasH = showExtendedPipeline ? (isDiagram2Active ? 1230 : 760) : 550;
+  const baseCanvasH = showExtendedPipeline ? (isDiagram2Active ? 1170 : 760) : 550;
   const autoScale = useMemo(() => {
     if (!containerWidth) return 1;
     if (isFullScreen && containerHeight > 0) {
@@ -781,7 +791,7 @@ export const AIPipelineFlowCanvas = ({
     const safeOffsetY = isFullScreen ? topSafePadding / 2 : 0;
     const forDiagram2 = showExtendedPipeline && targetDiagram === 'diagram2';
     const targetW = showExtendedPipeline ? (forDiagram2 ? 4090 : 2240) : 1000;
-    const targetH = showExtendedPipeline ? (forDiagram2 ? 1230 : 760) : 550;
+    const targetH = showExtendedPipeline ? (forDiagram2 ? 1170 : 760) : 550;
     if (mode === 'all' || !showExtendedPipeline) {
       return { nextZoom: 1, nextPan: { x: 0, y: safeOffsetY } };
     }
@@ -793,7 +803,7 @@ export const AIPipelineFlowCanvas = ({
         const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.25), MAX_VISUAL_SCALE / autoScale);
         const effScale = nextZoom * autoScale;
         const leftMarginPx = containerWidth <= 768 ? 8 : 18;
-        const focusCy = 540;
+        const focusCy = 480;
         return {
           nextZoom,
           nextPan: {
@@ -807,7 +817,7 @@ export const AIPipelineFlowCanvas = ({
         const nextZoom = Math.min(Math.max(targetScale / autoScale, 0.24), MAX_VISUAL_SCALE / autoScale);
         const effScale = nextZoom * autoScale;
         const leftMarginPx = containerWidth <= 768 ? 8 : 18;
-        const focusCy = 610;
+        const focusCy = 550;
         return {
           nextZoom,
           nextPan: {
@@ -2065,6 +2075,32 @@ export const AIPipelineFlowCanvas = ({
                 );
               })}
             </div>
+            <div style={{ width: '1px', height: '16px', backgroundColor: '#E2E8F0', margin: '0 2px' }} />
+            <Diagram2BranchControls
+              compact
+              allExpanded={activeDiagramAllExpanded}
+              onToggleAll={(expandAll) => {
+                didDragRef.current = false;
+                if (activeDiagram === 'diagram2') {
+                  setD2Branches(buildD2BranchesState(expandAll));
+                } else {
+                  setPinnedInspector(null);
+                  setHoveredInspector(null);
+                  setExpandedGroups({
+                    telemetry: expandAll,
+                    rule: expandAll,
+                    risks: expandAll,
+                    branches: expandAll,
+                  });
+                }
+              }}
+              isSimulating={activeDiagram === 'diagram2' && Boolean(d2SimulatedCause)}
+              onBackToLive={() => {
+                didDragRef.current = false;
+                setD2VerifyOutcome('auto');
+                setD2SimulatedCause(null);
+              }}
+            />
             <div style={{ width: '1px', height: '16px', backgroundColor: '#E2E8F0', margin: '0 2px' }} />
             {(activeDiagram === 'diagram2'
               ? [
@@ -4723,46 +4759,33 @@ export const AIPipelineFlowCanvas = ({
               onToggleTelemetry={(e) => {
                 if (e) e.stopPropagation();
                 didDragRef.current = false;
-                setD2TelemetryExpanded((prev) => !prev);
+                setD2Branches((prev) => ({ ...prev, telemetry: !prev.telemetry }));
               }}
               onToggleRule={(e) => {
                 if (e) e.stopPropagation();
                 didDragRef.current = false;
-                setD2RuleExpanded((prev) => !prev);
+                setD2Branches((prev) => ({ ...prev, rule: !prev.rule }));
               }}
               onToggleRisks={(e) => {
                 if (e) e.stopPropagation();
                 didDragRef.current = false;
-                setD2RisksExpanded((prev) => !prev);
+                setD2Branches((prev) => ({ ...prev, risks: !prev.risks }));
               }}
               onToggleCauses={(e) => {
                 if (e) e.stopPropagation();
                 didDragRef.current = false;
-                setD2CausesExpanded((prev) => !prev);
+                setD2Branches((prev) => ({ ...prev, causes: !prev.causes }));
               }}
               onToggleActions={(e) => {
                 if (e) e.stopPropagation();
                 didDragRef.current = false;
-                setD2ActionsExpanded((prev) => !prev);
-              }}
-              onToggleAllBranches={(expandAll) => {
-                didDragRef.current = false;
-                setD2TelemetryExpanded(expandAll);
-                setD2RuleExpanded(expandAll);
-                setD2RisksExpanded(expandAll);
-                setD2CausesExpanded(expandAll);
-                setD2ActionsExpanded(expandAll);
+                setD2Branches((prev) => ({ ...prev, actions: !prev.actions }));
               }}
               simulatedCauseCode={d2SimulatedCause}
               onSelectSimulatedCause={(code) => {
                 didDragRef.current = false;
                 setD2VerifyOutcome('auto');
                 setD2SimulatedCause((prev) => (prev === code ? null : code));
-              }}
-              onClearSimulation={() => {
-                didDragRef.current = false;
-                setD2VerifyOutcome('auto');
-                setD2SimulatedCause(null);
               }}
               verifyOutcomeMode={d2VerifyOutcome}
               onChangeVerifyOutcome={(mode) => {
