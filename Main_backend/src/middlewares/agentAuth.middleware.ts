@@ -5,6 +5,7 @@ import { AgentModel } from '../models/agent.model';
 import { pool } from '../config/database';
 import { recordAuthFailure } from '../telemetry/metrics';
 import { runWithTenantContext } from '../config/dbContext';
+import { sanitizeForLog } from '../utils/logSanitizer';
 
 export interface AuthenticatedAgentContext {
   id: string;
@@ -86,6 +87,7 @@ export const authenticateAgentToken = async (
     if (error instanceof ApiError) {
       return next(error);
     }
+    console.error('[AgentAuthMiddleware] DB lookup failed:', sanitizeForLog(error));
     return next(new ApiError(500, 'Lỗi cơ sở dữ liệu khi xác thực Agent'));
   }
 };

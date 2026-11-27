@@ -6,7 +6,7 @@ import { ApiResponse } from '../utils/apiResponse';
 import { PredictRequestSchema, RCARequestSchema } from '../schemas/ai.schema';
 import { ApiError } from '../utils/apiError';
 import { config } from '../config/env';
-import { redactSensitiveString, sanitizeForLog } from '../utils/logSanitizer';
+import { resolveSafeClientErrorMessage, sanitizeForLog } from '../utils/logSanitizer';
 import {
   AiPredictionModel,
   IncidentModel,
@@ -50,9 +50,11 @@ export class AiController {
       return ApiResponse.error(res, error.message, error.statusCode, error.errors);
     }
     console.error(tag, sanitizeForLog(error));
-    const msg = config.isDevelopment
-      ? redactSensitiveString((error as Error)?.message || 'Internal Server Error')
-      : 'Internal Server Error';
+    const msg = resolveSafeClientErrorMessage(error, {
+      isDevelopment: config.isDevelopment,
+      isApiError: false,
+      statusCode: 500,
+    });
     return ApiResponse.error(res, msg, 500);
   }
   /**

@@ -3,16 +3,18 @@ import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
 import { AiModelRegistryService } from '../services/aiModelRegistry.service';
 import { config } from '../config/env';
-import { redactSensitiveString, sanitizeForLog } from '../utils/logSanitizer';
+import { resolveSafeClientErrorMessage, sanitizeForLog } from '../utils/logSanitizer';
 
 function respondRegistryError(res: Response, error: unknown, tag: string) {
   if (error instanceof ApiError) {
     return ApiResponse.error(res, error.message, error.statusCode);
   }
   console.error(tag, sanitizeForLog(error));
-  const msg = config.isDevelopment
-    ? redactSensitiveString((error as Error)?.message || 'Internal Server Error')
-    : 'Internal Server Error';
+  const msg = resolveSafeClientErrorMessage(error, {
+    isDevelopment: config.isDevelopment,
+    isApiError: false,
+    statusCode: 500,
+  });
   return ApiResponse.error(res, msg, 500);
 }
 

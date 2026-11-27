@@ -652,6 +652,13 @@ describe('Sprint C Phase 3 — PostgreSQL TLS & Data Protection (11 Verification
           console.error = origErr;
         }
       });
+      miniApp.get('/pg-auth-boom', (_req, _res, next) =>
+        next(
+          Object.assign(new Error('password authentication failed for user "postgres"'), {
+            code: '28P01',
+          })
+        )
+      );
       miniApp.use(errorHandler);
 
       const srv = miniApp.listen(0);
@@ -664,7 +671,18 @@ describe('Sprint C Phase 3 — PostgreSQL TLS & Data Protection (11 Verification
         const r2 = await fetch(`http://127.0.0.1:${port}/ai-boom`).then((r) => r.json());
         assert.strictEqual(r2.message, 'Internal Server Error');
         assert.strictEqual(JSON.stringify(r2).includes('LeakMe'), false);
+
+        // Even in development mode, raw PostgreSQL auth/connection errors must NEVER leak to HTTP responses
+        (config as any).isDevelopment = true;
+        const rDevPg = await fetch(`http://127.0.0.1:${port}/pg-auth-boom`).then((r) => r.json());
+        assert.strictEqual(rDevPg.message, 'Lỗi kết nối hoặc xác thực cơ sở dữ liệu hệ thống');
+        assert.strictEqual(JSON.stringify(rDevPg).includes('password authentication failed'), false);
+        assert.strictEqual(JSON.stringify(rDevPg).includes('"postgres"'), false);
+
+        const rDevAiPg = await fetch(`http://127.0.0.1:${port}/ai-boom`).then((r) => r.json());
+        assert.strictEqual(JSON.stringify(rDevAiPg).includes('LeakMe'), false);
       } finally {
+        (config as any).isDevelopment = false;
         srv.close();
       }
 

@@ -6,6 +6,7 @@ import { IJwtPayload, UserModel } from '../models/user.model';
 import { SessionRevocationService } from '../services/sessionRevocation.service';
 import { recordAuthFailure } from '../telemetry/metrics';
 import { runWithDbContext } from '../config/dbContext';
+import { sanitizeForLog } from '../utils/logSanitizer';
 
 /**
  * Middleware kiểm tra và giải mã JWT Access Token
@@ -162,6 +163,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     if (dbError instanceof ApiError) {
       return next(dbError);
     }
+    console.error('[AuthMiddleware] DB status lookup failed:', sanitizeForLog(dbError));
     // Fail-closed: Không bỏ qua lỗi kết nối cơ sở dữ liệu
     return next(new ApiError(500, 'Lỗi cơ sở dữ liệu khi xác thực trạng thái tài khoản'));
   }

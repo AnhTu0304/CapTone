@@ -15,6 +15,44 @@ const JWT_RE = /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\b/g
 const AGENT_TOKEN_RE = /\bcap_[A-Za-z0-9_-]{8,}\b/g;
 const OPENAI_KEY_RE = /\bsk-[A-Za-z0-9_-]{12,}\b/g;
 
+const PG_SQLSTATE_SYSTEM_RE = /^(?:08|28|3D|3F|42|53|54|57|58|XX)[0-9A-Z]{3}$/i;
+const PG_DRIVER_ERROR_MSG_RE =
+  /password authentication failed|timeout exceeded when trying to connect|econnrefused|enotfound|etimedout|econnreset|connection terminated unexpectedly|could not resize shared memory|no pg_hba\.conf entry/i;
+
+export const SAFE_DB_ERROR_CLIENT_MESSAGE = 'Lỗi kết nối hoặc xác thực cơ sở dữ liệu hệ thống';
+
+/**
+ * Nhận diện lỗi thô phát sinh từ PostgreSQL driver hoặc lỗi kết nối mạng DB
+ * để không làm rò rỉ tên user/bảng/mật khẩu DB ra HTTP response kể cả ở môi trường dev.
+ */
+export function isSensitiveDbDriverError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const code = String((err as any).code || '').trim();
+  if (code && PG_SQLSTATE_SYSTEM_RE.test(code)) {
+    return true;
+  }
+  const msg = String((err as any).message || '');
+  return PG_DRIVER_ERROR_MSG_RE.test(msg);
+}
+
+/**
+ * Chuẩn hóa thông điệp lỗi trả về HTTP client cho cả errorHandler và các controller catch trực tiếp.
+ */
+export function resolveSafeClientErrorMessage(
+  err: unknown,
+  options: { isDevelopment: boolean; isApiError: boolean; statusCode: number }
+): string {
+  if (!options.isApiError && options.statusCode >= 500) {
+    if (!options.isDevelopment) {
+      return 'Internal Server Error';
+    }
+    if (isSensitiveDbDriverError(err)) {
+      return SAFE_DB_ERROR_CLIENT_MESSAGE;
+    }
+  }
+  return redactSensitiveString((err as Error)?.message || 'Internal Server Error');
+}
+
 export function maskSecretValue(value?: string | null): string {
   if (!value || typeof value !== 'string') return '***';
   const trimmed = value.trim();

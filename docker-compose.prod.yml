@@ -9,6 +9,7 @@ services:
     image: ${DOCKER_IMAGE_PREFIX:-phamthaisang/captone1}:postgres
     container_name: captone-postgres
     restart: unless-stopped
+    shm_size: 256mb
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
