@@ -236,6 +236,7 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
 
           {/* Children Slot */}
           <div
+            className="dashboard-children-slot"
             style={{
               maxWidth: isOverview ? '100%' : '1440px',
               margin: isOverview ? '0' : '0 auto',
@@ -284,6 +285,8 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
           .topheader-org-btn {
             padding: 4px 6px !important;
             gap: 4px !important;
+            max-width: 124px !important;
+            min-width: 0 !important;
           }
           .topheader-org-badge {
             display: none !important;
@@ -294,10 +297,15 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
           .topheader-org-mobile {
             display: inline !important;
             font-size: 0.75rem !important;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
           .topheader-cluster-btn {
             padding: 4px 6px !important;
             gap: 4px !important;
+            max-width: 128px !important;
+            min-width: 0 !important;
           }
           .topheader-cluster-desktop {
             display: none !important;
@@ -305,6 +313,9 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
           .topheader-cluster-mobile {
             display: inline !important;
             font-size: 0.75rem !important;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
           .topheader-avatar-chevron {
             display: none !important;
@@ -313,24 +324,19 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
             display: none !important;
           }
           .dashboard-kpi-grid {
-            display: flex !important;
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
-            scroll-snap-type: x mandatory;
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             gap: 8px !important;
-            padding-bottom: 4px !important;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: none !important;
-          }
-          .dashboard-kpi-grid::-webkit-scrollbar {
-            display: none !important;
+            overflow: visible !important;
+            padding-bottom: 0 !important;
           }
           .dashboard-kpi-grid > button {
-            min-width: 135px !important;
-            max-width: 145px !important;
-            flex-shrink: 0 !important;
-            scroll-snap-align: start;
-            padding: 6px 8px 5px !important;
+            min-width: 0 !important;
+            max-width: none !important;
+            width: 100% !important;
+            padding: 8px 10px 7px !important;
+            border-radius: 11px !important;
+            box-sizing: border-box !important;
           }
           .node-metrics-kpi-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -357,12 +363,39 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
           .overview-controls-left,
           .overview-controls-right {
             width: 100% !important;
+            flex-wrap: wrap !important;
             justify-content: space-between !important;
+            gap: 6px !important;
             box-sizing: border-box !important;
+          }
+          .overview-service-picker {
+            flex: 1 1 100% !important;
+            justify-content: space-between !important;
+            min-width: 0 !important;
+          }
+          .overview-service-picker > div {
+            flex: 1 !important;
+            min-width: 0 !important;
+          }
+          .overview-service-picker select {
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+          .overview-action-btn {
+            flex: 1 1 0 !important;
+            justify-content: center !important;
+            min-height: 32px !important;
           }
           .dashboard-overview-main {
             overflow-y: auto !important;
             overflow-x: hidden !important;
+            -webkit-overflow-scrolling: touch;
+          }
+          .dashboard-children-slot {
+            height: auto !important;
+            flex: none !important;
+            display: block !important;
+            overflow: visible !important;
           }
           .dashboard-overview-container,
           .dashboard-metrics-page {
@@ -451,24 +484,19 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
           display: none !important;
         }
         .device-mode-mobile .dashboard-kpi-grid {
-          display: flex !important;
-          overflow-x: auto !important;
-          overflow-y: hidden !important;
-          scroll-snap-type: x mandatory;
+          display: grid !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           gap: 8px !important;
-          padding-bottom: 4px !important;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: none !important;
-        }
-        .device-mode-mobile .dashboard-kpi-grid::-webkit-scrollbar {
-          display: none !important;
+          overflow: visible !important;
+          padding-bottom: 0 !important;
         }
         .device-mode-mobile .dashboard-kpi-grid > button {
-          min-width: 135px !important;
-          max-width: 145px !important;
-          flex-shrink: 0 !important;
-          scroll-snap-align: start;
-          padding: 6px 8px 5px !important;
+          min-width: 0 !important;
+          max-width: none !important;
+          width: 100% !important;
+          padding: 8px 10px 7px !important;
+          border-radius: 11px !important;
+          box-sizing: border-box !important;
         }
         .device-mode-mobile .node-metrics-kpi-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -495,12 +523,39 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
         .device-mode-mobile .overview-controls-left,
         .device-mode-mobile .overview-controls-right {
           width: 100% !important;
+          flex-wrap: wrap !important;
           justify-content: space-between !important;
+          gap: 6px !important;
           box-sizing: border-box !important;
+        }
+        .device-mode-mobile .overview-service-picker {
+          flex: 1 1 100% !important;
+          justify-content: space-between !important;
+          min-width: 0 !important;
+        }
+        .device-mode-mobile .overview-service-picker > div {
+          flex: 1 !important;
+          min-width: 0 !important;
+        }
+        .device-mode-mobile .overview-service-picker select {
+          width: 100% !important;
+          min-width: 0 !important;
+        }
+        .device-mode-mobile .overview-action-btn {
+          flex: 1 1 0 !important;
+          justify-content: center !important;
+          min-height: 32px !important;
         }
         .device-mode-mobile .dashboard-overview-main {
           overflow-y: auto !important;
           overflow-x: hidden !important;
+          -webkit-overflow-scrolling: touch;
+        }
+        .device-mode-mobile .dashboard-children-slot {
+          height: auto !important;
+          flex: none !important;
+          display: block !important;
+          overflow: visible !important;
         }
         .device-mode-mobile .dashboard-overview-container,
         .device-mode-mobile .dashboard-metrics-page {

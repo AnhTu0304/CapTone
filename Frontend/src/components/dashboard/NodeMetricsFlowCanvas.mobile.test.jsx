@@ -151,7 +151,28 @@ describe('NodeMetricsFlowCanvas Mobile Vertical Flow Mode', () => {
     fireEvent.click(screen.getByTestId('toggle-mobile-layout-mode'));
     expect(screen.queryByTestId('node-metrics-mobile-vertical')).not.toBeInTheDocument();
 
+    // Toggle back to mobile vertical flow
     fireEvent.click(screen.getByTestId('toggle-mobile-layout-mode'));
+    expect(screen.getByTestId('node-metrics-mobile-vertical')).toBeInTheDocument();
+  });
+
+  test('detects mobile vertical mode even when initial ResizeObserver height is 0', () => {
+    mockObservedWidth = 390;
+    mockObservedHeight = 0;
+
+    render(
+      <NodeMetricsFlowCanvas
+        clusterName="k8s-cluster-ecommerce"
+        isClusterOnline={false}
+        presetLabel="15 phút"
+        selectedNodeKey=""
+        tableRows={[]}
+        allNodesCount={0}
+        chartModel={{ samples: [], summary: {} }}
+        hasData={false}
+      />
+    );
+
     expect(screen.getByTestId('node-metrics-mobile-vertical')).toBeInTheDocument();
   });
 });

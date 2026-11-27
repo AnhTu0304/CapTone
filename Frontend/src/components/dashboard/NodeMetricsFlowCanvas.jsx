@@ -79,7 +79,9 @@ export const NodeMetricsFlowCanvas = ({
   const resolvedClusterName = clusterName || t('common.noCluster');
   const resolvedPresetLabel = presetLabel || t('timeRanges.15m');
   const containerRef = useRef(null);
-  const [containerWidth, setContainerWidth] = useState(1160);
+  const [containerWidth, setContainerWidth] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth > 0 ? window.innerWidth : 1160
+  );
   const [containerHeight, setContainerHeight] = useState(720);
   const [hasMeasuredContainer, setHasMeasuredContainer] = useState(false);
 
@@ -102,20 +104,46 @@ export const NodeMetricsFlowCanvas = ({
   const MIN_VISUAL_SCALE = 0.25;
   const MAX_VISUAL_SCALE = 2.6;
 
-  // Đo kích thước khung hiển thị thực tế
+  // Đo kích thước khung hiển thị thực tế (cập nhật width ngay cả khi height=0 để không kẹt layout mobile)
   useEffect(() => {
-    if (!containerRef.current) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          setContainerWidth(entry.contentRect.width);
-          setContainerHeight(entry.contentRect.height);
-          setHasMeasuredContainer(true);
-        }
+    const syncDimensions = (width, height) => {
+      if (width > 0) {
+        setContainerWidth(width);
       }
-    });
-    ro.observe(containerRef.current);
-    return () => ro.disconnect();
+      if (height > 0) {
+        setContainerHeight(height);
+        setHasMeasuredContainer(true);
+      }
+    };
+
+    const measureNow = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const isInMobilePreview = Boolean(containerRef.current.closest?.('.device-mode-mobile'));
+        const w = rect.width > 0 ? rect.width : isInMobilePreview ? 412 : typeof window !== 'undefined' ? window.innerWidth : 0;
+        syncDimensions(w, rect.height);
+      } else if (typeof window !== 'undefined' && window.innerWidth > 0) {
+        syncDimensions(window.innerWidth, 0);
+      }
+    };
+
+    measureNow();
+    window.addEventListener('resize', measureNow);
+
+    let ro;
+    if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          syncDimensions(entry.contentRect.width, entry.contentRect.height);
+        }
+      });
+      ro.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', measureNow);
+      if (ro) ro.disconnect();
+    };
   }, []);
 
   const autoScale = useMemo(() => {

@@ -234,7 +234,9 @@ export const AIPipelineFlowCanvas = ({
   };
   const containerRef = useRef(null);
   const popoverRef = useRef(null);
-  const [containerWidth, setContainerWidth] = useState(1000);
+  const [containerWidth, setContainerWidth] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth > 0 ? window.innerWidth : 1000
+  );
   const [containerHeight, setContainerHeight] = useState(600);
   const [isDraggingInspector, setIsDraggingInspector] = useState(false);
   const inspectorDragStartRef = useRef({ mouseX: 0, mouseY: 0, popX: 0, popY: 0, hasMoved: false });
@@ -362,20 +364,46 @@ export const AIPipelineFlowCanvas = ({
     setPinnedInspector((prev) => (prev && prev.id === id ? null : { id, ...pos }));
   };
 
-  // Tự động đo kích thước khung cha để tự co giãn vừa khít (Auto-fit to Container)
+  // Tự động đo kích thước khung cha để tự co giãn vừa khít (luôn cập nhật width kể cả khi height=0 ở chế độ mobile height:auto)
   useEffect(() => {
-    if (!containerRef.current) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          setContainerWidth(entry.contentRect.width);
-          setContainerHeight(entry.contentRect.height);
-          setHasMeasuredContainer(true);
-        }
+    const syncDimensions = (width, height) => {
+      if (width > 0) {
+        setContainerWidth(width);
       }
-    });
-    ro.observe(containerRef.current);
-    return () => ro.disconnect();
+      if (height > 0) {
+        setContainerHeight(height);
+        setHasMeasuredContainer(true);
+      }
+    };
+
+    const measureNow = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const isInMobilePreview = Boolean(containerRef.current.closest?.('.device-mode-mobile'));
+        const w = rect.width > 0 ? rect.width : isInMobilePreview ? 412 : typeof window !== 'undefined' ? window.innerWidth : 0;
+        syncDimensions(w, rect.height);
+      } else if (typeof window !== 'undefined' && window.innerWidth > 0) {
+        syncDimensions(window.innerWidth, 0);
+      }
+    };
+
+    measureNow();
+    window.addEventListener('resize', measureNow);
+
+    let ro;
+    if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          syncDimensions(entry.contentRect.width, entry.contentRect.height);
+        }
+      });
+      ro.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', measureNow);
+      if (ro) ro.disconnect();
+    };
   }, []);
 
   // Tỷ lệ co giãn tự động để vừa khít 100% khung màn hình theo Sơ đồ đang hiển thị (Sơ đồ 1: 2240x760 | Sơ đồ 2 có 00 Service: 4090x1170)

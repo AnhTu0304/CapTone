@@ -81,4 +81,22 @@ describe('AIPipelineFlowCanvas Mobile Vertical Flow Mode', () => {
     fireEvent.click(screen.getByTestId('toggle-mobile-layout-mode'));
     expect(screen.getByTestId('ai-pipeline-mobile-vertical')).toBeInTheDocument();
   });
+
+  test('detects mobile vertical mode even when initial ResizeObserver height is 0 (height: auto wrapper)', () => {
+    mockObservedWidth = 390;
+    mockObservedHeight = 0;
+
+    render(
+      <AIPipelineFlowCanvas
+        selectedService="ecommerce-api"
+        isAgentConnected={false}
+        isFullScreen={true}
+        showExtendedPipeline={true}
+        defaultViewMode="gru"
+        podCount={0}
+      />
+    );
+
+    expect(screen.getByTestId('ai-pipeline-mobile-vertical')).toBeInTheDocument();
+  });
 });

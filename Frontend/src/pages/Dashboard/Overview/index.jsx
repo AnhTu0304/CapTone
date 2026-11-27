@@ -2255,7 +2255,7 @@ export const OverviewPage = () => {
             }}
           >
             {/* Workload Select Dropdown */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <div className="overview-service-picker" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
               <span
                 style={{
                   fontSize: '0.73rem',
@@ -2326,6 +2326,7 @@ export const OverviewPage = () => {
             {/* Nút Thang đo Auto / Standard */}
             <button
               type="button"
+              className="overview-action-btn"
               onClick={() => setScaleMode((m) => (m === 'auto' ? 'standard' : 'auto'))}
               style={{
                 display: 'flex',
@@ -2348,6 +2349,7 @@ export const OverviewPage = () => {
             {/* Nút Làm mới */}
             <button
               type="button"
+              className="overview-action-btn"
               onClick={() => {
                 triggerRefresh();
                 fetchData();
