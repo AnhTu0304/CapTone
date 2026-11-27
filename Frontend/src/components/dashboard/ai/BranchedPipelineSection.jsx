@@ -1,10 +1,7 @@
 import React, { useMemo } from 'react';
 import {
-  Activity,
   AlertTriangle,
   CheckCircle2,
-  GitBranch,
-  Play,
   RefreshCw,
   Server,
   ShieldCheck,
@@ -21,6 +18,67 @@ import {
   normalizeActionCodeForBranch,
   normalizeCauseCodeFromText,
 } from './BranchedPipelineCatalog';
+
+export const buildD2BranchesState = (expandAll) => ({
+  telemetry: Boolean(expandAll),
+  rule: Boolean(expandAll),
+  risks: Boolean(expandAll),
+  causes: Boolean(expandAll),
+  actions: Boolean(expandAll),
+});
+
+export const Diagram2BranchControls = ({
+  allExpanded = false,
+  onToggleAll,
+  isSimulating = false,
+  onBackToLive,
+  compact = false,
+}) => (
+  <>
+    <button
+      type="button"
+      data-testid="d2-toggle-all-btn"
+      onClick={() => onToggleAll && onToggleAll(!allExpanded)}
+      style={{
+        pointerEvents: 'auto',
+        padding: compact ? '4px 10px' : '6px 12px',
+        borderRadius: compact ? '7px' : '8px',
+        border: '1px solid #93C5FD',
+        backgroundColor: allExpanded ? '#2563EB' : '#EFF6FF',
+        color: allExpanded ? '#FFFFFF' : '#1D4ED8',
+        fontSize: compact ? '0.6875rem' : '0.72rem',
+        fontWeight: 700,
+        cursor: 'pointer',
+        boxShadow: compact ? 'none' : '0 3px 10px rgba(15, 23, 42, 0.06)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {allExpanded ? '− Thu gọn tất cả' : '+ Mở rộng tất cả'}
+    </button>
+    {isSimulating && onBackToLive && (
+      <button
+        type="button"
+        data-testid="d2-back-to-live-btn"
+        onClick={onBackToLive}
+        style={{
+          pointerEvents: 'auto',
+          padding: compact ? '4px 10px' : '6px 12px',
+          borderRadius: compact ? '7px' : '8px',
+          border: '1px solid #7C3AED',
+          backgroundColor: '#7C3AED',
+          color: '#FFFFFF',
+          fontSize: compact ? '0.6875rem' : '0.72rem',
+          fontWeight: 700,
+          cursor: 'pointer',
+          boxShadow: compact ? 'none' : '0 3px 10px rgba(124, 58, 237, 0.18)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Về dữ liệu thực (Live)
+      </button>
+    )}
+  </>
+);
 
 /**
  * BranchedPipelineSection (Sơ đồ 2 — Kiến trúc Toàn Luồng 00 Service → 07 Hậu Kiểm)
@@ -77,10 +135,8 @@ export const BranchedPipelineSection = ({
   onToggleRisks,
   onToggleCauses,
   onToggleActions,
-  onToggleAllBranches,
   simulatedCauseCode = null,
   onSelectSimulatedCause,
-  onClearSimulation,
   verifyOutcomeMode = 'auto',
   onChangeVerifyOutcome,
 }) => {
@@ -347,24 +403,22 @@ export const BranchedPipelineSection = ({
   // ==========================================
   // 2. BỐ CỤC TOÀN LUỒNG CÓ 00 SERVICE ĐẦU TIÊN (4090PX) + RULE HÀNG NGANG
   // ==========================================
-  const BANNER_Y = topOffset;
-
   // Rule Engine xếp thành 1 hàng ngang 6 thẻ phía trên 02 AI Hub & 03 7 Đầu Rủi Ro
   const RULE_ROW_X = 695;
   const RULE_CARD_W = 148;
   const RULE_CARD_GAP = 10; // 6 * 148 + 5 * 10 = 938px (695 .. 1633)
   const RULE_ROW_TOTAL_W = 6 * RULE_CARD_W + 5 * RULE_CARD_GAP;
   const RULE_ROW_H = 66;
-  const RULE_ROW_Y = topOffset + 210;
+  const RULE_ROW_Y = topOffset + 150;
   const RULE_COMPACT_X = 814;
   const RULE_COMPACT_W = 700;
   const RULE_COMPACT_H = 56;
-  const RULE_COMPACT_Y = topOffset + 214;
+  const RULE_COMPACT_Y = topOffset + 154;
 
   const HUB_X = 760;
   const HUB_W = 420;
   const HUB_H = 430;
-  const HUB_Y = topOffset + 436;
+  const HUB_Y = topOffset + 376;
 
   const R_X = 1290;
   const R_W = 276;
@@ -798,7 +852,7 @@ export const BranchedPipelineSection = ({
         const rank = ruleAgentRank++;
         const agY = Math.round(AG_START_Y + agIdx * (AG_H + AG_GAP) + AG_H / 2 + (rIdx - 2.5) * 3);
         const rxOut = Math.round(ruleLeft + RULE_CARD_W * 0.5 + (sIdx - (sortedTargets.length - 1) / 2) * 26);
-        const laneY = Math.round(topOffset + 108 + rank * 5.8);
+        const laneY = Math.round(topOffset + 48 + rank * 5.8);
         const dropX = Math.round(AG_X - 75 - rank * 9.5);
         edgesRulesToAgents.push({
           id: `d2-rule-${rule.id}-ag-${agId}`,
@@ -891,40 +945,29 @@ export const BranchedPipelineSection = ({
   const targetCauseIndex = flowState.activeCauseObj
     ? BRANCHED_ROOT_CAUSES.findIndex((c) => c.code === flowState.activeCauseObj.code)
     : -1;
-  const activeCausePortY = isCausesExpanded
-    ? targetCauseIndex >= 0
-      ? RC_START_Y + targetCauseIndex * (RC_ITEM_H + RC_ITEM_GAP) + RC_ITEM_H / 2
-      : D2_MID_Y
-    : D2_MID_Y;
 
   const edgesAgentsToCauses = [];
   if (isCausesExpanded) {
     BRANCHED_CONTEXT_AGENTS.forEach((ag, agIdx) => {
       const sy = AG_START_Y + agIdx * (AG_H + AG_GAP) + AG_H / 2;
       const sx = AG_X + AG_W;
+      const mx = sx + (RC_X - sx) * 0.5;
       const isAgActive = flowState.isFlowActive && flowState.activeAgents.has(ag.id);
 
-      [agIdx * 4, agIdx * 4 + 1, agIdx * 4 + 2, Math.min(agIdx * 4 + 3, 15)].forEach((cIdx) => {
-        if (cIdx === targetCauseIndex) return;
+      BRANCHED_ROOT_CAUSES.forEach((cause, cIdx) => {
+        const causeAgents = Array.isArray(cause.agents) ? cause.agents : [];
+        if (!causeAgents.includes(ag.id)) return;
+
+        const isActiveEdge = cIdx === targetCauseIndex && isAgActive;
         const ey = RC_START_Y + cIdx * (RC_ITEM_H + RC_ITEM_GAP) + RC_ITEM_H / 2;
-        const mx = sx + (RC_X - sx) * 0.5;
         edgesAgentsToCauses.push({
-          id: `d2-ag-${ag.id}-bg-${cIdx}`,
+          id: `d2-ag-${ag.id}-to-${cause.code}`,
           pathD: `M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${RC_X} ${ey}`,
-          active: false,
-          color: '#CBD5E1',
+          active: isActiveEdge,
+          color: isActiveEdge ? ag.color : '#CBD5E1',
+          idleOpacity: flowState.isFlowActive ? 0.22 : 0.36,
         });
       });
-
-      if (targetCauseIndex >= 0) {
-        const mx = sx + (RC_X - sx) * 0.5;
-        edgesAgentsToCauses.push({
-          id: `d2-ag-${ag.id}-active-${targetCauseIndex}`,
-          pathD: `M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${activeCausePortY}, ${RC_X} ${activeCausePortY}`,
-          active: isAgActive,
-          color: isAgActive ? ag.color : '#CBD5E1',
-        });
-      }
     });
   } else {
     BRANCHED_CONTEXT_AGENTS.forEach((ag, agIdx) => {
@@ -1000,41 +1043,80 @@ export const BranchedPipelineSection = ({
     { ...POLICY_BRANCH_META.HITL, y: GT_START_Y + GT_H + GT_GAP },
     { ...POLICY_BRANCH_META.AUDIT, y: GT_START_Y + 2 * (GT_H + GT_GAP) },
   ];
+  const gateByCode = Object.fromEntries(policyGateCards.map((gate) => [gate.code, gate]));
   const activeActIdx = flowState.effectiveDisplayActionObj
     ? BRANCHED_ACTIONS.findIndex((a) => a.code === flowState.effectiveDisplayActionObj.code)
     : -1;
-  const activeActionPortY =
-    isActionsExpanded && activeActIdx >= 0
-      ? AC_START_Y + activeActIdx * (AC_ITEM_H + AC_ITEM_GAP) + AC_ITEM_H / 2
-      : D2_MID_Y;
 
-  const edgesActionsToGates = policyGateCards.map((gate) => {
-    const isActiveGate = flowState.isFlowActive && flowState.effectivePolicyBranch === gate.code;
+  const edgesActionsToGates = isActionsExpanded
+    ? BRANCHED_ACTIONS.map((act, actIdx) => {
+        const isCurrentAction = flowState.isFlowActive && actIdx === activeActIdx;
+        const defaultBranch = gateByCode[act.defaultBranch] ? act.defaultBranch : 'AUDIT';
+        const resolvedBranch =
+          isCurrentAction && gateByCode[flowState.effectivePolicyBranch]
+            ? flowState.effectivePolicyBranch
+            : defaultBranch;
+        const targetGate = gateByCode[resolvedBranch];
+        const sx = AC_X + AC_W;
+        const sy = AC_START_Y + actIdx * (AC_ITEM_H + AC_ITEM_GAP) + AC_ITEM_H / 2;
+        const ey = targetGate.y + GT_H / 2;
+        const mx = sx + (GT_X - sx) * 0.5;
+        return {
+          id: `d2-act-${act.code}-to-${resolvedBranch}`,
+          pathD: `M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${GT_X} ${ey}`,
+          active: isCurrentAction,
+          color: targetGate.color,
+          idleOpacity: flowState.isFlowActive ? 0.3 : 0.62,
+        };
+      })
+    : policyGateCards.map((gate) => {
+        const isActiveGate = flowState.isFlowActive && flowState.effectivePolicyBranch === gate.code;
+        const sx = AC_X + AC_W;
+        const sy = D2_MID_Y;
+        const ey = gate.y + GT_H / 2;
+        const mx = sx + (GT_X - sx) * 0.5;
+        return {
+          id: `d2-act-gate-${gate.code}`,
+          pathD: `M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${GT_X} ${ey}`,
+          active: isActiveGate,
+          color: gate.color,
+        };
+      });
+
+  if (
+    isActionsExpanded &&
+    flowState.isFlowActive &&
+    activeActIdx < 0 &&
+    gateByCode[flowState.effectivePolicyBranch]
+  ) {
+    const fallbackGate = gateByCode[flowState.effectivePolicyBranch];
     const sx = AC_X + AC_W;
-    const sy = isActiveGate ? activeActionPortY : D2_MID_Y;
-    const ey = gate.y + GT_H / 2;
+    const sy = D2_MID_Y;
+    const ey = fallbackGate.y + GT_H / 2;
     const mx = sx + (GT_X - sx) * 0.5;
-    return {
-      id: `d2-act-gate-${gate.code}`,
+    edgesActionsToGates.push({
+      id: `d2-act-fallback-to-${fallbackGate.code}`,
       pathD: `M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${GT_X} ${ey}`,
-      active: isActiveGate,
-      color: gate.color,
-    };
-  });
+      active: true,
+      color: fallbackGate.color,
+    });
+  }
 
-  const edgesGatesToVerify = policyGateCards.map((gate) => {
-    const isActiveGate = flowState.isFlowActive && flowState.effectivePolicyBranch === gate.code;
-    const sx = GT_X + GT_W;
-    const sy = gate.y + GT_H / 2;
-    const ey = D2_MID_Y;
-    const mx = sx + (VF_X - sx) * 0.5;
-    return {
-      id: `d2-gate-verify-${gate.code}`,
-      pathD: `M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${VF_X} ${ey}`,
-      active: isActiveGate,
-      color: gate.color,
-    };
-  });
+  const edgesGatesToVerify = policyGateCards
+    .filter((gate) => gate.code !== 'AUDIT')
+    .map((gate) => {
+      const isActiveGate = flowState.isFlowActive && flowState.effectivePolicyBranch === gate.code;
+      const sx = GT_X + GT_W;
+      const sy = gate.y + GT_H / 2;
+      const ey = D2_MID_Y;
+      const mx = sx + (VF_X - sx) * 0.5;
+      return {
+        id: `d2-gate-verify-${gate.code}`,
+        pathD: `M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${VF_X} ${ey}`,
+        active: isActiveGate,
+        color: gate.color,
+      };
+    });
 
   // 4.10: HAI ĐƯỜNG VÒNG LẶP KHÉP KÍN TỪ 07 HẬU KIỂM 60S
   const verifyBottomResolveX = VF_X + VF_W * 0.34;
@@ -1110,7 +1192,7 @@ export const BranchedPipelineSection = ({
     else if (edge.id === 'd2-sv-to-log-agent') resolvedMarker = edge.active ? 'url(#d2-arrow-log)' : 'url(#d2-arrow-idle)';
     else if (edge.id === 'd2-sv-to-k8s-agent') resolvedMarker = edge.active ? 'url(#d2-arrow-k8s)' : 'url(#d2-arrow-idle)';
     return (
-      <g key={edge.id}>
+      <g key={edge.id} data-testid={edge.id} data-active={edge.active ? 'true' : 'false'}>
         <path
           d={edge.pathD}
           fill="none"
@@ -1118,7 +1200,17 @@ export const BranchedPipelineSection = ({
           strokeWidth={edge.active ? widthActive : edge.secondary ? 1.8 : widthIdle}
           strokeLinecap="round"
           strokeDasharray={edge.active ? 'none' : edge.secondary ? '5 3' : '4 3'}
-          opacity={edge.active ? 1 : edge.secondary ? 0.85 : flowState.isFlowActive ? 0.65 : 0.82}
+          opacity={
+            edge.active
+              ? 1
+              : edge.idleOpacity !== undefined
+                ? edge.idleOpacity
+                : edge.secondary
+                  ? 0.85
+                  : flowState.isFlowActive
+                    ? 0.65
+                    : 0.82
+          }
           markerEnd={resolvedMarker}
         />
         {(edge.active || edge.animating) && (
@@ -1263,117 +1355,8 @@ export const BranchedPipelineSection = ({
     },
   ];
 
-  const allBranchesExpanded =
-    isTelemetryExpanded && isRuleExpanded && isRisksExpanded && isCausesExpanded && isActionsExpanded;
-
   return (
     <div data-testid="branched-pipeline-section">
-      {/* ============================================================ */}
-      {/* BANNER ĐIỀU KHIỂN SƠ ĐỒ 2                                    */}
-      {/* ============================================================ */}
-      <div
-        style={{
-          position: 'absolute',
-          left: '16px',
-          top: `${BANNER_Y}px`,
-          width: `${canvasWidth - 36}px`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '14px',
-          padding: '10px 18px',
-          borderRadius: '14px',
-          backgroundColor: isSimulating ? '#FAF5FF' : '#F8FAFC',
-          border: `1.5px solid ${isSimulating ? '#C4B5FD' : '#CBD5E1'}`,
-          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.06)',
-          boxSizing: 'border-box',
-          zIndex: 16,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-          <div style={{ width: '32px', height: '32px', borderRadius: '9px', backgroundColor: isSimulating ? '#EDE9FE' : '#E0F2FE', color: isSimulating ? '#7C3AED' : '#0284C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <GitBranch size={17} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0F172A' }}>
-              Sơ Đồ 2 • Kiến Trúc Toàn Luồng (00 Service → 8 Metric • 6 Rule • 7 Risk • 4 Agent • 16 Nguyên Nhân • 10 Action • 07)
-            </div>
-            <div style={{ fontSize: '0.74rem', color: '#475569', marginTop: '2px' }}>
-              Khối 00 Service thu thập qua 3 luồng (Metrics/Probe → 01, LogsCollector → Log Agent, EventsCollector → K8s Event Agent); bấm từng nguyên nhân để mô phỏng luồng sáng.
-            </div>
-          </div>
-        </div>
-
-        <div onMouseDown={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          <span
-            data-testid="d2-mode-badge"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '5px 12px',
-              borderRadius: '999px',
-              fontSize: '0.74rem',
-              fontWeight: 800,
-              backgroundColor: isSimulating
-                ? isUnrecoveredLoop
-                  ? '#FEE2E2'
-                  : '#EDE9FE'
-                : flowState.isFlowActive
-                  ? '#FEF2F2'
-                  : flowState.isGatheringRcaContext
-                    ? '#FFFBEB'
-                    : '#ECFDF5',
-              color: isSimulating
-                ? isUnrecoveredLoop
-                  ? '#DC2626'
-                  : '#6D28D9'
-                : flowState.isFlowActive
-                  ? '#DC2626'
-                  : flowState.isGatheringRcaContext
-                    ? '#B45309'
-                    : '#059669',
-              border: `1px solid ${
-                isSimulating
-                  ? isUnrecoveredLoop
-                    ? '#FCA5A5'
-                    : '#C4B5FD'
-                  : flowState.isFlowActive
-                    ? '#FCA5A5'
-                    : flowState.isGatheringRcaContext
-                      ? '#FDE68A'
-                      : '#A7F3D0'
-              }`,
-            }}
-          >
-            {isSimulating ? <Play size={12} /> : <Activity size={12} />}
-            <span>
-              {flowState.isUnrecoveredLoop && flowState.activeCauseObj
-                ? `${flowState.liveModeLabel} (Chưa hồi phục → Leo thang ${flowState.effectiveDisplayActionObj?.code})`
-                : flowState.liveModeLabel}
-            </span>
-          </span>
-
-          {isSimulating && (
-            <button type="button" data-testid="d2-back-to-live-btn" onClick={(e) => { e.stopPropagation(); onClearSimulation(); }} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #7C3AED', backgroundColor: '#7C3AED', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
-              Về dữ liệu thực (Live)
-            </button>
-          )}
-
-          <button type="button" data-testid="d2-toggle-all-btn" onClick={() => onToggleAllBranches(!allBranchesExpanded)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #93C5FD', backgroundColor: allBranchesExpanded ? '#2563EB' : '#EFF6FF', color: allBranchesExpanded ? '#FFFFFF' : '#1D4ED8', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
-            {allBranchesExpanded ? '− Thu gọn tất cả' : '+ Mở rộng tất cả'}
-          </button>
-
-          <button type="button" data-testid="d2-toggle-causes-btn" onClick={onToggleCauses} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #C4B5FD', backgroundColor: isCausesExpanded ? '#7C3AED' : '#FFFFFF', color: isCausesExpanded ? '#FFFFFF' : '#6D28D9', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
-            {isCausesExpanded ? '− Thu gọn 16 RCA' : '+ Mở 16 Nguyên nhân'}
-          </button>
-
-          <button type="button" data-testid="d2-toggle-actions-btn" onClick={onToggleActions} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #99F6E4', backgroundColor: isActionsExpanded ? '#0F766E' : '#FFFFFF', color: isActionsExpanded ? '#FFFFFF' : '#0F766E', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
-            {isActionsExpanded ? '− Thu gọn 10 Action' : '+ Mở 10 Action'}
-          </button>
-        </div>
-      </div>
-
       {/* Stage Header Pills bám ngay trên đầu từng cột */}
       {stagePills.map((col) => (
         <div key={col.step} style={{ position: 'absolute', left: `${col.x}px`, top: `${col.top}px`, width: `${col.w}px`, display: 'flex', justifyContent: 'center', zIndex: 14, pointerEvents: col.onToggle ? 'auto' : 'none' }}>
@@ -2080,7 +2063,12 @@ export const BranchedPipelineSection = ({
         return (
           <div key={gate.code} data-testid={`d2-gate-${gate.code}`} style={{ position: 'absolute', left: `${GT_X}px`, top: `${gate.y}px`, width: `${GT_W}px`, height: `${GT_H}px`, backgroundColor: '#FFFFFF', borderRadius: '12px', border: `1.5px solid ${isActiveGate ? gate.color : '#CBD5E1'}`, boxShadow: isActiveGate ? `0 8px 20px ${gate.color}2B` : '0 3px 10px rgba(15, 23, 42, 0.05)', padding: '11px 13px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', opacity: flowState.isFlowActive && !isActiveGate ? 0.54 : 1, zIndex: 12 }}>
             <div style={{ position: 'absolute', left: '-6px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: isActiveGate ? gate.color : '#94A3B8', border: '2px solid #FFFFFF' }} />
-            <div style={{ position: 'absolute', right: '-6px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: isActiveGate ? gate.color : '#94A3B8', border: '2px solid #FFFFFF' }} />
+            {gate.code !== 'AUDIT' && (
+              <div
+                data-testid={`d2-gate-out-port-${gate.code}`}
+                style={{ position: 'absolute', right: '-6px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: isActiveGate ? gate.color : '#94A3B8', border: '2px solid #FFFFFF' }}
+              />
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#0F172A', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><GateIcon size={15} color={gate.color} />{gate.labelVi}</span>
             </div>

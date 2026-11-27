@@ -52,10 +52,14 @@ describe('Diagram 2 Branched Pipeline Architecture (Full 01->03 + 4 Agents -> 16
     expect(switchDiagram1Btn).toBeInTheDocument();
     expect(switchDiagram2Btn).toBeInTheDocument();
 
-    // Chuyển sang Sơ đồ 2 -> Sơ đồ 2 hiển thị đầy đủ, Sơ đồ 1 ẩn gọn đi
+    // Chuyển sang Sơ đồ 2 -> Sơ đồ 2 hiển thị đầy đủ, Sơ đồ 1 ẩn gọn đi và không còn hàng banner Sơ đồ 2
     fireEvent.click(switchDiagram2Btn);
     expect(screen.getByTestId('branched-pipeline-section')).toBeInTheDocument();
     expect(screen.queryByText('Multi-Agent RCA')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sơ Đồ 2 • Kiến Trúc Toàn Luồng/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('d2-mode-badge')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('d2-toggle-causes-btn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('d2-toggle-actions-btn')).not.toBeInTheDocument();
 
     // Khối 00 Target Service ở đầu luồng + 2 rãnh thu thập Log/K8s Event
     expect(screen.getByTestId('d2-service-node')).toBeInTheDocument();
@@ -94,7 +98,7 @@ describe('Diagram 2 Branched Pipeline Architecture (Full 01->03 + 4 Agents -> 16
 
     // Click thử 'deployment_failure' -> Rule R4/R5 sáng, ROLLBACK_DEPLOYMENT & cổng HITL sáng
     fireEvent.click(screen.getByTestId('d2-cause-deployment_failure'));
-    expect(screen.getByTestId('d2-mode-badge').textContent).toMatch(/Mô phỏng: .*ROLLBACK_DEPLOYMENT/i);
+    expect(screen.getByTestId('d2-service-node').textContent).toMatch(/Mô phỏng lỗi/i);
     expect(screen.getByTestId('d2-cause-deployment_failure').textContent).toMatch(/MÔ PHỎNG/i);
     expect(screen.getByTestId('d2-action-ROLLBACK_DEPLOYMENT').textContent).toMatch(/ĐANG CHỌN/i);
     expect(screen.getByTestId('d2-gate-HITL').textContent).toMatch(/LUỒNG ĐANG CHẠY QUA ĐÂY/i);
@@ -125,7 +129,8 @@ describe('Diagram 2 Branched Pipeline Architecture (Full 01->03 + 4 Agents -> 16
 
     // Thoát mô phỏng về Live
     fireEvent.click(screen.getByTestId('d2-back-to-live-btn'));
-    expect(screen.getByTestId('d2-mode-badge').textContent).toMatch(/Dữ liệu thực \(Live\)/i);
+    expect(screen.getByTestId('d2-service-node').textContent).toMatch(/2 Pod • Online/i);
+    expect(screen.queryByTestId('d2-back-to-live-btn')).not.toBeInTheDocument();
 
     // Chuyển ngược về Sơ đồ 1 -> hiển thị lại Sơ đồ 1 nguyên vẹn
     fireEvent.click(switchDiagram1Btn);
@@ -285,12 +290,170 @@ describe('Diagram 2 Branched Pipeline Architecture (Full 01->03 + 4 Agents -> 16
     fireEvent.click(screen.getByTestId('d2-toggle-all-btn'));
 
     // Chế độ hiển thị đang gom ngữ cảnh RCA (0 sự cố), KHÔNG tự bật RESTART_POD / AUTO
-    expect(screen.getByTestId('d2-mode-badge').textContent).toMatch(/Đang gom RCA \(0 sự cố\)/i);
     expect(screen.getByTestId('d2-risk-oom_risk').textContent).toMatch(/84%/i);
     expect(screen.getByTestId('d2-agent-metrics').textContent).toMatch(/Đang thu thập/i);
     expect(screen.getByTestId('d2-cause-memory_exhaustion').textContent).not.toMatch(/ĐANG CHẠY/i);
     expect(screen.getByTestId('d2-action-RESTART_POD').textContent).not.toMatch(/ĐANG CHỌN/i);
     expect(screen.getByTestId('d2-gate-AUTO').textContent).not.toMatch(/LUỒNG ĐANG CHẠY QUA ĐÂY/i);
     expect(screen.getByTestId('d2-gate-AUTO').textContent).toMatch(/Trạng thái chờ/i);
+  });
+
+  test('bottom toolbar toggle-all button expands and collapses all branches in both Diagram 1 and Diagram 2', () => {
+    const { container } = render(
+      <AIPipelineFlowCanvas
+        selectedService="ecommerce-store-app"
+        isAgentConnected={true}
+        isFullScreen={true}
+        showExtendedPipeline={true}
+        defaultViewMode="gru"
+        podCount={2}
+      />
+    );
+
+    const toolbar = container.querySelector('.canvas-bottom-toolbar');
+    const toggleBtn = screen.getByTestId('d2-toggle-all-btn');
+    expect(toolbar).toContainElement(toggleBtn);
+    expect(toggleBtn.textContent).toBe('+ Mở rộng tất cả');
+
+    // Sơ đồ 1: bấm + Mở rộng tất cả -> các cột 01, 03, 06 & Rule mở rộng toàn bộ
+    expect(screen.queryByTestId('expanded-rule-R1')).not.toBeInTheDocument();
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn.textContent).toBe('− Thu gọn tất cả');
+
+    // Bấm lại − Thu gọn tất cả -> thu gọn lại Sơ đồ 1
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn.textContent).toBe('+ Mở rộng tất cả');
+
+    // Chuyển sang Sơ đồ 2 -> nút vẫn nằm ở toolbar dưới, điều khiển toàn bộ 5 nhóm của Sơ đồ 2
+    fireEvent.click(screen.getByTestId('switch-diagram-2'));
+    const branchSection = screen.getByTestId('branched-pipeline-section');
+    expect(toolbar).toContainElement(screen.getByTestId('d2-toggle-all-btn'));
+    expect(branchSection).not.toContainElement(screen.getByTestId('d2-toggle-all-btn'));
+
+    fireEvent.click(screen.getByTestId('d2-toggle-all-btn'));
+    expect(screen.getByTestId('d2-toggle-all-btn').textContent).toBe('− Thu gọn tất cả');
+    expect(screen.getByTestId('d2-cause-cpu_saturation')).toBeInTheDocument();
+    expect(screen.getByTestId('d2-action-SCALE_REPLICAS')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('d2-toggle-all-btn'));
+    expect(screen.getByTestId('d2-toggle-all-btn').textContent).toBe('+ Mở rộng tất cả');
+    expect(screen.queryByTestId('d2-cause-cpu_saturation')).not.toBeInTheDocument();
+  });
+
+  test('wires 04A->04B strictly by cause.agents, 06A->06B directly per action, and omits AUDIT->07 wire & port', () => {
+    render(
+      <AIPipelineFlowCanvas
+        selectedService="ecommerce-store-app"
+        isAgentConnected={true}
+        isFullScreen={true}
+        showExtendedPipeline={true}
+        defaultViewMode="gru"
+        podCount={2}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('switch-diagram-2'));
+
+    // 06B -> 07 chỉ nối AUTO và HITL; AUDIT (Circuit Breaker & Audit) dừng tại Audit Log
+    expect(screen.getByTestId('d2-gate-verify-AUTO')).toBeInTheDocument();
+    expect(screen.getByTestId('d2-gate-verify-HITL')).toBeInTheDocument();
+    expect(screen.queryByTestId('d2-gate-verify-AUDIT')).not.toBeInTheDocument();
+    expect(screen.getByTestId('d2-gate-out-port-AUTO')).toBeInTheDocument();
+    expect(screen.getByTestId('d2-gate-out-port-HITL')).toBeInTheDocument();
+    expect(screen.queryByTestId('d2-gate-out-port-AUDIT')).not.toBeInTheDocument();
+
+    // Khi 06A thu gọn: vẫn dùng 3 dây gom vào 3 cổng
+    expect(screen.getByTestId('d2-act-gate-AUTO')).toBeInTheDocument();
+    expect(screen.getByTestId('d2-act-gate-HITL')).toBeInTheDocument();
+    expect(screen.getByTestId('d2-act-gate-AUDIT')).toBeInTheDocument();
+
+    // Mở rộng toàn bộ nhánh
+    fireEvent.click(screen.getByTestId('d2-toggle-all-btn'));
+
+    // 04A -> 04B: mọi cặp (agent, cause) khớp 100% với cause.agents trong catalog
+    BRANCHED_CONTEXT_AGENTS.forEach((ag) => {
+      BRANCHED_ROOT_CAUSES.forEach((cause) => {
+        const edgeId = `d2-ag-${ag.id}-to-${cause.code}`;
+        if ((cause.agents || []).includes(ag.id)) {
+          expect(screen.getByTestId(edgeId)).toBeInTheDocument();
+        } else {
+          expect(screen.queryByTestId(edgeId)).not.toBeInTheDocument();
+        }
+      });
+    });
+
+    // 06A -> 06B: từng action nối thẳng từ port riêng tới đúng defaultBranch
+    BRANCHED_ACTIONS.forEach((act) => {
+      expect(screen.getByTestId(`d2-act-${act.code}-to-${act.defaultBranch}`)).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('d2-act-gate-AUTO')).not.toBeInTheDocument();
+
+    // Mô phỏng sự cố cpu_saturation: chỉ các agent thuộc cpuCause.agents mới sáng dây
+    fireEvent.click(screen.getByTestId('d2-cause-cpu_saturation'));
+    const cpuCause = BRANCHED_ROOT_CAUSES.find((c) => c.code === 'cpu_saturation');
+    BRANCHED_CONTEXT_AGENTS.forEach((ag) => {
+      const edgeId = `d2-ag-${ag.id}-to-cpu_saturation`;
+      if ((cpuCause.agents || []).includes(ag.id)) {
+        expect(screen.getByTestId(edgeId)).toHaveAttribute('data-active', 'true');
+      } else {
+        expect(screen.queryByTestId(edgeId)).not.toBeInTheDocument();
+      }
+    });
+    const cpuActionTargetBranch = cpuCause.policyBranch || 'AUTO';
+    expect(screen.getByTestId(`d2-act-${cpuCause.primaryActionCode}-to-${cpuActionTargetBranch}`)).toHaveAttribute(
+      'data-active',
+      'true'
+    );
+  });
+
+  test('highlights overridden runtime gate path (AUTO action escalated to HITL) and keeps AUDIT disconnected from verify', () => {
+    const { rerender } = render(
+      <AIPipelineFlowCanvas
+        selectedService="ecommerce-store-app"
+        isAgentConnected={true}
+        isFullScreen={true}
+        showExtendedPipeline={true}
+        defaultViewMode="gru"
+        podCount={2}
+        pipelineContext={{
+          openServiceIncidentsCount: 1,
+          latestIncident: { cause: 'cpu_saturation', severity: 'CRITICAL' },
+          pendingServiceApprovalsCount: 1,
+          latestHitlApproval: { action_code: 'SCALE_REPLICAS', status: 'PENDING' },
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('switch-diagram-2'));
+    fireEvent.click(screen.getByTestId('d2-toggle-all-btn'));
+
+    // SCALE_REPLICAS mặc định là AUTO nhưng đang bị giữ ở HITL -> dây nối trực tiếp từ SCALE_REPLICAS sang HITL sáng
+    expect(screen.queryByTestId('d2-act-SCALE_REPLICAS-to-AUTO')).not.toBeInTheDocument();
+    expect(screen.getByTestId('d2-act-SCALE_REPLICAS-to-HITL')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('d2-gate-verify-HITL')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('d2-gate-verify-AUTO')).toHaveAttribute('data-active', 'false');
+    expect(screen.queryByTestId('d2-gate-verify-AUDIT')).not.toBeInTheDocument();
+
+    // Khi Circuit Breaker ngắt mạch -> NO_ACTION đi vào AUDIT và không nối sang Hậu Kiểm 60s
+    rerender(
+      <AIPipelineFlowCanvas
+        selectedService="ecommerce-store-app"
+        isAgentConnected={true}
+        isFullScreen={true}
+        showExtendedPipeline={true}
+        defaultViewMode="gru"
+        podCount={2}
+        pipelineContext={{
+          openServiceIncidentsCount: 1,
+          latestIncident: { cause: 'cpu_saturation', severity: 'CRITICAL' },
+          isCircuitBreakerTripped: true,
+        }}
+      />
+    );
+
+    expect(screen.getByTestId('d2-act-NO_ACTION-to-AUDIT')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('d2-gate-verify-AUTO')).toHaveAttribute('data-active', 'false');
+    expect(screen.getByTestId('d2-gate-verify-HITL')).toHaveAttribute('data-active', 'false');
+    expect(screen.queryByTestId('d2-gate-verify-AUDIT')).not.toBeInTheDocument();
   });
 });
