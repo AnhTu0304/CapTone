@@ -123,6 +123,7 @@ export const LogDetailModal = ({ log, onClose }) => {
     >
       <div
         data-testid="log-detail-modal"
+        className="dash-modal-card"
         style={{
           backgroundColor: '#FFFFFF',
           borderRadius: '12px',
@@ -315,7 +316,8 @@ export const LogDetailModal = ({ log, onClose }) => {
                 fontSize: '0.75rem',
                 lineHeight: 1.6,
                 whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
+                wordBreak: 'normal',
+                overflowWrap: 'anywhere',
                 maxHeight: '180px',
                 overflowY: 'auto',
                 border: '1px solid #334155',
@@ -381,6 +383,8 @@ export const LogDetailModal = ({ log, onClose }) => {
             borderTop: '1px solid #E2E8F0',
             backgroundColor: '#F8FAFC',
             display: 'flex',
+            flexWrap: 'wrap',
+            gap: '10px',
             alignItems: 'center',
             justifyContent: 'space-between',
           }}

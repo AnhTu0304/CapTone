@@ -249,6 +249,247 @@
   padding: 14px 12px !important;
 }
 
+/* Mobile Responsive Log Viewer (fixes vertical 1-char wrap & clipped selects) */
+.logs-row-meta {
+  display: contents;
+}
+
+@media (max-width: 860px) {
+  .dashboard-logs-page {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .logs-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .logs-action-bar {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px !important;
+  }
+
+  .logs-action-bar > button {
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .logs-filter-pills {
+    width: 100%;
+    flex-wrap: wrap !important;
+  }
+
+  .logs-filter-row2 {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .logs-resource-filters {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px !important;
+  }
+
+  .logs-resource-filters select {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  .logs-resource-filters > button {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .logs-autoscroll-toggle {
+    justify-content: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 10px !important;
+  }
+
+  .logs-terminal-header {
+    padding: 10px 12px !important;
+  }
+
+  .logs-container {
+    height: auto !important;
+    min-height: 320px !important;
+    max-height: 68vh !important;
+    padding: 8px 10px !important;
+    overflow-x: hidden !important;
+  }
+
+  .logs-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 5px !important;
+    padding: 8px 10px !important;
+    margin-bottom: 4px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12) !important;
+  }
+
+  .logs-row-meta {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 4px 7px !important;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .logs-row-index {
+    width: auto !important;
+    min-width: 18px;
+    text-align: left !important;
+    font-size: 0.68rem !important;
+  }
+
+  .logs-row-time {
+    font-size: 0.68rem !important;
+  }
+
+  .logs-row-source {
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    max-width: 100%;
+    font-size: 0.7rem !important;
+    overflow-wrap: anywhere;
+    white-space: normal !important;
+  }
+
+  .logs-row-msg {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: none !important;
+    font-size: 0.76rem !important;
+    line-height: 1.5 !important;
+    white-space: pre-wrap !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
+
+  .logs-jump-latest-btn {
+    right: 12px !important;
+    bottom: 64px !important;
+  }
+
+  .logs-pagination-bar {
+    padding: 10px 12px !important;
+  }
+
+  .logs-pagination-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+.device-mode-mobile .logs-kpi-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.device-mode-mobile .logs-action-bar {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  gap: 8px !important;
+}
+
+.device-mode-mobile .logs-action-bar > button {
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.device-mode-mobile .logs-filter-pills {
+  width: 100%;
+  flex-wrap: wrap !important;
+}
+
+.device-mode-mobile .logs-filter-row2 {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+
+.device-mode-mobile .logs-resource-filters {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  gap: 8px !important;
+}
+
+.device-mode-mobile .logs-resource-filters select {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+.device-mode-mobile .logs-autoscroll-toggle {
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.device-mode-mobile .logs-container {
+  height: auto !important;
+  min-height: 320px !important;
+  max-height: 68vh !important;
+  padding: 8px 10px !important;
+  overflow-x: hidden !important;
+}
+
+.device-mode-mobile .logs-row {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 5px !important;
+  padding: 8px 10px !important;
+}
+
+.device-mode-mobile .logs-row-meta {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 4px 7px !important;
+  width: 100%;
+  min-width: 0;
+}
+
+.device-mode-mobile .logs-row-index {
+  width: auto !important;
+  text-align: left !important;
+  font-size: 0.68rem !important;
+}
+
+.device-mode-mobile .logs-row-source {
+  flex-shrink: 1 !important;
+  min-width: 0 !important;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal !important;
+}
+
+.device-mode-mobile .logs-row-msg {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  flex: none !important;
+  white-space: pre-wrap !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+}
+
+.device-mode-mobile .logs-pagination-controls {
+  width: 100%;
+  justify-content: space-between;
+}
+
 .dash-table-container {
   width: 100%;
   overflow-x: auto;

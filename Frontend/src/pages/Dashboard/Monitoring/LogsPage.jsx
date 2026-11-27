@@ -578,7 +578,7 @@ export const LogsPage = () => {
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="logs-action-bar" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             type="button"
             data-testid="logs-live-toggle"
@@ -625,7 +625,7 @@ export const LogsPage = () => {
       </div>
 
       {/* Hàng KPI Tóm Tắt (đồng bộ 4 thẻ kính/viền màu giống Dashboard & Node Metrics) */}
-      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4 logs-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div style={kpiCardStyle('#059669')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('logs.kpi.totalLogs')}</span>
@@ -727,7 +727,7 @@ export const LogsPage = () => {
         }}
       >
         {/* Hàng 1: Tìm kiếm + Chọn nhanh cấp độ + Chọn nhanh thời gian */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+        <div className="logs-filter-row1" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <div className="dash-search-box" style={{ position: 'relative', flex: '1 1 260px', maxWidth: '380px' }}>
             <input
               type="text"
@@ -772,7 +772,7 @@ export const LogsPage = () => {
           </div>
 
           {/* Chọn nhanh Cấp độ (giữ nguyên select ẩn hoặc pills trực quan + data-testid) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#F8FAFC', padding: '3px', borderRadius: '9px', border: '1px solid #E2E8F0' }}>
+          <div className="logs-filter-pills" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px', backgroundColor: '#F8FAFC', padding: '3px', borderRadius: '9px', border: '1px solid #E2E8F0' }}>
             {[
               { id: 'all', label: t('common.all'), color: '#059669', bg: '#ECFDF5' },
               { id: 'INFO', label: 'INFO', color: '#2563EB', bg: '#EFF6FF' },
@@ -809,7 +809,7 @@ export const LogsPage = () => {
           </div>
 
           {/* Chọn nhanh Khung thời gian */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', backgroundColor: '#F8FAFC', padding: '3px', borderRadius: '9px', border: '1px solid #E2E8F0' }}>
+          <div className="logs-filter-pills logs-range-pills" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '3px', backgroundColor: '#F8FAFC', padding: '3px', borderRadius: '9px', border: '1px solid #E2E8F0' }}>
             {[
               { id: '15m', label: '15m' },
               { id: '1h', label: '1h' },
@@ -846,6 +846,7 @@ export const LogsPage = () => {
 
         {/* Hàng 2: Bộ lọc tài nguyên K8s (Namespace / Deployment / Pod / Dịch vụ) + Đặt lại + Tự cuộn */}
         <div
+          className="logs-filter-row2"
           style={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -856,7 +857,7 @@ export const LogsPage = () => {
             borderTop: '1px solid #F1F5F9',
           }}
         >
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+          <div className="logs-resource-filters" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
             <select
               data-testid="logs-namespace-select"
               value={selectedNamespace}
@@ -949,6 +950,7 @@ export const LogsPage = () => {
           </div>
 
           <label
+            className="logs-autoscroll-toggle"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -1018,6 +1020,7 @@ export const LogsPage = () => {
       {/* Terminal Display Window (bo tròn đồng bộ 14px & nền console slate sâu) */}
       <div
         data-testid="logs-terminal-window"
+        className="logs-terminal-window"
         style={{
           position: 'relative',
           backgroundColor: '#0B1120',
@@ -1029,26 +1032,31 @@ export const LogsPage = () => {
       >
         {/* Terminal Title Bar */}
         <div
+          className="logs-terminal-header"
           style={{
             backgroundColor: '#0F172A',
             padding: '11px 16px',
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: '8px',
             borderBottom: '1px solid rgba(148, 163, 184, 0.14)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#EF4444' }} />
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F59E0B' }} />
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981' }} />
-            <span style={{ marginLeft: '10px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#94A3B8' }}>
+          <div className="logs-terminal-title-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: '1 1 220px' }}>
+            <span className="logs-terminal-dots" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#EF4444' }} />
+              <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F59E0B' }} />
+              <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+            </span>
+            <span style={{ marginLeft: '4px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#94A3B8', lineHeight: 1.4 }}>
               k8s-pod-stream &bull; {t('logs.terminal.showing')} <strong style={{ color: '#E2E8F0' }}>{logs.length}</strong> /{' '}
               {(pagination.total || 0).toLocaleString(intlLocale)} {t('logs.terminal.linesUnit')}
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="logs-terminal-status-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
             {streamNotice && (
               <span data-testid="logs-overflow-notice" style={{ fontSize: '0.6875rem', color: '#FBBF24', fontFamily: 'var(--font-mono)' }}>
                 ⚠️ {streamNotice}
@@ -1076,6 +1084,7 @@ export const LogsPage = () => {
         <div
           ref={logContainerRef}
           data-testid="logs-container"
+          className="logs-container"
           onScroll={handleContainerScroll}
           style={{
             height: 'calc(100vh - 385px)',
@@ -1160,6 +1169,7 @@ export const LogsPage = () => {
                 <div
                   key={item.id || idx}
                   data-testid={`log-row-${item.id || idx}`}
+                  className="logs-row"
                   onClick={() => setSelectedLog(item)}
                   title={t('logs.terminal.rowTitle')}
                   style={{
@@ -1193,30 +1203,34 @@ export const LogsPage = () => {
                         : 'transparent';
                   }}
                 >
-                  <span style={{ color: '#64748B', width: '28px', textAlign: 'right', flexShrink: 0, userSelect: 'none' }}>
-                    {(pagination.page - 1) * pagination.limit + idx + 1}
-                  </span>
-                  <span style={{ color: '#94A3B8', flexShrink: 0, userSelect: 'none' }}>
-                    [{timeDisplay}]
-                  </span>
+                  <div className="logs-row-meta">
+                    <span className="logs-row-index" style={{ color: '#64748B', width: '28px', textAlign: 'right', flexShrink: 0, userSelect: 'none' }}>
+                      {(pagination.page - 1) * pagination.limit + idx + 1}
+                    </span>
+                    <span className="logs-row-time" style={{ color: '#94A3B8', flexShrink: 0, userSelect: 'none' }}>
+                      [{timeDisplay}]
+                    </span>
+                    <span
+                      className="logs-row-badge"
+                      style={{
+                        padding: '0 5px',
+                        borderRadius: '3px',
+                        fontSize: '0.625rem',
+                        fontWeight: 800,
+                        backgroundColor: badge.bg,
+                        color: badge.text,
+                        border: `1px solid ${badge.border}`,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {item.level || 'INFO'}
+                    </span>
+                    <span className="logs-row-source" style={{ color: '#38BDF8', flexShrink: 0 }}>
+                      [{item.namespace ? `${item.namespace}/` : ''}{svcName}/{item.pod_name || podName}]
+                    </span>
+                  </div>
                   <span
-                    style={{
-                      padding: '0 5px',
-                      borderRadius: '3px',
-                      fontSize: '0.625rem',
-                      fontWeight: 800,
-                      backgroundColor: badge.bg,
-                      color: badge.text,
-                      border: `1px solid ${badge.border}`,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {item.level || 'INFO'}
-                  </span>
-                  <span style={{ color: '#38BDF8', flexShrink: 0 }}>
-                    [{item.namespace ? `${item.namespace}/` : ''}{svcName}/{item.pod_name || podName}]
-                  </span>
-                  <span
+                    className="logs-row-msg"
                     data-testid={`log-msg-${item.id || idx}`}
                     style={{
                       color:
@@ -1225,11 +1239,12 @@ export const LogsPage = () => {
                           : item.level === 'WARN' || item.level === 'WARNING'
                           ? '#FDE68A'
                           : '#F1F5F9',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'anywhere',
+                      wordBreak: 'normal',
+                      overflowWrap: 'break-word',
                       whiteSpace: 'pre-wrap',
                       fontFamily: "var(--font-mono, 'Menlo', 'Monaco', 'Courier New', monospace)",
-                      flex: 1,
+                      flex: '1 1 0%',
+                      minWidth: 0,
                     }}
                   >
                     {maskSensitiveData(item.message || item.msg)}
@@ -1305,6 +1320,7 @@ export const LogsPage = () => {
           <button
             type="button"
             data-testid="logs-jump-latest-btn"
+            className="logs-jump-latest-btn"
             onClick={handleJumpToLatest}
             style={{
               position: 'absolute',
@@ -1333,6 +1349,7 @@ export const LogsPage = () => {
         {/* Pagination Bar */}
         <div
           data-testid="logs-pagination-bar"
+          className="logs-pagination-bar"
           style={{
             padding: '10px 16px',
             backgroundColor: '#0F172A',
@@ -1346,7 +1363,7 @@ export const LogsPage = () => {
             color: '#94A3B8',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="logs-pagination-info" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
             <span>{t('logs.terminal.rowsPerPage')}</span>
             <select
               data-testid="logs-page-size-select"
@@ -1374,7 +1391,7 @@ export const LogsPage = () => {
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div className="logs-pagination-controls" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <button
               type="button"
               data-testid="logs-prev-page-btn"
