@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { pool } from '../config/database';
 import { config } from '../config/env';
 import { EmailService } from './email.service';
+import { LOGO_DATA_URI, PROJECT_BRAND_NAME } from './emailBrandAssets';
 import { HealingActionService } from './healingAction.service';
 import type { IAuditRequestContext } from './audit.service';
 import { runWithTenantContext } from '../config/dbContext';
@@ -555,7 +556,7 @@ export class HitlNotificationService {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(title)} - CapTone AI Self-Healing</title>
+  <title>${escapeHtml(title)} - ${PROJECT_BRAND_NAME}</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -567,6 +568,7 @@ export class HitlNotificationService {
 </head>
 <body>
   <div class="card">
+    <img src="${LOGO_DATA_URI}" alt="${PROJECT_BRAND_NAME}" width="52" height="52" style="display:block; margin:0 auto 14px; border-radius:10px;" />
     <h1>${escapeHtml(title)}</h1>
     <p>Để ngăn trình quét email tự động kích hoạt lệnh trên Kubernetes, vui lòng bấm nút xác nhận bên dưới để hoàn tất thao tác.</p>
     <form method="POST" action="${escapeHtml(actionPath)}">
@@ -607,7 +609,7 @@ export class HitlNotificationService {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${escapeHtml(options.title)} - CapTone AI Self-Healing</title>
+      <title>${escapeHtml(options.title)} - ${PROJECT_BRAND_NAME}</title>
       <style>
         * { box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -639,7 +641,7 @@ export class HitlNotificationService {
         </div>
         ` : ''}
         <a href="${safeDashUrl}" class="btn-portal">Mở Bảng Điều Khiển Dashboard</a>
-        <div class="footer-note">CapTone AI Autonomous Self-Healing Platform &bull; HITL Safe Execution &bull; RBAC Verified</div>
+        <div class="footer-note">${PROJECT_BRAND_NAME} &bull; HITL Safe Execution &bull; RBAC Verified</div>
       </div>
     </body>
     </html>`;

@@ -1,6 +1,7 @@
 import nodemailer, { Transporter, SendMailOptions } from 'nodemailer';
 import { config } from '../config/env';
 import { maskSecretValue, redactSensitiveString } from '../utils/logSanitizer';
+import { getLogoAttachment, LOGO_CID, PROJECT_BRAND_NAME, renderBrandedEmailLayout } from './emailBrandAssets';
 
 /**
  * Service xử lý việc gửi email thông báo và xác thực tài khoản
@@ -121,12 +122,18 @@ export class EmailService {
       return;
     }
 
+    const attachments = Array.isArray(mailOptions.attachments) ? [...mailOptions.attachments] : [];
+    if (!attachments.some((att) => att?.cid === LOGO_CID)) {
+      attachments.push(getLogoAttachment());
+    }
+    const enrichedOptions: SendMailOptions = { ...mailOptions, attachments };
+
     let attempt = 0;
     const maxRetries = 1;
 
     while (attempt <= maxRetries) {
       try {
-        await transporter.sendMail(mailOptions);
+        await transporter.sendMail(enrichedOptions);
         return;
       } catch (error: any) {
         attempt++;
@@ -169,75 +176,48 @@ export class EmailService {
       return true;
     }
 
-    // HTML Template email chuyên nghiệp, tương thích tốt với Gmail/Outlook
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Xác thực tài khoản AI Self-Heal</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7fa; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
-        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px 24px; text-align: center; color: #ffffff; }
-        .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
-        .header p { margin: 8px 0 0; font-size: 14px; color: #94a3b8; }
-        .content { padding: 32px 28px; color: #334155; line-height: 1.6; }
-        .greeting { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #0f172a; }
-        .button-wrapper { text-align: center; margin: 32px 0; }
-        .btn { display: inline-block; background-color: #2563eb; color: #ffffff !important; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25); }
-        .btn:hover { background-color: #1d4ed8; }
-        .token-box { background-color: #f1f5f9; border-left: 4px solid #2563eb; padding: 12px 16px; border-radius: 4px; font-family: monospace; font-size: 13px; word-break: break-all; margin: 20px 0; }
-        .footer { padding: 24px 28px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>AI Self-Heal Platform</h1>
-          <p>Hệ thống Giám sát & Tự khắc phục sự cố hệ thống</p>
-        </div>
-        <div class="content">
-          <div class="greeting">Xin chào ${safeName},</div>
-          <p>Bạn vừa yêu cầu mã xác thực địa chỉ email trên nền tảng <strong>AI Self-Heal</strong>. Vui lòng sử dụng mã xác thực bên dưới để hoàn tất:</p>
-          
-          <div style="text-align: center; margin: 28px 0;">
-            <p style="margin: 0 0 10px; font-size: 14px; font-weight: 600; color: #475569;">MÃ XÁC THỰC EMAIL CỦA BẠN:</p>
-            <div style="display: inline-block; background: #eff6ff; border: 2px dashed #2563eb; color: #1d4ed8; font-size: 34px; font-weight: 800; letter-spacing: 8px; padding: 12px 28px; border-radius: 8px; font-family: monospace;">
-              ${safeToken}
-            </div>
-            <p style="margin: 8px 0 0; font-size: 12px; color: #94a3b8;">(Mã có hiệu lực trong vòng 24 giờ)</p>
+    // HTML Template email đồng bộ nhận diện thương hiệu + logo + mục đích thư
+    const htmlContent = renderBrandedEmailLayout({
+      pageTitle: `Xác thực tài khoản - ${PROJECT_BRAND_NAME}`,
+      headerBg: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
+      accentColor: '#3b82f6',
+      badgeText: 'Xác Thực Tài Khoản',
+      badgeBg: 'rgba(59, 130, 246, 0.28)',
+      headerTitle: 'Xác Thực Địa Chỉ Email',
+      headerSubtitle: 'Kích hoạt tài khoản mới & bảo vệ quyền truy cập hạ tầng',
+      purposeText:
+        'Thư này dùng để xác nhận bạn là chủ sở hữu hợp lệ của địa chỉ email đã đăng ký trên AI Self-Heal Platform (hệ thống giám sát eBPF và tự phục hồi cụm Kubernetes), trước khi kích hoạt tài khoản và truy cập không gian làm việc.',
+      purposeBg: '#eff6ff',
+      purposeBorder: '#2563eb',
+      purposeTextColor: '#1e40af',
+      bodyHtml: `
+        <p style="font-size:17px; font-weight:700; color:#0f172a; margin-top:0;">Xin chào ${safeName},</p>
+        <p>Bạn vừa yêu cầu mã kích hoạt tài khoản trên nền tảng <strong>${PROJECT_BRAND_NAME}</strong>. Vui lòng nhập mã xác thực bên dưới để hoàn tất:</p>
+        <div style="text-align:center; margin:24px 0;">
+          <p style="margin:0 0 10px; font-size:13px; font-weight:700; color:#475569; text-transform:uppercase;">Mã xác thực Email của bạn</p>
+          <div style="display:inline-block; background:#eff6ff; border:2px dashed #2563eb; color:#1d4ed8; font-size:32px; font-weight:800; letter-spacing:8px; padding:12px 28px; border-radius:10px; font-family:monospace;">
+            ${safeToken}
           </div>
-
-          <div class="button-wrapper">
-            <a href="${safeBackendVerifyUrl}" class="btn" target="_blank">Hoặc Nhấn Vào Đây Để Kích Hoạt Ngay</a>
-          </div>
-
-          <p style="font-size: 13px; color: #64748b;">
-            Nếu nút phía trên không bấm được, bạn có thể copy link sau và dán trực tiếp vào trình duyệt:
-          </p>
-          <div class="token-box">
-            <a href="${safeBackendVerifyUrl}" style="color: #2563eb; text-decoration: none;">${safeBackendVerifyUrl}</a>
-          </div>
-
-          <p style="font-size: 13px; color: #94a3b8; margin-top: 24px;">
-            Nếu bạn không tạo tài khoản trên AI Self-Heal, vui lòng bỏ qua email này. Tài khoản sẽ tự động hết hạn mà không gây ảnh hưởng gì.
-          </p>
+          <p style="margin:8px 0 0; font-size:12px; color:#64748b;">(Mã có hiệu lực trong vòng 24 giờ)</p>
         </div>
-        <div class="footer">
-          <p>© ${new Date().getFullYear()} AI Self-Heal Platform. Bảo mật và an toàn dữ liệu hàng đầu.</p>
+        <div style="text-align:center; margin:26px 0;">
+          <a href="${safeBackendVerifyUrl}" style="display:inline-block; background-color:#2563eb; color:#ffffff !important; padding:13px 28px; border-radius:8px; text-decoration:none; font-weight:700; font-size:14px;" target="_blank">Hoặc Nhấn Vào Đây Để Kích Hoạt Ngay</a>
         </div>
-      </div>
-    </body>
-    </html>
-    `;
+        <p style="font-size:13px; color:#64748b; margin-bottom:8px;">Nếu nút phía trên không hoạt động, bạn có thể sao chép liên kết sau vào trình duyệt:</p>
+        <div style="background-color:#f1f5f9; border-left:4px solid #2563eb; padding:10px 14px; border-radius:6px; font-family:monospace; font-size:12px; word-break:break-all;">
+          <a href="${safeBackendVerifyUrl}" style="color:#2563eb; text-decoration:none;">${safeBackendVerifyUrl}</a>
+        </div>
+        <p style="font-size:12.5px; color:#64748b; margin-top:20px; margin-bottom:0;">
+          Nếu bạn không thực hiện đăng ký tài khoản, vui lòng bỏ qua thư này.
+        </p>
+      `,
+    });
 
     try {
       await this.sendMailWithRetry({
         from: this.getFromAddress(),
         to: toEmail,
-        subject: '🔒 [AI Self-Heal] Xác thực địa chỉ email kích hoạt tài khoản',
+        subject: '🔒 [SelfHeal] Xác thực địa chỉ email kích hoạt tài khoản',
         html: htmlContent,
       });
 
@@ -273,54 +253,39 @@ export class EmailService {
       return true;
     }
 
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-      <meta charset="UTF-8">
-      <title>Lời mời tham gia tổ chức - CapTone AI Self-Heal</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7fa; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
-        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px 24px; text-align: center; color: #ffffff; }
-        .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
-        .content { padding: 32px 28px; color: #334155; line-height: 1.6; }
-        .badge { display: inline-block; background-color: #e0f2fe; color: #0369a1; padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 14px; }
-        .btn-wrapper { text-align: center; margin: 28px 0; }
-        .btn { display: inline-block; background-color: #059669; color: #ffffff !important; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 14px; }
-        .footer { padding: 24px 28px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>CapTone AI Self-Heal Platform</h1>
-          <p>Lời mời cộng tác quản trị hạ tầng</p>
+    const safeOrg = this.escapeHtml(orgName);
+    const safeRole = this.escapeHtml(roleName);
+    const portalInviteUrl = `${this.escapeHtml(config.email.clientUrl)}/portal/dashboard`;
+
+    const htmlContent = renderBrandedEmailLayout({
+      pageTitle: `Lời mời tham gia tổ chức ${safeOrg} - ${PROJECT_BRAND_NAME}`,
+      badgeText: 'Lời Mời Cộng Tác',
+      headerTitle: `Lời Mời Tham Gia Tổ Chức ${safeOrg}`,
+      headerSubtitle: 'Quản trị cụm Kubernetes, giám sát viễn trắc & tự phục hồi AI',
+      purposeText:
+        `Thư này được gửi để thông báo tài khoản của bạn đã được mời gia nhập không gian làm việc của tổ chức ${safeOrg} trên AI Self-Heal Platform với quyền truy cập được phân công sẵn. Bạn cần chấp nhận lời mời trong Cổng Cá Nhân để bắt đầu cộng tác.`,
+      bodyHtml: `
+        <p style="margin-top:0;">Xin chào <strong>${this.escapeHtml(recipientName)}</strong>,</p>
+        <p><strong>${this.escapeHtml(inviterName)}</strong> vừa mời bạn tham gia quản trị hạ tầng cho tổ chức <strong>${safeOrg}</strong> trên nền tảng <strong>${PROJECT_BRAND_NAME}</strong>.</p>
+        <div style="background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px 16px; margin:16px 0;">
+          <div style="font-size:12px; color:#64748b; font-weight:600; margin-bottom:6px;">CHI TIẾT PHÂN QUYỀN MỜI:</div>
+          <div style="font-size:14px; color:#0f172a; margin-bottom:6px;">🏢 Tổ chức: <strong>${safeOrg}</strong></div>
+          <div style="font-size:14px; color:#0f172a;">🛡️ Vai trò được cấp: <span style="display:inline-block; background-color:#e0f2fe; color:#0369a1; padding:3px 10px; border-radius:6px; font-weight:700; font-size:12.5px;">${safeRole}</span></div>
         </div>
-        <div class="content">
-          <p>Xin chào <strong>${this.escapeHtml(recipientName)}</strong>,</p>
-          <p><strong>${this.escapeHtml(inviterName)}</strong> vừa mời bạn tham gia quản trị hệ thống cho tổ chức <strong>${this.escapeHtml(orgName)}</strong> trên nền tảng CapTone.</p>
-          <p>Vai trò được chỉ định: <span class="badge">${this.escapeHtml(roleName)}</span></p>
-          <div class="btn-wrapper">
-            <a href="${this.escapeHtml(config.email.clientUrl)}/portal/dashboard" class="btn" target="_blank">Xem và Chấp Nhận Lời Mời</a>
-          </div>
-          <p style="font-size: 13px; color: #64748b;">
-            Vui lòng đăng nhập vào hệ thống để chấp nhận lời mời và bắt đầu quản lý cụm Kubernetes cùng đồng đội.
-          </p>
+        <div style="text-align:center; margin:26px 0;">
+          <a href="${portalInviteUrl}" style="display:inline-block; background-color:#059669; color:#ffffff !important; padding:13px 28px; border-radius:8px; text-decoration:none; font-weight:700; font-size:14px;" target="_blank">Xem và Chấp Nhận Lời Mời</a>
         </div>
-        <div class="footer">
-          <p>© ${new Date().getFullYear()} CapTone AI Self-Heal Platform.</p>
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
+        <p style="font-size:13px; color:#64748b; margin-bottom:0;">
+          Sau khi đăng nhập và nhấn Chấp nhận tại <strong>Cổng Cá Nhân (Portal)</strong>, bạn sẽ có quyền xem chỉ số node, sự cố RCA và chính sách tự phục hồi của tổ chức theo phân quyền RBAC.
+        </p>
+      `,
+    });
 
     try {
       await this.sendMailWithRetry({
         from: this.getFromAddress(),
         to: toEmail,
-        subject: `🏢 [CapTone] Lời mời tham gia tổ chức ${orgName}`,
+        subject: `🏢 [SelfHeal] Lời mời tham gia tổ chức ${orgName}`,
         html: htmlContent,
       });
       console.log(`✅ [EMAIL] Đã gửi thành công email lời mời tới: ${toEmail}`);
@@ -347,53 +312,37 @@ export class EmailService {
       return true;
     }
 
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-      <meta charset="UTF-8">
-      <title>Chào mừng bạn đến với CapTone AI Self-Heal</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7fa; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
-        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px 24px; text-align: center; color: #ffffff; }
-        .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
-        .content { padding: 32px 28px; color: #334155; line-height: 1.6; }
-        .btn-wrapper { text-align: center; margin: 28px 0; }
-        .btn { display: inline-block; background-color: #2563eb; color: #ffffff !important; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 14px; }
-        .footer { padding: 24px 28px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>CapTone AI Self-Heal Platform</h1>
-          <p>Chào mừng bạn đã liên kết tài khoản Google</p>
+    const htmlContent = renderBrandedEmailLayout({
+      pageTitle: `Chào mừng bạn đến với ${PROJECT_BRAND_NAME}`,
+      headerBg: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%)',
+      accentColor: '#3b82f6',
+      badgeText: 'Tài Khoản Google Đã Kích Hoạt',
+      badgeBg: 'rgba(59, 130, 246, 0.28)',
+      headerTitle: 'Chào Mừng Đến Với AI Self-Heal',
+      headerSubtitle: 'Đăng nhập SSO Google thành công • Sẵn sàng kết nối cụm Kubernetes',
+      purposeText:
+        'Thư này nhằm xác nhận tài khoản Google của bạn đã được liên kết an toàn với AI Self-Heal Platform và cung cấp lối tắt để thiết lập Tổ chức cùng tác tử eBPF Agent.',
+      purposeBg: '#eff6ff',
+      purposeBorder: '#2563eb',
+      purposeTextColor: '#1e40af',
+      bodyHtml: `
+        <p style="margin-top:0;">Xin chào <strong>${this.escapeHtml(fullName)}</strong>,</p>
+        <p>Tài khoản của bạn đã được xác thực và liên kết thành công qua Google (<strong>${this.escapeHtml(toEmail)}</strong>).</p>
+        <p>Bạn có thể bắt đầu khởi tạo tổ chức, lấy lệnh cài đặt Self-Heal Agent cho cụm Kubernetes và theo dõi luồng tự phục hồi AI ngay bây giờ.</p>
+        <div style="text-align:center; margin:26px 0;">
+          <a href="${this.escapeHtml(portalUrl)}" style="display:inline-block; background-color:#2563eb; color:#ffffff !important; padding:13px 28px; border-radius:8px; text-decoration:none; font-weight:700; font-size:14px;" target="_blank">Tiếp Tục Thiết Lập Tổ Chức</a>
         </div>
-        <div class="content">
-          <p>Xin chào <strong>${this.escapeHtml(fullName)}</strong>,</p>
-          <p>Tài khoản của bạn đã được liên kết thành công với tài khoản Google (<strong>${this.escapeHtml(toEmail)}</strong>).</p>
-          <p>Hệ thống của chúng tôi đã tự động xác thực địa chỉ email từ nhà cung cấp Google. Bạn có thể thiết lập tổ chức và cấu hình giám sát hạ tầng ngay bây giờ.</p>
-          <div class="btn-wrapper">
-            <a href="${this.escapeHtml(portalUrl)}" class="btn" target="_blank">Tiếp Tục Thiết Lập Tổ Chức</a>
-          </div>
-          <p style="font-size: 13px; color: #64748b;">
-            Nếu bạn không thực hiện đăng nhập hoặc đăng ký này, vui lòng liên hệ ngay với đội ngũ bảo mật của chúng tôi.
-          </p>
-        </div>
-        <div class="footer">
-          <p>© ${new Date().getFullYear()} CapTone AI Self-Heal Platform.</p>
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
+        <p style="font-size:13px; color:#64748b; margin-bottom:0;">
+          Nếu bạn không thực hiện đăng nhập hoặc liên kết này, vui lòng kiểm tra lại bảo mật tài khoản ngay trong Cổng Cá Nhân.
+        </p>
+      `,
+    });
 
     try {
       await this.sendMailWithRetry({
         from: this.getFromAddress(),
         to: toEmail,
-        subject: '🎉 [CapTone] Chào mừng bạn - Tài khoản Google đã được kích hoạt',
+        subject: '🎉 [SelfHeal] Chào mừng bạn - Tài khoản Google đã được kích hoạt',
         html: htmlContent,
       });
       console.log(`✅ [EMAIL] Đã gửi thành công email chào mừng Google tới: ${toEmail}`);
@@ -479,105 +428,80 @@ export class EmailService {
       ? new Date(payload.detectedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false })
       : new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
 
-    const html = `
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Cảnh Báo Khẩn Cấp - ${this.escapeHtml(incidentCode)}</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #fef2f2; margin: 0; padding: 0; color: #1e293b; }
-        .wrapper { max-width: 660px; margin: 28px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 12px 30px -5px rgba(185, 28, 28, 0.18); border: 1px solid #fecaca; }
-        .header { background: linear-gradient(135deg, #991b1b 0%, #dc2626 100%); padding: 26px 28px; color: #ffffff; }
-        .header-tag { display: inline-block; background-color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.45); color: #ffffff; font-size: 11px; font-weight: 800; text-transform: uppercase; padding: 4px 10px; border-radius: 9999px; letter-spacing: 0.6px; margin-bottom: 10px; }
-        .header h1 { margin: 0; font-size: 20px; font-weight: 800; line-height: 1.3; }
-        .header p { margin: 6px 0 0 0; font-size: 13px; color: #fee2e2; }
-        .content { padding: 26px 28px; }
-        .urgent-banner { background-color: #fff1f2; border: 1px solid #fda4af; border-left: 5px solid #e11d48; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 13px; color: #9f1239; line-height: 1.5; }
-        .info-table { width: 100%; border-collapse: collapse; margin-bottom: 22px; font-size: 13px; }
-        .info-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-        .info-table td.label { width: 34%; color: #64748b; font-weight: 600; }
-        .info-table td.value { width: 66%; color: #0f172a; font-weight: 600; }
-        .badge-crit { display: inline-block; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 800; }
-        .rca-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 22px; font-size: 13px; color: #334155; line-height: 1.55; }
-        .cta-box { text-align: center; margin: 26px 0 18px; }
-        .btn-urgent { display: inline-block; background: #dc2626; color: #ffffff !important; font-weight: 800; font-size: 14px; padding: 13px 28px; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35); }
-        .footer { background-color: #f8fafc; padding: 18px 28px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <div class="wrapper">
-        <div class="header">
-          <div class="header-tag">🚨 CẢNH BÁO KHẨN CẤP (URGENT INCIDENT ALERT)</div>
-          <h1>[${this.escapeHtml(incidentCode)}] ${this.escapeHtml(payload.title || 'Sự cố nghiêm trọng hệ thống')}</h1>
-          <p>Tổ chức: <strong>${this.escapeHtml(payload.organizationName || 'Tổ chức Quản trị')}</strong> &bull; Thời điểm: <strong>${this.escapeHtml(detectedTime)} (GMT+7)</strong></p>
+    const html = renderBrandedEmailLayout({
+      pageTitle: `Cảnh Báo Khẩn Cấp - ${incidentCode}`,
+      headerBg: 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)',
+      accentColor: '#f87171',
+      bodyBg: '#fef2f2',
+      containerBorder: '#fecaca',
+      maxWidth: 660,
+      badgeText: '🚨 CẢNH BÁO KHẨN CẤP (URGENT INCIDENT ALERT)',
+      badgeBg: 'rgba(255, 255, 255, 0.2)',
+      headerTitle: `[${this.escapeHtml(incidentCode)}] ${this.escapeHtml(payload.title || 'Sự cố nghiêm trọng hệ thống')}`,
+      headerSubtitle: `Tổ chức: ${this.escapeHtml(payload.organizationName || 'Tổ chức Quản trị')} • Thời điểm: ${this.escapeHtml(detectedTime)} (GMT+7)`,
+      purposeTitle: 'Mục đích thư cảnh báo sự cố khẩn cấp',
+      purposeText:
+        'Thư này báo động ngay cho đội ngũ kỹ sư SRE/DevOps khi phát hiện sự cố mức CRITICAL trên cụm Kubernetes mà hệ thống AI chưa thể tự động khắc phục (ngắt mạch an toàn, thiếu chính sách hoặc tự sửa thất bại).',
+      purposeBg: '#fff1f2',
+      purposeBorder: '#e11d48',
+      purposeTextColor: '#9f1239',
+      bodyHtml: `
+        <p style="margin-top:0; font-size:14px;">Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong>${payload.recipientRole ? ` (${this.escapeHtml(payload.recipientRole)})` : ''},</p>
+
+        <div style="background-color:#fff1f2; border:1px solid #fda4af; border-left:5px solid #e11d48; border-radius:8px; padding:14px 16px; margin-bottom:20px; font-size:13px; color:#9f1239; line-height:1.5;">
+          <strong>Yêu cầu xử lý ngay (${this.escapeHtml(payload.reasonStage)}):</strong><br/>
+          ${this.escapeHtml(stageDesc)}
+          ${payload.failureMessage ? `<br/><br/><strong>Chi tiết lỗi:</strong> <code>${this.escapeHtml(payload.failureMessage)}</code>` : ''}
         </div>
 
-        <div class="content">
-          <p style="margin-top: 0; font-size: 14px;">Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong>${payload.recipientRole ? ` (${this.escapeHtml(payload.recipientRole)})` : ''},</p>
+        <table style="width:100%; border-collapse:collapse; margin-bottom:22px; font-size:13px;">
+          <tr>
+            <td style="width:34%; padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600; vertical-align:top;">🆔 Mã sự cố</td>
+            <td style="width:66%; padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#0f172a; font-weight:600;"><code>${this.escapeHtml(incidentCode)}</code> <span style="display:inline-block; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; padding:2px 8px; border-radius:5px; font-size:11px; font-weight:800;">${this.escapeHtml(sevUpper)}</span>${occCount > 1 ? ` <span style="display:inline-block; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; padding:2px 8px; border-radius:5px; font-size:11px; font-weight:800;">Lặp lại x${occCount}</span>` : ''}</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">📦 Dịch vụ bị ảnh hưởng</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#dc2626; font-weight:800;">${this.escapeHtml(payload.serviceName)}</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">☸️ Cụm / Namespace / Pod / Node</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#0f172a; font-weight:600;">
+              Cụm: <strong>${this.escapeHtml(payload.clusterName || 'Cụm Kubernetes')}</strong>
+              ${payload.namespace ? ` &bull; Namespace: <code>${this.escapeHtml(payload.namespace)}</code>` : ''}
+              ${payload.podName ? `<br/>Pod: <code>${this.escapeHtml(payload.podName)}</code>` : ''}
+              ${payload.nodeName ? ` &bull; Node: <code>${this.escapeHtml(payload.nodeName)}</code>` : ''}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">🔬 Nguyên nhân gốc (RCA)</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#0f172a; font-weight:600;">${this.escapeHtml(payload.rootCauseType || payload.title)} (Độ tin cậy AI: <strong>${this.escapeHtml(confidenceLabel)}</strong>)</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">🛡️ Trạng thái tự phục hồi</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#0f172a; font-weight:600;"><code>${this.escapeHtml(payload.recommendationAction || 'NO_ACTION')}</code> &mdash; Cần kỹ sư xác minh &amp; can thiệp</td>
+          </tr>
+        </table>
 
-          <div class="urgent-banner">
-            <strong>Yêu cầu xử lý ngay (${this.escapeHtml(payload.reasonStage)}):</strong><br/>
-            ${this.escapeHtml(stageDesc)}
-            ${payload.failureMessage ? `<br/><br/><strong>Chi tiết lỗi:</strong> <code>${this.escapeHtml(payload.failureMessage)}</code>` : ''}
-          </div>
+        ${(payload.rootCauseDescription || (payload.recommendationReason && (!payload.failureMessage || payload.recommendationReason !== payload.failureMessage))) ? `
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px 16px; margin-bottom:22px; font-size:13px; color:#334155; line-height:1.55;">
+          <strong>📋 Tóm tắt phân tích AI &amp; Khuyến nghị:</strong><br/>
+          ${payload.rootCauseDescription ? `<div style="margin-top:6px;">${this.escapeHtml(payload.rootCauseDescription)}</div>` : ''}
+          ${(payload.recommendationReason && (!payload.failureMessage || payload.recommendationReason !== payload.failureMessage)) ? `<div style="margin-top:8px; color:#b91c1c;"><strong>Hướng dẫn can thiệp:</strong> ${this.escapeHtml(payload.recommendationReason)}</div>` : ''}
+          ${Array.isArray((payload as any).manualPlaybook) && (payload as any).manualPlaybook.length > 0 ? `<div style="margin-top:10px; padding:10px 12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; color:#166534;"><strong>🛠️ Phương pháp xử lý thủ công đề xuất (Manual Playbook 3 bước):</strong><ul style="margin:6px 0 0 18px; padding:0;">${((payload as any).manualPlaybook as string[]).map((st) => `<li style="margin-bottom:4px;">${this.escapeHtml(st)}</li>`).join('')}</ul></div>` : ''}
+        </div>` : ''}
 
-          <table class="info-table">
-            <tr>
-              <td class="label">🆔 Mã sự cố</td>
-              <td class="value"><code>${this.escapeHtml(incidentCode)}</code> <span class="badge-crit">${this.escapeHtml(sevUpper)}</span>${occCount > 1 ? ` <span class="badge-crit">Lặp lại x${occCount}</span>` : ''}</td>
-            </tr>
-            <tr>
-              <td class="label">📦 Dịch vụ bị ảnh hưởng</td>
-              <td class="value" style="color: #dc2626; font-weight: 800;">${this.escapeHtml(payload.serviceName)}</td>
-            </tr>
-            <tr>
-              <td class="label">☸️ Cụm / Namespace / Pod / Node</td>
-              <td class="value">
-                Cụm: <strong>${this.escapeHtml(payload.clusterName || 'Cụm Kubernetes')}</strong>
-                ${payload.namespace ? ` &bull; Namespace: <code>${this.escapeHtml(payload.namespace)}</code>` : ''}
-                ${payload.podName ? `<br/>Pod: <code>${this.escapeHtml(payload.podName)}</code>` : ''}
-                ${payload.nodeName ? ` &bull; Node: <code>${this.escapeHtml(payload.nodeName)}</code>` : ''}
-              </td>
-            </tr>
-            <tr>
-              <td class="label">🔬 Nguyên nhân gốc (RCA)</td>
-              <td class="value">${this.escapeHtml(payload.rootCauseType || payload.title)} (Độ tin cậy AI: <strong>${this.escapeHtml(confidenceLabel)}</strong>)</td>
-            </tr>
-            <tr>
-              <td class="label">🛡️ Trạng thái tự phục hồi</td>
-              <td class="value"><code>${this.escapeHtml(payload.recommendationAction || 'NO_ACTION')}</code> &mdash; Cần kỹ sư xác minh &amp; can thiệp</td>
-            </tr>
-          </table>
-
-          ${(payload.rootCauseDescription || (payload.recommendationReason && (!payload.failureMessage || payload.recommendationReason !== payload.failureMessage))) ? `
-          <div class="rca-box">
-            <strong>📋 Tóm tắt phân tích AI &amp; Khuyến nghị:</strong><br/>
-            ${payload.rootCauseDescription ? `<div style="margin-top:6px;">${this.escapeHtml(payload.rootCauseDescription)}</div>` : ''}
-            ${(payload.recommendationReason && (!payload.failureMessage || payload.recommendationReason !== payload.failureMessage)) ? `<div style="margin-top:8px; color:#b91c1c;"><strong>Hướng dẫn can thiệp:</strong> ${this.escapeHtml(payload.recommendationReason)}</div>` : ''}
-            ${Array.isArray((payload as any).manualPlaybook) && (payload as any).manualPlaybook.length > 0 ? `<div style="margin-top:10px; padding:10px 12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; color:#166534;"><strong>🛠️ Phương pháp xử lý thủ công đề xuất (Manual Playbook 3 bước):</strong><ul style="margin:6px 0 0 18px; padding:0;">${((payload as any).manualPlaybook as string[]).map((st) => `<li style="margin-bottom:4px;">${this.escapeHtml(st)}</li>`).join('')}</ul></div>` : ''}
-          </div>` : ''}
-
-          <div class="cta-box">
-            <a href="${dashboardUrl}" class="btn-urgent" target="_blank">
-              🔍 Mở Bảng Điều Khiển &amp; Xem Chi Tiết Sự Cố (${this.escapeHtml(incidentCode)})
-            </a>
-          </div>
-
-          <p style="font-size: 12px; color: #64748b; text-align: center; margin-bottom: 0;">
-            Link trực tiếp: <a href="${dashboardUrl}" style="color: #dc2626;">${this.escapeHtml(dashboardUrl)}</a>
-          </p>
+        <div style="text-align:center; margin:24px 0 16px;">
+          <a href="${dashboardUrl}" style="display:inline-block; background:#dc2626; color:#ffffff !important; font-weight:800; font-size:14px; padding:13px 28px; border-radius:8px; text-decoration:none; box-shadow:0 4px 14px rgba(220, 38, 38, 0.35);" target="_blank">
+            🔍 Mở Bảng Điều Khiển &amp; Xem Chi Tiết Sự Cố (${this.escapeHtml(incidentCode)})
+          </a>
         </div>
 
-        <div class="footer">
-          <p style="margin: 0 0 4px 0;">Email khẩn cấp từ <strong>CapTone AI Self-Healing SRE Platform</strong>.</p>
-          <p style="margin: 0;">Hệ thống áp dụng kiểm soát chống spam cảnh báo tự động (Cooldown) và phân quyền nhận tin cho SME_OWNER, DEVOPS &amp; danh sách tùy chỉnh.</p>
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
+        <p style="font-size:12px; color:#64748b; text-align:center; margin-bottom:0;">
+          Link trực tiếp: <a href="${dashboardUrl}" style="color:#dc2626;">${this.escapeHtml(dashboardUrl)}</a>
+        </p>
+      `,
+      footerExtraHtml: 'Hệ thống áp dụng cơ chế chống spam cảnh báo tự động (Cooldown) và phân quyền nhận tin cho SME_OWNER, DEVOPS &amp; danh sách tùy chỉnh.',
+    });
 
     return { subject, html, dashboardUrl, incidentCode };
   }
@@ -688,34 +612,28 @@ export class EmailService {
       return { ok: true, mode: 'dev_console' };
     }
 
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head><meta charset="UTF-8"><title>Kiểm tra cấu hình Email cảnh báo</title></head>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background:#f8fafc; padding:24px; color:#0f172a;">
-      <div style="max-width:600px; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
-        <div style="background:linear-gradient(135deg,#065f46,#059669); padding:22px 24px; color:#ffffff;">
-          <h2 style="margin:0; font-size:18px;">✅ Kiểm Tra Kênh Email Cảnh Báo Khẩn Cấp</h2>
-          <p style="margin:6px 0 0; font-size:13px; color:#d1fae5;">Tổ chức: ${this.escapeHtml(orgLabel)}</p>
+    const htmlContent = renderBrandedEmailLayout({
+      pageTitle: `Kiểm tra kênh cảnh báo Email - ${PROJECT_BRAND_NAME}`,
+      badgeText: 'Kiểm Tra Cấu Hình SMTP',
+      headerTitle: '✅ Kiểm Tra Kênh Email Cảnh Báo Khẩn Cấp',
+      headerSubtitle: `Tổ chức: ${this.escapeHtml(orgLabel)}`,
+      purposeText:
+        `Thư kiểm tra này xác nhận cấu hình SMTP và hộp thư của bạn đã sẵn sàng tiếp nhận cảnh báo sự cố CRITICAL từ AI Self-Heal Platform cho tổ chức ${this.escapeHtml(orgLabel)}.`,
+      bodyHtml: `
+        <p style="margin-top:0;">Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong>,</p>
+        <p>Đây là email kiểm tra kết nối SMTP được kích hoạt bởi <strong>${this.escapeHtml(payload.triggeredByEmail || 'Quản trị viên')}</strong> cho tổ chức <strong>${this.escapeHtml(orgLabel)}</strong>.</p>
+        <p>Khi hệ thống AI Self-Heal phát hiện sự cố mức <strong>KHẨN CẤP (CRITICAL)</strong> mà chưa thể tự phục hồi (ví dụ <code>NO_ACTION</code>, Cầu dao ngắt mạch hoặc tự sửa lỗi thất bại), thông báo chi tiết sẽ được gửi ngay tới địa chỉ email này.</p>
+        <div style="margin:24px 0; text-align:center;">
+          <a href="${settingsUrl}" style="display:inline-block; background:#059669; color:#ffffff; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:700;">Quản Lý Cấu Hình Cảnh Báo</a>
         </div>
-        <div style="padding:24px; font-size:14px; line-height:1.6;">
-          <p>Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong>,</p>
-          <p>Đây là email kiểm tra kết nối SMTP được kích hoạt bởi <strong>${this.escapeHtml(payload.triggeredByEmail || 'Quản trị viên')}</strong> cho tổ chức <strong>${this.escapeHtml(orgLabel)}</strong>.</p>
-          <p>Khi hệ thống AI Self-Heal phát hiện sự cố mức <strong>KHẨN CẤP (CRITICAL)</strong> mà chưa thể tự phục hồi (ví dụ <code>NO_ACTION</code>, Cầu dao ngắt mạch hoặc tự sửa lỗi thất bại), thông báo chi tiết sẽ được gửi ngay tới địa chỉ email này.</p>
-          <div style="margin:22px 0; text-align:center;">
-            <a href="${settingsUrl}" style="display:inline-block; background:#059669; color:#ffffff; padding:11px 22px; border-radius:8px; text-decoration:none; font-weight:700;">Quản Lý Cấu Hình Cảnh Báo</a>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
+      `,
+    });
 
     try {
       await this.sendMailWithRetry({
         from: this.getFromAddress(),
         to: payload.toEmail,
-        subject: `🧪 [CapTone] Email kiểm tra kênh cảnh báo khẩn cấp - ${orgLabel}`,
+        subject: `🧪 [SelfHeal] Email kiểm tra kênh cảnh báo khẩn cấp - ${orgLabel}`,
         html: htmlContent,
       });
       console.log(`✅ [EMAIL TEST] Đã gửi email kiểm tra cảnh báo tới <${payload.toEmail}>`);
@@ -779,40 +697,34 @@ export class EmailService {
       return true;
     }
 
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head><meta charset="UTF-8"><title>${this.escapeHtml(payload.title)}</title></head>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background:#f8fafc; padding:24px; color:#0f172a;">
-      <div style="max-width:640px; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
-        <div style="background:${priorityBg}; padding:24px; color:#ffffff;">
-          <div style="display:inline-block; font-size:11px; font-weight:800; padding:4px 10px; border-radius:999px; background:rgba(255,255,255,0.2); letter-spacing:0.05em; text-transform:uppercase;">
-            ${priorityBadge} • ${this.escapeHtml(payload.broadcastCode)}
-          </div>
-          <h2 style="margin:12px 0 0; font-size:20px; font-weight:800; line-height:1.4;">${this.escapeHtml(payload.title)}</h2>
+    const htmlContent = renderBrandedEmailLayout({
+      pageTitle: `${payload.title} - ${PROJECT_BRAND_NAME}`,
+      headerBg: priorityBg,
+      accentColor: priorityColor,
+      maxWidth: 640,
+      badgeText: `${priorityBadge} • ${this.escapeHtml(payload.broadcastCode)}`,
+      headerTitle: this.escapeHtml(payload.title),
+      headerSubtitle: `Thông báo vận hành từ ${this.escapeHtml(payload.senderName || 'Ban Quản Trị Hệ Thống')}`,
+      purposeText:
+        'Thư phát sóng (Broadcast) truyền đạt thông tin bảo trì, cập nhật tính năng hoặc cảnh báo vận hành toàn hệ thống tới người dùng trên AI Self-Heal Platform.',
+      purposeBg: '#f8fafc',
+      purposeBorder: priorityColor,
+      purposeTextColor: '#334155',
+      bodyHtml: `
+        <p style="margin-top:0;">Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong>,</p>
+        <p>Ban Quản Trị Hệ Thống <strong>${PROJECT_BRAND_NAME}</strong> vừa phát sóng một thông báo mới tới bạn:</p>
+        <div style="margin:18px 0; padding:16px 20px; background:#f8fafc; border-left:4px solid ${priorityColor}; border-radius:6px; font-size:14px; color:#334155; white-space:pre-wrap;">${this.escapeHtml(payload.content)}</div>
+        <div style="margin:26px 0 10px; text-align:center;">
+          <a href="${dashboardUrl}" style="display:inline-block; background:${priorityColor}; color:#ffffff; padding:12px 28px; border-radius:8px; text-decoration:none; font-weight:700; font-size:14px;">Mở Bàn Điều Khiển Nền Tảng</a>
         </div>
-        <div style="padding:28px 24px; font-size:14px; line-height:1.7;">
-          <p>Xin chào <strong>${this.escapeHtml(payload.recipientName || payload.toEmail)}</strong>,</p>
-          <p>Ban Quản Trị Hệ Thống Nền Tảng Self-Healing vừa phát sóng một thông báo mới tới bạn:</p>
-          <div style="margin:20px 0; padding:16px 20px; background:#f8fafc; border-left:4px solid ${priorityColor}; border-radius:6px; font-size:14px; color:#334155; white-space:pre-wrap;">${this.escapeHtml(payload.content)}</div>
-          <div style="margin:28px 0 16px; text-align:center;">
-            <a href="${dashboardUrl}" style="display:inline-block; background:${priorityColor}; color:#ffffff; padding:12px 28px; border-radius:8px; text-decoration:none; font-weight:700; font-size:14px; box-shadow:0 2px 4px rgba(0,0,0,0.1);">Mở Bàn Điều Khiển Nền Tảng</a>
-          </div>
-          <hr style="border:none; border-top:1px solid #e2e8f0; margin:24px 0 16px;" />
-          <p style="font-size:12px; color:#64748b; margin:0; text-align:center;">
-            Thông báo này được gửi tự động từ Trung Tâm Phát Thông Báo Toàn Mạng CapTone Self-Healing.
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
+      `,
+    });
 
     try {
       await this.sendMailWithRetry({
         from: this.getFromAddress(),
         to: payload.toEmail,
-        subject: `📢 [CapTone] ${payload.title}`,
+        subject: `📢 [SelfHeal] ${payload.title}`,
         html: htmlContent,
       });
       console.log(`✅ [EMAIL BROADCAST] Đã gửi thông báo [${payload.broadcastCode}] tới <${payload.toEmail}>`);
@@ -882,137 +794,89 @@ export class EmailService {
       return true;
     }
 
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Yêu Cầu Phê Duyệt Tự Phục Hồi - ${esc(hitlCode)}</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; color: #1e293b; }
-        .wrapper { max-width: 640px; margin: 30px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
-        .header { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 26px 28px; color: #ffffff; border-bottom: 3px solid #3b82f6; }
-        .header-tag { display: inline-block; background-color: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 4px 10px; border-radius: 9999px; letter-spacing: 0.5px; margin-bottom: 12px; }
-        .header h1 { margin: 0; font-size: 20px; font-weight: 800; }
-        .header p { margin: 6px 0 0 0; font-size: 13px; color: #94a3b8; }
-        .content { padding: 28px; }
-        .alert-box { background-color: #fef2f2; border: 1px solid #fee2e2; border-left: 4px solid #ef4444; border-radius: 6px; padding: 14px 16px; margin-bottom: 22px; font-size: 13px; color: #991b1b; }
-        .info-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
-        .info-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; }
-        .info-table td.label { width: 35%; color: #64748b; font-weight: 600; }
-        .info-table td.value { width: 65%; color: #0f172a; font-weight: 700; }
-        .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-        .actions-box { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 20px; text-align: center; margin: 24px 0; }
-        .btn-approve { display: inline-block; background: #059669; color: #ffffff !important; font-weight: 700; font-size: 14px; padding: 13px 28px; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); margin-right: 8px; }
-        .btn-dashboard { display: inline-block; background: #ffffff; color: #2563eb !important; border: 1px solid #bfdbfe; font-weight: 600; font-size: 14px; padding: 12px 22px; border-radius: 8px; text-decoration: none; }
-        .footer { background-color: #f8fafc; padding: 20px 28px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5; }
-      </style>
-    </head>
-    <body>
-      <div class="wrapper">
-        <div class="header">
-          <div class="header-tag">🚨 HITL Human-In-The-Loop Cần Phê Duyệt</div>
-          <h1>Yêu Cầu Phê Duyệt Hành Động Khắc Phục</h1>
-          <p>Mã kiểm toán: <strong>${esc(hitlCode)}</strong> &bull; Tổ chức: <strong>${esc(payload.organizationName || 'Tổ chức Quản trị')}</strong></p>
+    const htmlContent = renderBrandedEmailLayout({
+      pageTitle: `Yêu Cầu Phê Duyệt Tự Phục Hồi - ${hitlCode}`,
+      headerBg: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+      accentColor: '#3b82f6',
+      maxWidth: 640,
+      badgeText: '🚨 HITL Human-In-The-Loop Cần Phê Duyệt',
+      badgeBg: 'rgba(239, 68, 68, 0.25)',
+      badgeColor: '#fecaca',
+      headerTitle: 'Yêu Cầu Phê Duyệt Hành Động Khắc Phục',
+      headerSubtitle: `Mã kiểm toán: ${esc(hitlCode)} • Tổ chức: ${esc(payload.organizationName || 'Tổ chức Quản trị')}`,
+      purposeTitle: 'Mục đích thư phê duyệt HITL',
+      purposeText:
+        'Thư này đề nghị kỹ sư vận hành xem xét nguyên nhân gốc (RCA) và xác nhận 1-Click Phê duyệt hoặc Từ chối trước khi Agent thực thi lệnh can thiệp có mức rủi ro cao lên cụm Kubernetes.',
+      purposeBg: '#fef2f2',
+      purposeBorder: '#ef4444',
+      purposeTextColor: '#991b1b',
+      bodyHtml: `
+        <p style="margin-top:0; font-size:14px;">Xin chào <strong>${esc(payload.recipientName || payload.toEmail)}</strong> (${esc(payload.recipientRole || 'SME/DevOps')}),</p>
+        <div style="background-color:#fef2f2; border:1px solid #fee2e2; border-left:4px solid #ef4444; border-radius:6px; padding:12px 14px; margin-bottom:20px; font-size:13px; color:#991b1b;">
+          <strong>Cảnh báo giám sát MAPE-K:</strong> Hệ thống tự phục hồi phát hiện nguy cơ bất thường dịch vụ và chuẩn bị thực thi hành động can thiệp có mức độ rủi ro cần sự phê duyệt của con người trước khi áp dụng.
         </div>
-        <div class="content">
-          <p style="margin-top: 0; font-size: 14px;">Xin chào <strong>${esc(payload.recipientName || payload.toEmail)}</strong> (${esc(payload.recipientRole || 'SME/DevOps')}),</p>
-          <div class="alert-box">
-            <strong>Cảnh báo giám sát MAPE-K:</strong> Hệ thống tự phục hồi phát hiện nguy cơ bất thường dịch vụ và chuẩn bị thực thi hành động can thiệp có mức độ rủi ro cần sự phê duyệt của con người trước khi áp dụng.
+        <table style="width:100%; border-collapse:collapse; margin-bottom:22px; font-size:13px;">
+          <tr>
+            <td style="width:35%; padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">🚨 Sự cố phát hiện</td>
+            <td style="width:65%; padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#dc2626; font-weight:700;">${esc(payload.incidentTitle || payload.actionName || 'Sự cố cần can thiệp')}</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">📦 Dịch vụ & Đối tượng</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#0f172a; font-weight:700;"><span style="color:#2563eb; font-weight:800;">${esc(payload.targetName)}</span> (${esc(payload.targetType || 'POD')})${payload.namespace ? ` &bull; Namespace: <code>${esc(payload.namespace)}</code>` : ''}</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">🔬 Nguyên nhân gốc (RCA)</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#0f172a; font-weight:700;">${esc(payload.rootCauseType || payload.incidentTitle || 'Bất thường hạ tầng phát hiện bởi AI')} (Độ tin cậy AI: <strong>${Number(payload.confidenceScore || 70)}%</strong>)</td>
+          </tr>
+          ${payload.actionReasoning ? `
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">💡 Lập luận khuyến nghị AI</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#334155; font-style:italic;">${esc(payload.actionReasoning)}</td>
+          </tr>` : ''}
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">⚡ Hành động tự khắc phục</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9;"><span style="display:inline-block; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:700;">${esc(payload.actionName)} (${esc(payload.actionCode)})</span></td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">🛡️ Chính sách an toàn</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#0f172a; font-weight:700;"><code>${esc(payload.policyName || 'POL-SAFETY-DEFAULT')}</code></td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">⚠️ Mức độ rủi ro</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9;"><span style="display:inline-block; background:#fef2f2; color:${riskColor}; border:1px solid #fecaca; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700;">${riskLabel}</span></td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">☸️ Cụm K8s & Môi trường</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#0f172a; font-weight:700;">${esc(payload.clusterName || 'Cụm Kubernetes')} (${esc(payload.environmentName || 'Production')})${payload.organizationName ? ` &bull; ${esc(payload.organizationName)}` : ''}</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-weight:600;">⏱️ Thời hạn xử lý</td>
+            <td style="padding:9px 12px; border-bottom:1px solid #f1f5f9; color:#64748b; font-size:12px;">Trong vòng 24 giờ kể từ khi kích hoạt</td>
+          </tr>
+        </table>
+        <div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; padding:18px; text-align:center; margin:20px 0;">
+          <div style="font-size:14px; font-weight:700; margin-bottom:14px; color:#0f172a;">
+            ⚡ Kỹ sư có thể phê duyệt hoặc từ chối trực tiếp ngay tại Email này:
           </div>
-          
-          <table class="info-table">
-            <tr>
-              <td class="label">🚨 Sự cố phát hiện</td>
-              <td class="value" style="color: #dc2626;">${esc(payload.incidentTitle || payload.actionName || 'Sự cố cần can thiệp')}</td>
-            </tr>
-            <tr>
-              <td class="label">📦 Dịch vụ & Đối tượng</td>
-              <td class="value"><span style="color: #2563eb; font-weight: 800;">${esc(payload.targetName)}</span> (${esc(payload.targetType || 'POD')})${payload.namespace ? ` &bull; Namespace: <code>${esc(payload.namespace)}</code>` : ''}</td>
-            </tr>
-            <tr>
-              <td class="label">🔬 Nguyên nhân gốc (RCA)</td>
-              <td class="value">${esc(payload.rootCauseType || payload.incidentTitle || 'Bất thường hạ tầng phát hiện bởi AI')} (Độ tin cậy AI: <strong>${Number(payload.confidenceScore || 70)}%</strong>)</td>
-            </tr>
-            ${payload.actionReasoning ? `
-            <tr>
-              <td class="label">💡 Lập luận khuyến nghị AI</td>
-              <td class="value" style="color: #334155; font-style: italic;">${esc(payload.actionReasoning)}</td>
-            </tr>` : ''}
-            <tr>
-              <td class="label">⚡ Hành động tự khắc phục</td>
-              <td class="value">
-                <span class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px;">
-                  ${esc(payload.actionName)} (${esc(payload.actionCode)})
-                </span>
-              </td>
-            </tr>
-            <tr>
-              <td class="label">🛡️ Chính sách an toàn</td>
-              <td class="value"><code>${esc(payload.policyName || 'POL-SAFETY-DEFAULT')}</code></td>
-            </tr>
-            <tr>
-              <td class="label">⚠️ Mức độ rủi ro</td>
-              <td class="value">
-                <span class="badge" style="background: #fef2f2; color: ${riskColor}; border: 1px solid #fecaca;">
-                  ${riskLabel}
-                </span>
-              </td>
-            </tr>
-            <tr>
-              <td class="label">☸️ Cụm K8s & Môi trường</td>
-              <td class="value">${esc(payload.clusterName || 'Cụm Kubernetes')} (${esc(payload.environmentName || 'Production')})${payload.organizationName ? ` &bull; ${esc(payload.organizationName)}` : ''}</td>
-            </tr>
-            <tr>
-              <td class="label">⏱️ Thời hạn xử lý</td>
-              <td class="value" style="color: #64748b; font-size: 12px;">Trong vòng 24 giờ kể từ khi kích hoạt</td>
-            </tr>
-          </table>
-
-          <div class="actions-box">
-            <div style="font-size: 14px; font-weight: 700; margin-bottom: 14px; color: #0f172a;">
-              ⚡ Kỹ sư có thể phê duyệt hoặc từ chối trực tiếp ngay tại Email này:
-            </div>
-            <div style="margin-bottom: 12px;">
-              <a href="${esc(quickApproveUrl)}" class="btn-approve" target="_blank">
-                ✅ Phê Duyệt Ngay (1-Click)
-              </a>
-              <a href="${esc(quickRejectUrl)}" style="display: inline-block; background: #dc2626; color: #ffffff !important; font-weight: 700; font-size: 14px; padding: 13px 24px; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3); margin-right: 8px;" target="_blank">
-                ❌ Từ Chối Yêu Cầu
-              </a>
-              <a href="${esc(dashboardUrl)}" class="btn-dashboard" target="_blank">
-                🔍 Xem Bảng Chứng & Diff YAML
-              </a>
-            </div>
-            <div style="font-size: 12px; color: #64748b;">
-              (Bấm nút phía trên sẽ tự động xác thực và thực thi an toàn mà không cần đăng nhập lại)
-            </div>
+          <div style="margin-bottom:10px;">
+            <a href="${esc(quickApproveUrl)}" style="display:inline-block; background:#059669; color:#ffffff !important; font-weight:700; font-size:14px; padding:12px 22px; border-radius:8px; text-decoration:none; margin:4px;" target="_blank">✅ Phê Duyệt Ngay (1-Click)</a>
+            <a href="${esc(quickRejectUrl)}" style="display:inline-block; background:#dc2626; color:#ffffff !important; font-weight:700; font-size:14px; padding:12px 20px; border-radius:8px; text-decoration:none; margin:4px;" target="_blank">❌ Từ Chối Yêu Cầu</a>
+            <a href="${esc(dashboardUrl)}" style="display:inline-block; background:#ffffff; color:#2563eb !important; border:1px solid #bfdbfe; font-weight:600; font-size:14px; padding:11px 18px; border-radius:8px; text-decoration:none; margin:4px;" target="_blank">🔍 Xem Chi Tiết</a>
           </div>
-
-          <p style="font-size: 12px; color: #64748b; margin-bottom: 0;">
-            * Lưu ý: Nút <strong>Phê Duyệt Ngay</strong> sử dụng liên kết bảo mật có ký số JWT kèm thời hạn TTL. Khi bạn bấm nút, hệ thống sẽ tự động xác thực quyền hạn RBAC của bạn đối với tổ chức <strong>${esc(payload.organizationName || 'hệ thống')}</strong> và thực thi can thiệp lên cụm Kubernetes.
-          </p>
+          <div style="font-size:12px; color:#64748b;">(Bấm nút phía trên sẽ xác nhận qua trang an toàn ký số JWT có thời hạn)</div>
         </div>
-
-        <div class="footer">
-          <p style="margin: 0 0 6px 0;">
-            Email này được gửi tự động từ <strong>CapTone AI Autonomous Self-Healing Platform</strong> theo quy chuẩn an toàn HITL.
-          </p>
-          <p style="margin: 0;">
-            Bảo mật nhiều bên thuê (Multi-Tenancy Isolation) &bull; Kiểm soát truy cập RBAC &bull; Sổ kiểm toán Audit Trails
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
+        <p style="font-size:12px; color:#64748b; margin-bottom:0;">
+          * Lưu ý: Liên kết 1-Click sử dụng mã ký số JWT kèm quyền RBAC của bạn đối với tổ chức <strong>${esc(payload.organizationName || 'hệ thống')}</strong>.
+        </p>
+      `,
+      footerExtraHtml: 'Bảo mật Multi-Tenancy Isolation &bull; Kiểm soát truy cập RBAC &bull; Nhật ký Audit Trails',
+    });
 
     try {
       await this.sendMailWithRetry({
         from: this.getFromAddress(),
         to: payload.toEmail,
-        subject: `🚨 [CẢNH BÁO SỰ CỐ & CẦN PHÊ DUYỆT] ${payload.incidentTitle || payload.actionName} trên ${payload.targetName} (${hitlCode})`,
+        subject: `🚨 [SelfHeal] [CẦN PHÊ DUYỆT HITL] ${payload.incidentTitle || payload.actionName} trên ${payload.targetName} (${hitlCode})`,
         html: htmlContent,
       });
       console.log(`✅ [EMAIL HITL] Đã gửi thông báo phê duyệt tới ${payload.recipientName} <${payload.toEmail}>`);
@@ -1035,30 +899,32 @@ export class EmailService {
     const baseUrl = (config.email.clientUrl || 'http://localhost:3000').replace(/\/+$/, '');
     const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head><meta charset="UTF-8" /></head>
-    <body style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
-      <div style="max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px;">
-        <h2 style="margin-top: 0; color: #059669;">Đặt lại mật khẩu AI Self-Heal</h2>
-        <p>Xin chào <strong>${safeName}</strong>,</p>
+    const htmlContent = renderBrandedEmailLayout({
+      pageTitle: `Đặt lại mật khẩu - ${PROJECT_BRAND_NAME}`,
+      badgeText: 'Khôi Phục Mật Khẩu',
+      headerTitle: 'Đặt Lại Mật Khẩu Tài Khoản',
+      headerSubtitle: 'Liên kết khôi phục một lần có hiệu lực trong 15 phút',
+      purposeText:
+        'Thư này cung cấp đường dẫn bảo mật một lần giúp bạn thiết lập mật khẩu mới khi yêu cầu khôi phục quyền truy cập trên AI Self-Heal Platform.',
+      bodyHtml: `
+        <p style="margin-top:0;">Xin chào <strong>${safeName}</strong>,</p>
         <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Nhấn vào nút bên dưới để tạo mật khẩu mới (hiệu lực trong 15 phút, dùng 1 lần):</p>
-        <p style="margin: 24px 0;">
-          <a href="${resetUrl}" style="display: inline-block; background: #059669; color: #ffffff; text-decoration: none; padding: 12px 22px; border-radius: 6px; font-weight: 700;">
+        <div style="text-align:center; margin:26px 0;">
+          <a href="${resetUrl}" style="display:inline-block; background:#059669; color:#ffffff !important; text-decoration:none; padding:13px 26px; border-radius:8px; font-weight:700; font-size:14px;">
             Đặt lại mật khẩu
           </a>
+        </div>
+        <p style="font-size:13px; color:#64748b; margin-bottom:0;">
+          Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này. Tài khoản và phiên đăng nhập hiện tại của bạn vẫn an toàn.
         </p>
-        <p style="font-size: 13px; color: #475569;">Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này. Tài khoản và phiên đăng nhập hiện tại của bạn vẫn an toàn.</p>
-      </div>
-    </body>
-    </html>`;
+      `,
+    });
 
     try {
       await this.sendMailWithRetry({
         from: this.getFromAddress(),
         to: toEmail,
-        subject: '🔐 [AI Self-Heal] Yêu cầu đặt lại mật khẩu',
+        subject: '🔐 [SelfHeal] Yêu cầu đặt lại mật khẩu',
         html: htmlContent,
       });
       return true;
