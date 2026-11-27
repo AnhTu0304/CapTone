@@ -1637,10 +1637,31 @@ export const BranchedPipelineSection = ({
             })}
 
             {isAgentConnected && effectiveTimesteps.length > 0 && (
-              <g>
-                <line x1={sweepTargetX} y1={chartPad.top} x2={sweepTargetX} y2={chartPad.top + innerH} stroke="#2563EB" strokeWidth="1.5" strokeDasharray="3 2" />
-                <circle cx={sweepTargetX} cy={getMiniY(Number(effectiveTimesteps[activeSweepIdx]?.latency || effectiveTimesteps[activeSweepIdx]?.ram || 50))} r="4.5" fill="#2563EB" stroke="#FFFFFF" strokeWidth="2" />
-                <text x={sweepTargetX} y={chartPad.top - 8} fill="#2563EB" fontSize="8.5" fontWeight="800" fontFamily="var(--font-mono)" textAnchor={activeSweepIdx >= 10 ? 'end' : activeSweepIdx <= 1 ? 'start' : 'middle'}>
+              <g
+                style={{
+                  transform: `translateX(${sweepTargetX}px)`,
+                  transition: activeSweepIdx >= Math.max(effectiveTimesteps.length - 1, 0) ? 'none' : 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
+                }}
+              >
+                <line x1={0} y1={chartPad.top} x2={0} y2={chartPad.top + innerH} stroke="#2563EB" strokeWidth="1.5" strokeDasharray="3 2" />
+                <circle
+                  cx={0}
+                  cy={getMiniY(Number(effectiveTimesteps[activeSweepIdx]?.latency || effectiveTimesteps[activeSweepIdx]?.ram || 50))}
+                  r="4.5"
+                  fill="#2563EB"
+                  stroke="#FFFFFF"
+                  strokeWidth="2"
+                  style={{ transition: 'cy 0.25s ease-out' }}
+                />
+                <text
+                  x={0}
+                  y={chartPad.top - 8}
+                  fill="#2563EB"
+                  fontSize="8.5"
+                  fontWeight="800"
+                  fontFamily="var(--font-mono)"
+                  textAnchor={activeSweepIdx >= Math.max(effectiveTimesteps.length - 2, 1) ? 'end' : activeSweepIdx <= 1 ? 'start' : 'middle'}
+                >
                   {currentStepLabel} ({activeSweepIdx === 0 ? t('pipeline.canvas.aiHub.enough12') : t('pipeline.canvas.aiHub.newHead')})
                 </text>
               </g>
@@ -2219,4 +2240,4 @@ export const BranchedPipelineSection = ({
   );
 };
 
-export default BranchedPipelineSection;
+export default React.memo(BranchedPipelineSection);

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18nInstance, { normalizeLanguage } from '../../../i18n';
 import BranchedPipelineSection, {
@@ -2018,7 +2018,7 @@ export const AIPipelineFlowCanvas = ({
     return Math.ceil(maxFound * 1.08);
   }, [scaleMode, effectiveTimesteps, METRIC_CONFIGS]);
 
-  const yTicks = [0, 25, 50, 75, 100];
+  const yTicks = useMemo(() => [0, 25, 50, 75, 100], []);
 
   const getMiniX = (index) => {
     const total = Math.max(effectiveTimesteps.length - 1, 1);
@@ -2030,11 +2030,54 @@ export const AIPipelineFlowCanvas = ({
     return chartPad.top + innerH - (clamped / chartMaxY) * innerH;
   };
 
-  // Tính toán cột quét viễn trắc (Sweep bar)
+  // Tính toán cột quét viễn trắc (Sweep bar): dữ liệu chèn vào T12 (phải) và trôi sang trái -> kim quét đi cùng chiều T12 -> T1
   const totalStepsCount = effectiveTimesteps.length || 12;
   const activeSweepIdx = (totalStepsCount - 1) - Math.min(Math.max((currentActiveStep || 1) - 1, 0), totalStepsCount - 1);
   const sweepTargetX = getMiniX(activeSweepIdx);
   const currentStepLabel = effectiveTimesteps[activeSweepIdx]?.stepLabel || `T${activeSweepIdx + 1}`;
+  const isSweepWrapReset = activeSweepIdx === totalStepsCount - 1;
+  const isBatchCompleteStep = activeSweepIdx === 0;
+
+  const handleToggleD2Telemetry = useCallback((e) => {
+    if (e) e.stopPropagation();
+    didDragRef.current = false;
+    setD2Branches((prev) => ({ ...prev, telemetry: !prev.telemetry }));
+  }, []);
+
+  const handleToggleD2Rule = useCallback((e) => {
+    if (e) e.stopPropagation();
+    didDragRef.current = false;
+    setD2Branches((prev) => ({ ...prev, rule: !prev.rule }));
+  }, []);
+
+  const handleToggleD2Risks = useCallback((e) => {
+    if (e) e.stopPropagation();
+    didDragRef.current = false;
+    setD2Branches((prev) => ({ ...prev, risks: !prev.risks }));
+  }, []);
+
+  const handleToggleD2Causes = useCallback((e) => {
+    if (e) e.stopPropagation();
+    didDragRef.current = false;
+    setD2Branches((prev) => ({ ...prev, causes: !prev.causes }));
+  }, []);
+
+  const handleToggleD2Actions = useCallback((e) => {
+    if (e) e.stopPropagation();
+    didDragRef.current = false;
+    setD2Branches((prev) => ({ ...prev, actions: !prev.actions }));
+  }, []);
+
+  const handleSelectD2SimulatedCause = useCallback((code) => {
+    didDragRef.current = false;
+    setD2VerifyOutcome('auto');
+    setD2SimulatedCause((prev) => (prev === code ? null : code));
+  }, []);
+
+  const handleChangeD2VerifyOutcome = useCallback((mode) => {
+    didDragRef.current = false;
+    setD2VerifyOutcome((prev) => (prev === mode ? 'auto' : mode));
+  }, []);
 
   // Chiều cao tự thích ứng của khung Canvas để vừa khít 100% không bị tràn dọc
   const canvasHeight = useMemo(() => Math.max(380, Math.round(baseCanvasH * autoScale)), [baseCanvasH, autoScale]);
@@ -3138,12 +3181,17 @@ export const AIPipelineFlowCanvas = ({
 
               {/* Cột quét viễn trắc thời gian thực (chỉ hiển thị khi Agent đang ONLINE) */}
               {isAgentConnected && effectiveTimesteps && effectiveTimesteps.length > 0 && (
-                <g>
+                <g
+                  style={{
+                    transform: `translateX(${sweepTargetX}px)`,
+                    transition: isSweepWrapReset ? 'none' : 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
+                  }}
+                >
                   {/* Đường kẻ thẳng đứng nhấp nháy xanh dương */}
                   <line
-                    x1={sweepTargetX}
+                    x1={0}
                     y1={chartPad.top}
-                    x2={sweepTargetX}
+                    x2={0}
                     y2={chartPad.top + innerH}
                     stroke="#2563EB"
                     strokeWidth="1.5"
@@ -3151,25 +3199,25 @@ export const AIPipelineFlowCanvas = ({
                   />
                   {/* Điểm tròn nổi bật tại đầu gom */}
                   <circle
-                    cx={sweepTargetX}
+                    cx={0}
                     cy={getMiniY(Number(effectiveTimesteps[activeSweepIdx]?.latency || effectiveTimesteps[activeSweepIdx]?.ram || 50))}
                     r="4.5"
                     fill="#2563EB"
                     stroke="#FFFFFF"
                     strokeWidth="2"
-                    style={{ filter: 'drop-shadow(0 0 4px rgba(37,99,235,0.6))' }}
+                    style={{ filter: 'drop-shadow(0 0 4px rgba(37,99,235,0.6))', transition: 'cy 0.25s ease-out' }}
                   />
                   {/* Nhãn trên đầu cột quét */}
                   <text
-                    x={sweepTargetX}
+                    x={0}
                     y={chartPad.top - 8}
                     fill="#2563EB"
                     fontSize="8.5"
                     fontWeight="800"
                     fontFamily="var(--font-mono)"
-                    textAnchor={activeSweepIdx >= 10 ? 'end' : activeSweepIdx <= 1 ? 'start' : 'middle'}
+                    textAnchor={activeSweepIdx >= Math.max(totalStepsCount - 2, 1) ? 'end' : activeSweepIdx <= 1 ? 'start' : 'middle'}
                   >
-                    {currentStepLabel} ({activeSweepIdx === 0 ? t('pipeline.canvas.aiHub.enough12') : t('pipeline.canvas.aiHub.newHead')})
+                    {currentStepLabel} ({isBatchCompleteStep ? t('pipeline.canvas.aiHub.enough12') : t('pipeline.canvas.aiHub.newHead')})
                   </text>
                 </g>
               )}
@@ -4963,42 +5011,15 @@ export const AIPipelineFlowCanvas = ({
               isRisksExpanded={d2RisksExpanded}
               isCausesExpanded={d2CausesExpanded}
               isActionsExpanded={d2ActionsExpanded}
-              onToggleTelemetry={(e) => {
-                if (e) e.stopPropagation();
-                didDragRef.current = false;
-                setD2Branches((prev) => ({ ...prev, telemetry: !prev.telemetry }));
-              }}
-              onToggleRule={(e) => {
-                if (e) e.stopPropagation();
-                didDragRef.current = false;
-                setD2Branches((prev) => ({ ...prev, rule: !prev.rule }));
-              }}
-              onToggleRisks={(e) => {
-                if (e) e.stopPropagation();
-                didDragRef.current = false;
-                setD2Branches((prev) => ({ ...prev, risks: !prev.risks }));
-              }}
-              onToggleCauses={(e) => {
-                if (e) e.stopPropagation();
-                didDragRef.current = false;
-                setD2Branches((prev) => ({ ...prev, causes: !prev.causes }));
-              }}
-              onToggleActions={(e) => {
-                if (e) e.stopPropagation();
-                didDragRef.current = false;
-                setD2Branches((prev) => ({ ...prev, actions: !prev.actions }));
-              }}
+              onToggleTelemetry={handleToggleD2Telemetry}
+              onToggleRule={handleToggleD2Rule}
+              onToggleRisks={handleToggleD2Risks}
+              onToggleCauses={handleToggleD2Causes}
+              onToggleActions={handleToggleD2Actions}
               simulatedCauseCode={d2SimulatedCause}
-              onSelectSimulatedCause={(code) => {
-                didDragRef.current = false;
-                setD2VerifyOutcome('auto');
-                setD2SimulatedCause((prev) => (prev === code ? null : code));
-              }}
+              onSelectSimulatedCause={handleSelectD2SimulatedCause}
               verifyOutcomeMode={d2VerifyOutcome}
-              onChangeVerifyOutcome={(mode) => {
-                didDragRef.current = false;
-                setD2VerifyOutcome((prev) => (prev === mode ? 'auto' : mode));
-              }}
+              onChangeVerifyOutcome={handleChangeD2VerifyOutcome}
             />
         )}
       </div>

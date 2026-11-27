@@ -456,4 +456,51 @@ describe('Diagram 2 Branched Pipeline Architecture (Full 01->03 + 4 Agents -> 16
     expect(screen.getByTestId('d2-gate-verify-HITL')).toHaveAttribute('data-active', 'false');
     expect(screen.queryByTestId('d2-gate-verify-AUDIT')).not.toBeInTheDocument();
   });
+
+  test('synchronizes sweep scanhead right-to-left T12->T1 matching live telemetry shift direction', () => {
+    const timesteps = Array.from({ length: 12 }, (_, idx) => ({
+      stepLabel: `T${idx + 1}`,
+      cpu: 10 + idx,
+      ram: 40,
+      disk: 12,
+      latency: 8,
+      request_rate: 1,
+      http_5xx_rate: 0,
+      pod_restart_count: 0,
+      replica_count: 2,
+    }));
+
+    const { rerender } = render(
+      <AIPipelineFlowCanvas
+        selectedService="ecommerce-store-app"
+        isAgentConnected={true}
+        isFullScreen={true}
+        showExtendedPipeline={true}
+        defaultViewMode="gru"
+        podCount={2}
+        currentActiveStep={4}
+        totalSteps={12}
+        timesteps={timesteps}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('switch-diagram-2'));
+    expect(screen.getByText(/T9 \(Đầu gom mới\)/i)).toBeInTheDocument();
+
+    rerender(
+      <AIPipelineFlowCanvas
+        selectedService="ecommerce-store-app"
+        isAgentConnected={true}
+        isFullScreen={true}
+        showExtendedPipeline={true}
+        defaultViewMode="gru"
+        podCount={2}
+        currentActiveStep={12}
+        totalSteps={12}
+        timesteps={timesteps}
+      />
+    );
+
+    expect(screen.getByText(/T1 \(Đủ 12 bước -> AI\)/i)).toBeInTheDocument();
+  });
 });

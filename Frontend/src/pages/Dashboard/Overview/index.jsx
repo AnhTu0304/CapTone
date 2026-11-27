@@ -34,6 +34,44 @@ const normalizeServiceName = (raw) => {
   return raw.replace(/^(Deployment|StatefulSet|DaemonSet|Pod|Service)\s*[:/]?\s*/i, '').trim();
 };
 
+const TELEMETRY_POINT_KEYS = [
+  'cpu',
+  'ram',
+  'disk',
+  'latency',
+  'request_rate',
+  'http_5xx_rate',
+  'error_5xx',
+  'pod_restart_count',
+  'replica_count',
+];
+
+const mapSequenceToInputs = (points, idPrefix, extraFields = {}) => {
+  const directInputs = [];
+  points.forEach((pt, idx) => {
+    const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
+    for (const mName of TELEMETRY_POINT_KEYS) {
+      if (pt[mName] !== undefined) {
+        directInputs.push({
+          id: `${idPrefix}-${idx}-${mName}`,
+          ...extraFields,
+          metric_name: mName === 'http_5xx_rate' ? 'error_5xx' : mName,
+          metric_value: pt[mName],
+          collected_at: ts,
+        });
+      }
+    }
+  });
+  return directInputs;
+};
+
+const buildSequenceSignature = (points) => {
+  if (!Array.isArray(points) || points.length === 0) return '';
+  return points
+    .map((pt) => `${pt.time_bucket || ''}:${pt.cpu ?? ''}:${pt.ram ?? ''}:${pt.disk ?? ''}:${pt.latency ?? ''}:${pt.request_rate ?? ''}:${pt.http_5xx_rate ?? pt.error_5xx ?? ''}`)
+    .join('|');
+};
+
 const getWorkloadStorageKey = (clusterId) =>
   clusterId ? `selfheal_overview_selected_workload:${clusterId}` : 'selfheal_overview_selected_workload';
 
@@ -109,6 +147,10 @@ export const OverviewPage = () => {
   const isFetchingRef = useRef(false);
   const fetchSeqRef = useRef(0);
   const prevClusterParamRef = useRef(clusterParam);
+  const isWsConnectedRef = useRef(false);
+  const lastWsBatchAtRef = useRef({});
+  const lastWsPointsSigRef = useRef({});
+  const lastStepSigRef = useRef({});
   // Bộ nhớ đệm lưu trữ metrics mới nhất của từng node để tổng hợp số liệu chuẩn xác cho toàn cụm
   const nodeMetricsMapRef = useRef(new Map());
 
@@ -181,6 +223,10 @@ export const OverviewPage = () => {
     setClusterInfo(null);
     setNodeTelemetry(null);
     nodeMetricsMapRef.current.clear();
+    isWsConnectedRef.current = false;
+    lastWsBatchAtRef.current = {};
+    lastWsPointsSigRef.current = {};
+    lastStepSigRef.current = {};
     setClusterOpenIncidents(0);
     setIsWsConnected(false);
     setIsLoading(false);
@@ -352,37 +398,42 @@ export const OverviewPage = () => {
             });
           }),
 
-        // Ưu tiên 5: Chuỗi 12 điểm viễn trắc của dịch vụ đang chọn (chạy song song, không đợi phía sau!)
-        currentServiceTarget
-          ? telemetryService
-              .getMetricsSequence(currentServiceTarget, {
-                limit: 12,
-                cluster_id: clusterParam,
-              })
-              .then((metricsSeq) => {
-                if (isStale() || !Array.isArray(metricsSeq) || metricsSeq.length === 0) return;
-                const directInputs = [];
-                metricsSeq.forEach((pt, idx) => {
-                  const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
-                  for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx', 'pod_restart_count', 'replica_count']) {
-                    if (pt[mName] !== undefined) {
-                      directInputs.push({
-                        id: `seq-init-${currentServiceTarget}-${idx}-${mName}`,
-                        metric_name: mName === 'http_5xx_rate' ? 'error_5xx' : mName,
-                        metric_value: pt[mName],
-                        collected_at: ts,
-                      });
-                    }
-                  }
-                });
-                if (directInputs.length > 0) {
-                  setServiceInputsMap((prev) => ({
-                    ...prev,
-                    [currentServiceTarget]: directInputs,
-                  }));
-                }
-              })
-          : Promise.resolve(),
+        // Ưu tiên 5: Chuỗi 12 điểm viễn trắc của dịch vụ đang chọn
+        // Khi WebSocket đang trực tuyến và vừa cập nhật chuỗi trong 15s gần đây -> bỏ qua HTTP ghi đè để không giật biểu đồ
+        (() => {
+          if (!currentServiceTarget) return Promise.resolve();
+          const lastWsAt = lastWsBatchAtRef.current[currentServiceTarget] || 0;
+          const hasFreshWsData =
+            isSilent &&
+            isWsConnectedRef.current &&
+            Date.now() - lastWsAt < 15000 &&
+            Boolean(lastWsPointsSigRef.current[currentServiceTarget]);
+          if (hasFreshWsData) return Promise.resolve();
+
+          return telemetryService
+            .getMetricsSequence(currentServiceTarget, {
+              limit: 12,
+              cluster_id: clusterParam,
+              fill_padding: false,
+            })
+            .then((metricsSeq) => {
+              if (isStale() || !Array.isArray(metricsSeq) || metricsSeq.length === 0) return;
+              // Tránh ghi đè nếu WebSocket vừa cập nhật mới hơn trong lúc request đang bay
+              if (isSilent && Date.now() - (lastWsBatchAtRef.current[currentServiceTarget] || 0) < 5000) return;
+
+              const sig = buildSequenceSignature(metricsSeq);
+              if (sig && sig === lastWsPointsSigRef.current[currentServiceTarget]) return;
+              lastWsPointsSigRef.current[currentServiceTarget] = sig;
+
+              const directInputs = mapSequenceToInputs(metricsSeq, `seq-init-${currentServiceTarget}`);
+              if (directInputs.length > 0) {
+                setServiceInputsMap((prev) => ({
+                  ...prev,
+                  [currentServiceTarget]: directInputs,
+                }));
+              }
+            });
+        })(),
 
         // Dự báo AI (GRU 7-Head)
         aiService
@@ -394,34 +445,34 @@ export const OverviewPage = () => {
           .then((val) => {
             if (isStale()) return;
             const predsList = Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : [];
-            setPredictions(predsList);
+            setPredictions((prev) => {
+              if (
+                prev.length === predsList.length &&
+                prev[0]?.id === predsList[0]?.id &&
+                prev[prev.length - 1]?.id === predsList[predsList.length - 1]?.id
+              ) {
+                return prev;
+              }
+              return predsList;
+            });
 
             const inputsMap = {};
             predsList.forEach((pred) => {
               const wl = normalizeServiceName(pred.workload_name || pred.service_id);
-              if (wl && Array.isArray(pred.sequence) && pred.sequence.length > 0) {
-                const directInputs = [];
-                pred.sequence.forEach((pt, idx) => {
-                  const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
-                  for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx', 'pod_restart_count', 'replica_count']) {
-                    if (pt[mName] !== undefined) {
-                      directInputs.push({
-                        id: `seq-${pred.id}-${idx}-${mName}`,
-                        prediction_id: pred.id,
-                        metric_name: mName === 'http_5xx_rate' ? 'error_5xx' : mName,
-                        metric_value: pt[mName],
-                        collected_at: ts,
-                      });
-                    }
-                  }
+              if (wl && Array.isArray(pred.sequence) && pred.sequence.length > 0 && !inputsMap[wl]) {
+                const directInputs = mapSequenceToInputs(pred.sequence, `seq-${pred.id}`, {
+                  prediction_id: pred.id,
                 });
-                if (directInputs.length > 0 && !inputsMap[wl]) {
+                if (directInputs.length > 0) {
                   inputsMap[wl] = directInputs;
                 }
               }
             });
             if (Object.keys(inputsMap).length > 0) {
-              setServiceInputsMap((prev) => ({ ...inputsMap, ...prev }));
+              setServiceInputsMap((prev) => {
+                const hasMissingKey = Object.keys(inputsMap).some((k) => !prev[k] || prev[k].length === 0);
+                return hasMissingKey ? { ...inputsMap, ...prev } : prev;
+              });
             }
           }),
 
@@ -522,13 +573,16 @@ export const OverviewPage = () => {
   useEffect(() => {
     if (!isClusterOnline) return;
     fetchData();
-    const interval = setInterval(() => fetchData(true), 4000);
+    // Khi WebSocket đã kết nối trực tiếp, giảm tần suất polling HTTP xuống 15s để triệt tiêu hiện tượng giật đồ thị
+    const pollIntervalMs = isWsConnected ? 15000 : 5000;
+    const interval = setInterval(() => fetchData(true), pollIntervalMs);
     return () => clearInterval(interval);
-  }, [fetchData, isClusterOnline]);
+  }, [fetchData, isClusterOnline, isWsConnected]);
 
   // 2. Lắng nghe WebSocket thời gian thực (CHỈ kết nối khi cụm ONLINE và đã xác định rõ dịch vụ đang chọn — bỏ fallback cứng 'mongodb')
   useEffect(() => {
     if (!isClusterOnline || !currentServiceTarget) {
+      isWsConnectedRef.current = false;
       setIsWsConnected(false);
       return;
     }
@@ -545,12 +599,18 @@ export const OverviewPage = () => {
             const sId = normalizeServiceName(bp.service_id);
             if (!sId) return;
 
-            setBatchProgressMap((prev) => ({
-              ...prev,
-              [sId]: bp,
-            }));
+            lastWsBatchAtRef.current[sId] = Date.now();
 
-            if (bp.active_step) {
+            setBatchProgressMap((prev) => {
+              const cur = prev[sId];
+              if (cur && cur.active_step === bp.active_step && cur.collected === bp.collected && cur.status === bp.status) {
+                return prev;
+              }
+              return { ...prev, [sId]: bp };
+            });
+
+            if (bp.active_step && lastStepSigRef.current[sId] !== bp.active_step) {
+              lastStepSigRef.current[sId] = bp.active_step;
               setServiceStepMap((prev) => ({
                 ...prev,
                 [sId]: bp.active_step,
@@ -558,25 +618,16 @@ export const OverviewPage = () => {
             }
 
             if (Array.isArray(bp.points) && bp.points.length > 0) {
-              const directInputs = [];
-              bp.points.forEach((pt, idx) => {
-                const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
-                for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx', 'pod_restart_count', 'replica_count']) {
-                  if (pt[mName] !== undefined) {
-                    directInputs.push({
-                      id: `live-${sId}-${idx}-${mName}`,
-                      metric_name: mName === 'http_5xx_rate' ? 'error_5xx' : mName,
-                      metric_value: pt[mName],
-                      collected_at: ts,
-                    });
-                  }
+              const sig = buildSequenceSignature(bp.points);
+              if (sig !== lastWsPointsSigRef.current[sId]) {
+                lastWsPointsSigRef.current[sId] = sig;
+                const directInputs = mapSequenceToInputs(bp.points, `live-${sId}`);
+                if (directInputs.length > 0) {
+                  setServiceInputsMap((prev) => ({
+                    ...prev,
+                    [sId]: directInputs,
+                  }));
                 }
-              });
-              if (directInputs.length > 0) {
-                setServiceInputsMap((prev) => ({
-                  ...prev,
-                  [sId]: directInputs,
-                }));
               }
             }
           }
@@ -606,26 +657,18 @@ export const OverviewPage = () => {
             });
 
             if (Array.isArray(newPred.sequence) && newPred.sequence.length >= 12) {
-              const directInputs = [];
-              newPred.sequence.forEach((pt, idx) => {
-                const ts = pt.time_bucket ? new Date(pt.time_bucket).toISOString() : new Date().toISOString();
-                for (const mName of ['cpu', 'ram', 'disk', 'latency', 'request_rate', 'http_5xx_rate', 'error_5xx', 'pod_restart_count', 'replica_count']) {
-                  if (pt[mName] !== undefined) {
-                    directInputs.push({
-                      id: `ws-${predId}-${idx}-${mName}`,
-                      prediction_id: predId,
-                      metric_name: mName === 'http_5xx_rate' ? 'error_5xx' : mName,
-                      metric_value: pt[mName],
-                      collected_at: ts,
-                    });
-                  }
+              const sig = buildSequenceSignature(newPred.sequence);
+              if (sig !== lastWsPointsSigRef.current[wlName]) {
+                lastWsPointsSigRef.current[wlName] = sig;
+                const directInputs = mapSequenceToInputs(newPred.sequence, `ws-${predId}`, {
+                  prediction_id: predId,
+                });
+                if (directInputs.length > 0) {
+                  setServiceInputsMap((prev) => ({
+                    ...prev,
+                    [wlName]: directInputs,
+                  }));
                 }
-              });
-              if (directInputs.length > 0) {
-                setServiceInputsMap((prev) => ({
-                  ...prev,
-                  [wlName]: directInputs,
-                }));
               }
             }
           }
@@ -723,7 +766,10 @@ export const OverviewPage = () => {
             }
           }
         },
-        (connected) => setIsWsConnected(connected),
+        (connected) => {
+          isWsConnectedRef.current = connected;
+          setIsWsConnected(connected);
+        },
         clusterParam
       );
     } catch (e) {
@@ -904,7 +950,9 @@ export const OverviewPage = () => {
     });
   }, [timesteps, METRIC_CONFIGS]);
 
-  const currentActiveStep = isClusterOnline ? (serviceStepMap[currentServiceTarget] || 12) : 0;
+  const currentActiveStep = isClusterOnline
+    ? (serviceStepMap[currentServiceTarget] ?? (timesteps.length > 0 ? Math.min(timesteps.length, 12) : 12))
+    : 0;
 
   // Quy mô Pods & Nodes thực tế của Service đang chọn (kiểm tra chặt chẽ vị trí Pod trên từng Node)
   const currentServiceMetadata = useMemo(() => {
