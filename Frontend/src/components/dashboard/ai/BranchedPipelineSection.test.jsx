@@ -503,4 +503,71 @@ describe('Diagram 2 Branched Pipeline Architecture (Full 01->03 + 4 Agents -> 16
 
     expect(screen.getByText(/T1 \(Đủ 12 bước -> AI\)/i)).toBeInTheDocument();
   });
+
+  test('toggles between SVG chart and 12-step realtime table on click while preserving metric filters', () => {
+    const timesteps = Array.from({ length: 12 }, (_, idx) => ({
+      stepLabel: `T${idx + 1}`,
+      displayTime: `12:41:${String(10 + idx).padStart(2, '0')}`,
+      cpu: 2 + idx * 0.2,
+      ram: 51,
+      disk: 12,
+      latency: 8 + idx,
+      request_rate: 0.4,
+      http_5xx_rate: 0,
+      pod_restart_count: 0,
+      replica_count: 2,
+    }));
+
+    render(
+      <AIPipelineFlowCanvas
+        selectedService="ecommerce-store-app"
+        isAgentConnected={true}
+        isFullScreen={true}
+        showExtendedPipeline={true}
+        defaultViewMode="gru"
+        podCount={2}
+        currentActiveStep={4}
+        totalSteps={12}
+        timesteps={timesteps}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('switch-diagram-2'));
+    fireEvent.click(screen.getByTestId('d2-toggle-all-btn'));
+
+    // Mặc định hiển thị biểu đồ SVG, chưa hiện bảng realtime
+    expect(screen.getByTestId('d2-chart-view')).toBeInTheDocument();
+    expect(screen.queryByTestId('d2-table-view')).not.toBeInTheDocument();
+
+    // Click trực tiếp lên vùng biểu đồ -> ẩn biểu đồ, đổi sang bảng 12 bước realtime
+    fireEvent.click(screen.getByTestId('d2-chart-view'));
+    expect(screen.queryByTestId('d2-chart-view')).not.toBeInTheDocument();
+    const tableView = screen.getByTestId('d2-table-view');
+    expect(tableView).toBeInTheDocument();
+    expect(tableView.textContent).toContain('Mốc');
+    expect(tableView.textContent).toContain('Thời điểm');
+    expect(tableView.textContent).toContain('12:41:10');
+    expect(tableView.textContent).toContain('4.2%');
+
+    // Click thẻ Metric Input bên trái (Latency) trong lúc đang xem bảng -> đánh dấu cột Latency nhưng giữ nguyên chế độ bảng
+    fireEvent.click(screen.getByTestId('d2-metric-latency'));
+    expect(screen.getByTestId('d2-table-view')).toBeInTheDocument();
+    expect(screen.getByTestId('d2-metric-readout').textContent).toMatch(/19(?:\.0)?\s*ms/i);
+    expect(screen.getByTestId('d2-m-latency')).toHaveAttribute('data-active', 'true');
+
+    // Click trực tiếp vào bảng -> ẩn bảng, quay lại biểu đồ SVG
+    fireEvent.click(screen.getByTestId('d2-table-view'));
+    expect(screen.getByTestId('d2-chart-view')).toBeInTheDocument();
+    expect(screen.queryByTestId('d2-table-view')).not.toBeInTheDocument();
+
+    // Click nút chuyển chế độ trên thanh điều khiển cũng đổi qua lại biểu đồ <-> bảng
+    fireEvent.click(screen.getByTestId('d2-view-toggle-btn'));
+    expect(screen.getByTestId('d2-table-view')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('d2-view-toggle-btn'));
+    expect(screen.getByTestId('d2-chart-view')).toBeInTheDocument();
+
+    // Click nút Tất cả (8) -> trở về hiển thị cả 8 chỉ số
+    fireEvent.click(screen.getByTestId('d2-metric-pill-all'));
+    expect(screen.getByTestId('d2-metric-readout').textContent).toMatch(/Nhấn biểu đồ/i);
+  });
 });

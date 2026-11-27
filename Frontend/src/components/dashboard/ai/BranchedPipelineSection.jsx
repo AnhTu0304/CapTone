@@ -19,6 +19,7 @@ import {
   normalizeActionCodeForBranch,
   normalizeCauseCodeFromText,
 } from './BranchedPipelineCatalog';
+import TelemetryHubChart from './TelemetryHubChart';
 
 export const buildD2BranchesState = (expandAll) => ({
   telemetry: Boolean(expandAll),
@@ -120,9 +121,11 @@ export const BranchedPipelineSection = ({
   riskNodes = [],
   effectiveTimesteps = [],
   chartMaxY = 100,
-  yTicks = [0, 25, 50, 75, 100],
   activeSweepIdx = 0,
   currentStepLabel = 'T1',
+  selectedMetricKey = null,
+  onSelectMetricKey,
+  onCycleMetricKey,
   prediction = null,
   rawRiskScore = 0,
   isPredictionHealthy = true,
@@ -518,23 +521,8 @@ export const BranchedPipelineSection = ({
   const FEEDBACK_ESCALATE_Y = LOWEST_D2_Y + 84;
 
   // ==========================================
-  // 3. HELPER BIỂU ĐỒ & TÍN HIỆU
+  // 3. HELPER TÍN HIỆU METRIC / RULE / RISK
   // ==========================================
-  const miniChartW = 396;
-  const miniChartH = 195;
-  const chartPad = { top: 26, right: 12, bottom: 22, left: 28 };
-  const innerW = miniChartW - chartPad.left - chartPad.right;
-  const innerH = miniChartH - chartPad.top - chartPad.bottom;
-  const getMiniX = (index) => {
-    const total = Math.max(effectiveTimesteps.length - 1, 1);
-    return chartPad.left + (index / total) * innerW;
-  };
-  const getMiniY = (value) => {
-    const clamped = Math.max(0, Math.min(value, chartMaxY));
-    return chartPad.top + innerH - (clamped / chartMaxY) * innerH;
-  };
-  const sweepTargetX = getMiniX(activeSweepIdx);
-
   const liveCpuVal = parseFloat(liveMetrics.cpu?.latest) || 0;
   const liveRamVal = parseFloat(liveMetrics.ram?.latest) || 0;
   const liveLatVal = parseFloat(liveMetrics.latency?.latest) || 0;
@@ -580,11 +568,14 @@ export const BranchedPipelineSection = ({
         const ey = Math.round(HUB_Y + 42 + idx * ((HUB_H - 84) / Math.max(metricConfigs.length - 1, 1)));
         const mx = sx + (HUB_X - sx) * 0.5;
         const mState = effectiveMetricState(cfg);
+        const isFocused = selectedMetricKey === cfg.key;
+        const isDimmed = Boolean(selectedMetricKey) && !isFocused;
         return {
           id: `d2-m-${cfg.key}`,
           pathD: `M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${HUB_X} ${ey}`,
-          active: mState.isWarning,
-          animating: isAgentConnected || isSimulating,
+          active: mState.isWarning || isFocused,
+          animating: (isAgentConnected || isSimulating) && !isDimmed,
+          idleOpacity: isDimmed ? 0.28 : undefined,
           color: mState.isWarning ? '#EF4444' : cfg.color,
         };
       })
@@ -592,7 +583,7 @@ export const BranchedPipelineSection = ({
         {
           id: 'd2-m-compact',
           pathD: `M ${M_X + M_W} ${D2_MID_Y} C ${M_X + M_W + 35} ${D2_MID_Y}, ${HUB_X - 35} ${HUB_Y + HUB_H / 2}, ${HUB_X} ${HUB_Y + HUB_H / 2}`,
-          active: warningMetricItemsCount > 0,
+          active: warningMetricItemsCount > 0 || Boolean(selectedMetricKey),
           animating: isAgentConnected || isSimulating,
           color: warningMetricItemsCount > 0 ? '#F59E0B' : '#10B981',
         },
@@ -1533,20 +1524,51 @@ export const BranchedPipelineSection = ({
           const mState = effectiveMetricState(cfg);
           const IconComp = cfg.icon;
           const nodeY = M_START_Y + idx * (M_H + M_GAP);
+          const isFocusedMetric = selectedMetricKey === cfg.key;
 
           return (
-            <div key={cfg.key} data-testid={`d2-metric-${cfg.key}`} style={{ position: 'absolute', left: `${M_X}px`, top: `${nodeY}px`, width: `${M_W}px`, height: `${M_H}px`, backgroundColor: mState.isSimTriggered ? '#FEF2F2' : '#FFFFFF', borderRadius: '9px', border: `1.5px solid ${mState.isWarning ? '#EF4444' : '#E2E8F0'}`, boxShadow: mState.isWarning ? '0 4px 12px rgba(239, 68, 68, 0.16)' : '0 2px 8px rgba(15, 23, 42, 0.04)', display: 'flex', alignItems: 'center', padding: '0 9px', gap: '8px', zIndex: 10 }}>
+            <div
+              key={cfg.key}
+              data-testid={`d2-metric-${cfg.key}`}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => onSelectMetricKey && onSelectMetricKey(isFocusedMetric ? null : cfg.key)}
+              title={t('pipeline.canvas.aiHub.clickToCycleHint')}
+              style={{
+                position: 'absolute',
+                left: `${M_X}px`,
+                top: `${nodeY}px`,
+                width: `${M_W}px`,
+                height: `${M_H}px`,
+                backgroundColor: isFocusedMetric ? cfg.bgColor : mState.isSimTriggered ? '#FEF2F2' : '#FFFFFF',
+                borderRadius: '9px',
+                border: `${isFocusedMetric ? '2px' : '1.5px'} solid ${isFocusedMetric ? cfg.color : mState.isWarning ? '#EF4444' : '#E2E8F0'}`,
+                boxShadow: isFocusedMetric
+                  ? `0 6px 16px ${cfg.color}30`
+                  : mState.isWarning
+                    ? '0 4px 12px rgba(239, 68, 68, 0.16)'
+                    : '0 2px 8px rgba(15, 23, 42, 0.04)',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 9px',
+                gap: '8px',
+                zIndex: isFocusedMetric ? 14 : 10,
+                cursor: 'pointer',
+                transition: 'border-color 0.15s, box-shadow 0.15s, background-color 0.15s',
+              }}
+            >
               <div style={{ width: '28px', height: '28px', borderRadius: '7px', backgroundColor: cfg.bgColor, border: `1px solid ${cfg.borderColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: cfg.color }}>
                 <IconComp size={15} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.52rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase' }}>Metric Input</div>
+                <div style={{ fontSize: '0.52rem', fontWeight: 700, color: isFocusedMetric ? cfg.color : '#94A3B8', textTransform: 'uppercase' }}>
+                  {isFocusedMetric ? 'Đang lọc biểu đồ' : 'Metric Input'}
+                </div>
                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cfg.label}</div>
                 <div style={{ fontSize: '0.6rem', fontFamily: 'var(--font-mono)', color: mState.isWarning ? '#DC2626' : '#64748B' }}>
                   {mState.isSimTriggered ? t('pipeline.branched.metricSimTriggered') : `${mState.latest} ${cfg.unit} • ${t('predictions.telemetryChart.avgShort')} ${mState.avg}`}
                 </div>
               </div>
-              <div style={{ position: 'absolute', right: '-7px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', borderRadius: '50%', backgroundColor: '#FFFFFF', border: `2px solid ${mState.isWarning ? '#EF4444' : '#94A3B8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#64748B' }}>+</div>
+              <div style={{ position: 'absolute', right: '-7px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', borderRadius: '50%', backgroundColor: isFocusedMetric ? cfg.color : '#FFFFFF', border: `2px solid ${isFocusedMetric ? cfg.color : mState.isWarning ? '#EF4444' : '#94A3B8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: isFocusedMetric ? '#FFFFFF' : '#64748B' }}>+</div>
             </div>
           );
         })
@@ -1589,91 +1611,21 @@ export const BranchedPipelineSection = ({
           </span>
         </div>
 
-        <div style={{ position: 'relative', width: `${miniChartW}px`, height: `${miniChartH}px`, margin: '6px auto 0 auto', backgroundColor: '#FFFFFF', borderRadius: '8px' }}>
-          <svg viewBox={`0 0 ${miniChartW} ${miniChartH}`} style={{ width: '100%', height: '100%', display: 'block' }}>
-            <defs>
-              {metricConfigs.map((cfg) => (
-                <linearGradient key={`d2-grad-${cfg.key}`} id={`d2-mini-grad-${cfg.key}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={cfg.color} stopOpacity="0.28" />
-                  <stop offset="100%" stopColor={cfg.color} stopOpacity="0.0" />
-                </linearGradient>
-              ))}
-            </defs>
-
-            {yTicks.map((val) => {
-              const y = getMiniY(val);
-              return (
-                <g key={`d2-y-${val}`}>
-                  <line x1={chartPad.left} y1={y} x2={chartPad.left + innerW} y2={y} stroke="#F1F5F9" strokeWidth="1" strokeDasharray="3 3" />
-                  <text x={chartPad.left - 5} y={y + 3} fill="#94A3B8" fontSize="8" fontFamily="var(--font-mono)" textAnchor="end">{val}</text>
-                </g>
-              );
-            })}
-
-            {chartMaxY >= 80 && (
-              <g>
-                <line x1={chartPad.left} y1={getMiniY(80)} x2={chartPad.left + innerW} y2={getMiniY(80)} stroke="#EF4444" strokeWidth="1.2" strokeDasharray="4 3" />
-                <text x={chartPad.left + innerW + 4} y={getMiniY(80) + 3} fill="#EF4444" fontSize="7.5" fontWeight="700" fontFamily="var(--font-mono)">80%</text>
-              </g>
-            )}
-
-            {effectiveTimesteps.length > 0 && metricConfigs.map((cfg) => {
-              const points = effectiveTimesteps.map((t, i) => {
-                const val = Number(t[cfg.key] ?? (cfg.key === 'http_5xx_rate' ? t.error_5xx : undefined) ?? (cfg.key === 'pod_restart_count' ? t.restarts : undefined) ?? (cfg.key === 'replica_count' ? (t.replicas ?? podCount ?? 1) : undefined) ?? 0);
-                return { x: getMiniX(i), y: getMiniY(val) };
-              });
-              if (points.length < 2) return null;
-              const lineD = points.reduce((acc, p, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`, '');
-              const areaD = `${lineD} L ${points[points.length - 1].x} ${getMiniY(0)} L ${points[0].x} ${getMiniY(0)} Z`;
-              return (
-                <g key={`d2-series-${cfg.key}`}>
-                  <path d={areaD} fill={`url(#d2-mini-grad-${cfg.key})`} />
-                  <path d={lineD} fill="none" stroke={cfg.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                  {points.map((p, pIdx) => (
-                    <circle key={`d2-pt-${cfg.key}-${pIdx}`} cx={p.x} cy={p.y} r="2.5" fill="#FFFFFF" stroke={cfg.color} strokeWidth="1.2" />
-                  ))}
-                </g>
-              );
-            })}
-
-            {isAgentConnected && effectiveTimesteps.length > 0 && (
-              <g
-                style={{
-                  transform: `translateX(${sweepTargetX}px)`,
-                  transition: activeSweepIdx >= Math.max(effectiveTimesteps.length - 1, 0) ? 'none' : 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
-                }}
-              >
-                <line x1={0} y1={chartPad.top} x2={0} y2={chartPad.top + innerH} stroke="#2563EB" strokeWidth="1.5" strokeDasharray="3 2" />
-                <circle
-                  cx={0}
-                  cy={getMiniY(Number(effectiveTimesteps[activeSweepIdx]?.latency || effectiveTimesteps[activeSweepIdx]?.ram || 50))}
-                  r="4.5"
-                  fill="#2563EB"
-                  stroke="#FFFFFF"
-                  strokeWidth="2"
-                  style={{ transition: 'cy 0.25s ease-out' }}
-                />
-                <text
-                  x={0}
-                  y={chartPad.top - 8}
-                  fill="#2563EB"
-                  fontSize="8.5"
-                  fontWeight="800"
-                  fontFamily="var(--font-mono)"
-                  textAnchor={activeSweepIdx >= Math.max(effectiveTimesteps.length - 2, 1) ? 'end' : activeSweepIdx <= 1 ? 'start' : 'middle'}
-                >
-                  {currentStepLabel} ({activeSweepIdx === 0 ? t('pipeline.canvas.aiHub.enough12') : t('pipeline.canvas.aiHub.newHead')})
-                </text>
-              </g>
-            )}
-
-            {effectiveTimesteps.map((t, i) => (
-              <text key={`d2-step-${i}`} x={getMiniX(i)} y={chartPad.top + innerH + 15} fill={i === activeSweepIdx ? '#2563EB' : '#64748B'} fontSize={i === activeSweepIdx ? '9' : '8'} fontWeight={i === activeSweepIdx ? '800' : '500'} fontFamily="var(--font-mono)" textAnchor="middle">
-                {t.stepLabel || `T${i + 1}`}
-              </text>
-            ))}
-          </svg>
-        </div>
+        <TelemetryHubChart
+          variantPrefix="d2"
+          width={396}
+          height={176}
+          metricConfigs={metricConfigs}
+          effectiveTimesteps={effectiveTimesteps}
+          podCount={podCount}
+          isAgentConnected={isAgentConnected}
+          activeSweepIdx={activeSweepIdx}
+          currentStepLabel={currentStepLabel}
+          baseChartMaxY={chartMaxY}
+          selectedMetricKey={selectedMetricKey}
+          onSelectMetricKey={onSelectMetricKey}
+          onCycleMetricKey={onCycleMetricKey}
+        />
 
         <div style={{ padding: '10px 14px', textAlign: 'center', borderTop: '1px solid #F1F5F9', marginTop: 'auto', backgroundColor: '#FAFAFA' }}>
           <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>{t('pipeline.canvas.aiHub.analyzeFooter', { service: selectedService })}</div>

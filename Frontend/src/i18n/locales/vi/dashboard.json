@@ -879,7 +879,18 @@
         "newHead": "Đầu gom mới",
         "analyzeFooter": "AI to Analyze {{service}} & Assess Health",
         "optScore": "Chỉ số tối ưu:",
-        "riskScore": "Điểm rủi ro tổng:"
+        "riskScore": "Điểm rủi ro tổng:",
+        "filterAll": "Tất cả (8)",
+        "clickToCycleHint": "Nhấn biểu đồ để xem bảng realtime • Chọn thẻ lọc Metric",
+        "clickTableToChartHint": "Nhấn bảng để quay lại biểu đồ • Dữ liệu {{steps}} bước",
+        "viewChartBtn": "Biểu đồ",
+        "viewTableBtn": "Bảng realtime",
+        "tableColStep": "Mốc",
+        "tableColTime": "Thời điểm",
+        "tableColLatency": "Độ trễ",
+        "tableNoData": "Chưa có dữ liệu 12 bước realtime",
+        "metricReadout": "Hiện tại: {{latest}} {{unit}} • TB: {{avg}} • Đỉnh: {{max}}",
+        "thresholdLabel": "Ngưỡng: {{val}}{{unit}}"
       },
       "risks": {
         "threshold": "Ngưỡng: {{pct}}%",
