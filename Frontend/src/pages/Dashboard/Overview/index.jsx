@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Sliders,
   ChevronDown,
+  ChevronUp,
   Cpu,
   Database,
   HardDrive,
@@ -142,6 +143,22 @@ export const OverviewPage = () => {
   const [nodeTelemetry, setNodeTelemetry] = useState(null);
   const [clusterOpenIncidents, setClusterOpenIncidents] = useState(null);
   const [scaleMode, setScaleMode] = useState('standard');
+  const [isKpiCollapsed, setIsKpiCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('overview_kpi_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const handleToggleKpiBar = useCallback(() => {
+    setIsKpiCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('overview_kpi_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
   const [isLoading, setIsLoading] = useState(false);
   const [isWsConnected, setIsWsConnected] = useState(false);
   const isFetchingRef = useRef(false);
@@ -1950,11 +1967,26 @@ export const OverviewPage = () => {
           zIndex: 25,
           display: 'flex',
           flexDirection: 'column',
-          gap: '8px',
+          gap: isKpiCollapsed ? '4px' : '8px',
           pointerEvents: 'none',
         }}
       >
-        {/* Hàng 1: 8 Thẻ KPI Hạ tầng & Tự phục hồi thiết kế gọn đẹp, nổi trên nền lưới chấm */}
+        {/* Hàng 1: 8 Thẻ KPI Hạ tầng & Tự phục hồi có thể ẩn lên trên / sổ xuống */}
+        <div
+          className="overview-kpi-collapsible"
+          data-testid="overview-kpi-collapsible"
+          aria-hidden={isKpiCollapsed}
+          style={{
+            maxHeight: isKpiCollapsed ? '0px' : '460px',
+            opacity: isKpiCollapsed ? 0 : 1,
+            transform: isKpiCollapsed ? 'translateY(-10px)' : 'translateY(0)',
+            overflow: 'hidden',
+            padding: isKpiCollapsed ? '0px' : '2px 2px 10px 2px',
+            margin: isKpiCollapsed ? '0px' : '-2px -2px -10px -2px',
+            pointerEvents: isKpiCollapsed ? 'none' : 'auto',
+            transition: 'max-height 0.24s ease, opacity 0.18s ease, transform 0.24s ease',
+          }}
+        >
         <div
           className="dashboard-kpi-grid"
           style={{
@@ -2148,8 +2180,9 @@ export const OverviewPage = () => {
             );
           })}
         </div>
+        </div>
 
-        {/* Hàng 2: Thanh thông số Pod/WebSocket & Bộ điều khiển Dịch vụ nằm gọn phía dưới 8 thẻ KPI */}
+        {/* Hàng 2: Thanh thông số Pod/WebSocket, nút Ẩn/Sổ KPI & Bộ điều khiển Dịch vụ nằm gọn phía dưới 8 thẻ KPI */}
         <div
           className="overview-controls-row"
           style={{
@@ -2160,23 +2193,33 @@ export const OverviewPage = () => {
             gap: '8px',
           }}
         >
-          {/* Left Floating Status Pill: Trạng thái LIVE + Pod/Node */}
+          {/* Nhóm trái: Trạng thái LIVE + Pod/Node + Nút Ẩn/Sổ dải 8 KPI ngay bên cạnh */}
           <div
-            className="overview-controls-left"
             style={{
-              pointerEvents: 'auto',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
-              padding: '4px 10px',
-              borderRadius: '11px',
-              backgroundColor: 'rgba(255, 255, 255, 0.94)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(226, 232, 240, 0.95)',
-              boxShadow: '0 3px 12px rgba(15, 23, 42, 0.045)',
+              flexWrap: 'wrap',
+              pointerEvents: 'none',
             }}
           >
+            {/* Left Floating Status Pill: Trạng thái LIVE + Pod/Node */}
+            <div
+              className="overview-controls-left"
+              style={{
+                pointerEvents: 'auto',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '4px 10px',
+                borderRadius: '11px',
+                backgroundColor: 'rgba(255, 255, 255, 0.94)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                border: '1px solid rgba(226, 232, 240, 0.95)',
+                boxShadow: '0 3px 12px rgba(15, 23, 42, 0.045)',
+              }}
+            >
             <span
               style={{
                 fontSize: '0.73rem',
@@ -2282,6 +2325,56 @@ export const OverviewPage = () => {
                 </span>
               )}
             </span>
+          </div>
+
+            {/* Nút Ẩn lên trên / Sổ xuống cho dải 8 thẻ KPI đặt ngay bên cạnh cụm Live/Pod */}
+            <button
+              type="button"
+              data-testid="overview-kpi-toggle-btn"
+              onClick={handleToggleKpiBar}
+              aria-expanded={!isKpiCollapsed}
+              aria-label={isKpiCollapsed ? t('overview.kpi.expandTopBar') : t('overview.kpi.collapseTopBar')}
+              title={isKpiCollapsed ? t('overview.kpi.expandTopBar') : t('overview.kpi.collapseTopBar')}
+              style={{
+                pointerEvents: 'auto',
+                height: '28px',
+                minWidth: isKpiCollapsed ? 'auto' : '28px',
+                padding: isKpiCollapsed ? '0 11px' : '0',
+                borderRadius: '999px',
+                backgroundColor: '#059669',
+                color: '#FFFFFF',
+                border: '2px solid #FFFFFF',
+                boxShadow: '0 2px 8px rgba(5, 150, 105, 0.28)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                flexShrink: 0,
+                transition: 'transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.06)';
+                e.currentTarget.style.backgroundColor = '#047857';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(5, 150, 105, 0.38)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.backgroundColor = '#059669';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(5, 150, 105, 0.28)';
+              }}
+            >
+              {isKpiCollapsed ? (
+                <>
+                  <ChevronDown size={14} strokeWidth={2.8} />
+                  <span>{t('overview.kpi.expandTopBarShort')}</span>
+                </>
+              ) : (
+                <ChevronUp size={15} strokeWidth={2.8} />
+              )}
+            </button>
           </div>
 
           {/* Right Floating Controls Pill: Dịch vụ Dropdown + Thang đo + Làm mới */}
@@ -2448,7 +2541,7 @@ export const OverviewPage = () => {
           isFullScreen={true}
           showExtendedPipeline={true}
           defaultViewMode="gru"
-          topSafePadding={126}
+          topSafePadding={isKpiCollapsed ? 48 : 126}
           pipelineContext={isClusterOnline ? pipelineContext : null}
           podCount={isClusterOnline ? currentServiceMetadata.pods : 0}
           onNavigate={onNavigate}

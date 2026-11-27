@@ -261,7 +261,10 @@
       "hitlPending": "Chờ Duyệt HITL",
       "needsApproval": "Cần phê duyệt",
       "noPending": "Không có chờ duyệt",
-      "viewDetails": "Xem chi tiết {{label}}"
+      "viewDetails": "Xem chi tiết {{label}}",
+      "collapseTopBar": "Ẩn thanh chỉ số lên trên",
+      "expandTopBar": "Sổ thanh chỉ số cụm xuống",
+      "expandTopBarShort": "Chỉ số cụm (8)"
     },
     "controls": {
       "live": "LIVE",

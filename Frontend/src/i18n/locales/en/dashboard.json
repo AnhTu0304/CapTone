@@ -261,7 +261,10 @@
       "hitlPending": "Pending HITL",
       "needsApproval": "Approval needed",
       "noPending": "No pending approvals",
-      "viewDetails": "View {{label}} details"
+      "viewDetails": "View {{label}} details",
+      "collapseTopBar": "Collapse cluster KPI bar",
+      "expandTopBar": "Expand cluster KPI bar",
+      "expandTopBarShort": "Cluster KPIs (8)"
     },
     "controls": {
       "live": "LIVE",
