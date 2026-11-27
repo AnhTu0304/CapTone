@@ -15,7 +15,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       POSTGRES_DB: ${DB_NAME:-captone_db}
     ports:
-      - "${DB_PORT:-5433}:5432"
+      - "${DB_BIND_HOST:-127.0.0.1}:${DB_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     security_opt:
