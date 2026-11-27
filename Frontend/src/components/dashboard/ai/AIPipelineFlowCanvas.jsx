@@ -5,6 +5,7 @@ import BranchedPipelineSection, {
   Diagram2BranchControls,
   buildD2BranchesState,
 } from './BranchedPipelineSection';
+import TelemetryHubChart from './TelemetryHubChart';
 import AIPipelineMobileVerticalFlow from './AIPipelineMobileVerticalFlow';
 import {
   translateIncidentTitle,
@@ -217,6 +218,7 @@ export const AIPipelineFlowCanvas = ({
 
   const [d2SimulatedCause, setD2SimulatedCause] = useState(null);
   const [d2VerifyOutcome, setD2VerifyOutcome] = useState('auto');
+  const [selectedMetricKey, setSelectedMetricKey] = useState(null);
   const d1AllBranchesExpanded =
     expandedGroups.telemetry && expandedGroups.rule && expandedGroups.risks && expandedGroups.branches;
   const activeDiagramAllExpanded = activeDiagram === 'diagram2' ? d2AllBranchesExpanded : d1AllBranchesExpanded;
@@ -1964,15 +1966,6 @@ export const AIPipelineFlowCanvas = ({
   const activeInspectorData = activeInspector ? getInspectorContent(activeInspector.id) : null;
   const isInspectorPinned = Boolean(pinnedInspector);
 
-  // ==========================================
-  // THUẬT TOÁN VẼ MINI TELEMETRY WAVEFORM CHART (T1..T12)
-  // ==========================================
-  const miniChartW = 414;
-  const miniChartH = 195;
-  const chartPad = { top: 26, right: 12, bottom: 22, left: 28 };
-  const innerW = miniChartW - chartPad.left - chartPad.right;
-  const innerH = miniChartH - chartPad.top - chartPad.bottom;
-
   // Chuẩn bị danh sách 12 bước thời gian: khi mất kết nối Agent / Cụm trả toàn bộ bằng 0 (không vẽ sóng giả!)
   const effectiveTimesteps = useMemo(() => {
     if (!isAgentConnected) {
@@ -1990,7 +1983,6 @@ export const AIPipelineFlowCanvas = ({
       }));
     }
     if (timesteps && timesteps.length >= 2) return timesteps;
-    // Khi đang kết nối nhưng chưa gom đủ mẫu ban đầu -> đường nền bằng 0 trung thực
     return Array.from({ length: 12 }, (_, i) => ({
       stepLabel: `T${i + 1}`,
       cpu: parseFloat(liveMetrics.cpu?.latest) || 0,
@@ -2005,7 +1997,7 @@ export const AIPipelineFlowCanvas = ({
     }));
   }, [isAgentConnected, timesteps, liveMetrics, podCount]);
 
-  // Tính Y max & Ticks cho biểu đồ mini
+  // Tính Y max tổng quát cho chế độ xem cả 8 Metric
   const chartMaxY = useMemo(() => {
     if (scaleMode === 'standard') return 100;
     let maxFound = 100;
@@ -2018,25 +2010,26 @@ export const AIPipelineFlowCanvas = ({
     return Math.ceil(maxFound * 1.08);
   }, [scaleMode, effectiveTimesteps, METRIC_CONFIGS]);
 
-  const yTicks = useMemo(() => [0, 25, 50, 75, 100], []);
-
-  const getMiniX = (index) => {
-    const total = Math.max(effectiveTimesteps.length - 1, 1);
-    return chartPad.left + (index / total) * innerW;
-  };
-
-  const getMiniY = (value) => {
-    const clamped = Math.max(0, Math.min(value, chartMaxY));
-    return chartPad.top + innerH - (clamped / chartMaxY) * innerH;
-  };
-
   // Tính toán cột quét viễn trắc (Sweep bar): dữ liệu chèn vào T12 (phải) và trôi sang trái -> kim quét đi cùng chiều T12 -> T1
   const totalStepsCount = effectiveTimesteps.length || 12;
   const activeSweepIdx = (totalStepsCount - 1) - Math.min(Math.max((currentActiveStep || 1) - 1, 0), totalStepsCount - 1);
-  const sweepTargetX = getMiniX(activeSweepIdx);
   const currentStepLabel = effectiveTimesteps[activeSweepIdx]?.stepLabel || `T${activeSweepIdx + 1}`;
-  const isSweepWrapReset = activeSweepIdx === totalStepsCount - 1;
-  const isBatchCompleteStep = activeSweepIdx === 0;
+
+  const handleSelectMetricKey = useCallback((nextKey) => {
+    didDragRef.current = false;
+    setSelectedMetricKey(nextKey || null);
+  }, []);
+
+  const handleCycleMetricKey = useCallback(() => {
+    didDragRef.current = false;
+    setSelectedMetricKey((prev) => {
+      if (!METRIC_CONFIGS.length) return null;
+      if (!prev) return METRIC_CONFIGS[0].key;
+      const idx = METRIC_CONFIGS.findIndex((m) => m.key === prev);
+      if (idx === -1 || idx === METRIC_CONFIGS.length - 1) return null;
+      return METRIC_CONFIGS[idx + 1].key;
+    });
+  }, [METRIC_CONFIGS]);
 
   const handleToggleD2Telemetry = useCallback((e) => {
     if (e) e.stopPropagation();
@@ -2804,7 +2797,10 @@ export const AIPipelineFlowCanvas = ({
                 setHoveredNode(null);
                 handleInspectorLeave(`metric:${cfg.key}`);
               }}
-              onClick={(e) => handleInspectorClick(e, `metric:${cfg.key}`)}
+              onClick={(e) => {
+                handleSelectMetricKey(selectedMetricKey === cfg.key ? null : cfg.key);
+                handleInspectorClick(e, `metric:${cfg.key}`);
+              }}
               style={{
                 position: 'absolute',
                 left: `${LEFT_X}px`,
@@ -3057,192 +3053,22 @@ export const AIPipelineFlowCanvas = ({
             </span>
           </div>
 
-          {/* VÙNG CHÍNH: BIỂU ĐỒ SÓNG VIỄN TRẮC NHỎ LẠI ĐƯỢC ĐƯA VÀO VỪA VẶN KHUNG TRUNG TÂM */}
-          <div
-            style={{
-              position: 'relative',
-              width: `${miniChartW}px`,
-              height: `${miniChartH}px`,
-              margin: '6px auto 0 auto',
-              backgroundColor: '#FFFFFF',
-              borderRadius: '8px',
-            }}
-          >
-            <svg
-              viewBox={`0 0 ${miniChartW} ${miniChartH}`}
-              style={{ width: '100%', height: '100%', display: 'block' }}
-            >
-              <defs>
-                {METRIC_CONFIGS.map((cfg) => (
-                  <linearGradient key={`grad-${cfg.key}`} id={`mini-grad-${cfg.key}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={cfg.color} stopOpacity="0.28" />
-                    <stop offset="100%" stopColor={cfg.color} stopOpacity="0.0" />
-                  </linearGradient>
-                ))}
-              </defs>
-
-              {/* Đường kẻ ngang Y-Axis */}
-              {yTicks.map((val) => {
-                const y = getMiniY(val);
-                return (
-                  <g key={`y-${val}`}>
-                    <line
-                      x1={chartPad.left}
-                      y1={y}
-                      x2={chartPad.left + innerW}
-                      y2={y}
-                      stroke="#F1F5F9"
-                      strokeWidth="1"
-                      strokeDasharray="3 3"
-                    />
-                    <text
-                      x={chartPad.left - 5}
-                      y={y + 3}
-                      fill="#94A3B8"
-                      fontSize="8"
-                      fontFamily="var(--font-mono)"
-                      textAnchor="end"
-                    >
-                      {val}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* Đường ngưỡng cảnh báo đỏ 80% */}
-              {chartMaxY >= 80 && (
-                <g>
-                  <line
-                    x1={chartPad.left}
-                    y1={getMiniY(80)}
-                    x2={chartPad.left + innerW}
-                    y2={getMiniY(80)}
-                    stroke="#EF4444"
-                    strokeWidth="1.2"
-                    strokeDasharray="4 3"
-                  />
-                  <text
-                    x={chartPad.left + innerW + 4}
-                    y={getMiniY(80) + 3}
-                    fill="#EF4444"
-                    fontSize="7.5"
-                    fontWeight="700"
-                    fontFamily="var(--font-mono)"
-                  >
-                    80%
-                  </text>
-                </g>
-              )}
-
-              {/* Vẽ các đường sóng viễn trắc (T1..T12) */}
-              {effectiveTimesteps && effectiveTimesteps.length > 0 && METRIC_CONFIGS.map((cfg) => {
-                // Xây dựng đường Path và Gradient Area
-                const points = effectiveTimesteps.map((t, i) => {
-                  const val = Number(
-                    t[cfg.key] ??
-                    (cfg.key === 'http_5xx_rate' ? t.error_5xx : undefined) ??
-                    (cfg.key === 'pod_restart_count' ? t.restarts : undefined) ??
-                    (cfg.key === 'replica_count' ? (t.replicas ?? podCount ?? 1) : undefined) ??
-                    0
-                  );
-                  return { x: getMiniX(i), y: getMiniY(val) };
-                });
-
-                if (points.length < 2) return null;
-
-                const lineD = points.reduce((acc, p, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`, '');
-                const areaD = `${lineD} L ${points[points.length - 1].x} ${getMiniY(0)} L ${points[0].x} ${getMiniY(0)} Z`;
-
-                return (
-                  <g key={`series-${cfg.key}`}>
-                    <path d={areaD} fill={`url(#mini-grad-${cfg.key})`} />
-                    <path
-                      d={lineD}
-                      fill="none"
-                      stroke={cfg.color}
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    {points.map((p, pIdx) => (
-                      <circle
-                        key={`pt-${cfg.key}-${pIdx}`}
-                        cx={p.x}
-                        cy={p.y}
-                        r="2.5"
-                        fill="#FFFFFF"
-                        stroke={cfg.color}
-                        strokeWidth="1.2"
-                      />
-                    ))}
-                  </g>
-                );
-              })}
-
-              {/* Cột quét viễn trắc thời gian thực (chỉ hiển thị khi Agent đang ONLINE) */}
-              {isAgentConnected && effectiveTimesteps && effectiveTimesteps.length > 0 && (
-                <g
-                  style={{
-                    transform: `translateX(${sweepTargetX}px)`,
-                    transition: isSweepWrapReset ? 'none' : 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
-                  }}
-                >
-                  {/* Đường kẻ thẳng đứng nhấp nháy xanh dương */}
-                  <line
-                    x1={0}
-                    y1={chartPad.top}
-                    x2={0}
-                    y2={chartPad.top + innerH}
-                    stroke="#2563EB"
-                    strokeWidth="1.5"
-                    strokeDasharray="3 2"
-                  />
-                  {/* Điểm tròn nổi bật tại đầu gom */}
-                  <circle
-                    cx={0}
-                    cy={getMiniY(Number(effectiveTimesteps[activeSweepIdx]?.latency || effectiveTimesteps[activeSweepIdx]?.ram || 50))}
-                    r="4.5"
-                    fill="#2563EB"
-                    stroke="#FFFFFF"
-                    strokeWidth="2"
-                    style={{ filter: 'drop-shadow(0 0 4px rgba(37,99,235,0.6))', transition: 'cy 0.25s ease-out' }}
-                  />
-                  {/* Nhãn trên đầu cột quét */}
-                  <text
-                    x={0}
-                    y={chartPad.top - 8}
-                    fill="#2563EB"
-                    fontSize="8.5"
-                    fontWeight="800"
-                    fontFamily="var(--font-mono)"
-                    textAnchor={activeSweepIdx >= Math.max(totalStepsCount - 2, 1) ? 'end' : activeSweepIdx <= 1 ? 'start' : 'middle'}
-                  >
-                    {currentStepLabel} ({isBatchCompleteStep ? t('pipeline.canvas.aiHub.enough12') : t('pipeline.canvas.aiHub.newHead')})
-                  </text>
-                </g>
-              )}
-
-              {/* Nhãn trục X: T1..T12 */}
-              {effectiveTimesteps && effectiveTimesteps.length > 0 && effectiveTimesteps.map((t, i) => {
-                const x = getMiniX(i);
-                const isActive = i === activeSweepIdx;
-                return (
-                  <text
-                    key={`step-${i}`}
-                    x={x}
-                    y={chartPad.top + innerH + 15}
-                    fill={isActive ? '#2563EB' : '#64748B'}
-                    fontSize={isActive ? '9' : '8'}
-                    fontWeight={isActive ? '800' : '500'}
-                    fontFamily="var(--font-mono)"
-                    textAnchor="middle"
-                  >
-                    {t.stepLabel || `T${i + 1}`}
-                  </text>
-                );
-              })}
-            </svg>
-          </div>
+          {/* VÙNG CHÍNH: BIỂU ĐỒ SÓNG VIỄN TRẮC + CHỌN LỌC METRIC TƯƠNG TÁC */}
+          <TelemetryHubChart
+            variantPrefix="d1"
+            width={414}
+            height={176}
+            metricConfigs={METRIC_CONFIGS}
+            effectiveTimesteps={effectiveTimesteps}
+            podCount={podCount}
+            isAgentConnected={isAgentConnected}
+            activeSweepIdx={activeSweepIdx}
+            currentStepLabel={currentStepLabel}
+            baseChartMaxY={chartMaxY}
+            selectedMetricKey={selectedMetricKey}
+            onSelectMetricKey={handleSelectMetricKey}
+            onCycleMetricKey={handleCycleMetricKey}
+          />
 
           {/* Footer khối AI: Tên workload & Điểm rủi ro AI */}
           <div
@@ -4997,9 +4823,11 @@ export const AIPipelineFlowCanvas = ({
               riskNodes={ACTION_OUTCOME_NODES}
               effectiveTimesteps={effectiveTimesteps}
               chartMaxY={chartMaxY}
-              yTicks={yTicks}
               activeSweepIdx={activeSweepIdx}
               currentStepLabel={currentStepLabel}
+              selectedMetricKey={selectedMetricKey}
+              onSelectMetricKey={handleSelectMetricKey}
+              onCycleMetricKey={handleCycleMetricKey}
               prediction={prediction}
               rawRiskScore={rawRiskScore}
               isPredictionHealthy={isPredictionHealthy}

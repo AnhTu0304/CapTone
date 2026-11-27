@@ -879,7 +879,18 @@
         "newHead": "Latest sample",
         "analyzeFooter": "AI to Analyze {{service}} & Assess Health",
         "optScore": "Optimization score:",
-        "riskScore": "Overall risk score:"
+        "riskScore": "Overall risk score:",
+        "filterAll": "All (8)",
+        "clickToCycleHint": "Click chart for realtime table • Filter via pills",
+        "clickTableToChartHint": "Click table to return to chart • {{steps}} steps data",
+        "viewChartBtn": "Chart",
+        "viewTableBtn": "Realtime Table",
+        "tableColStep": "Step",
+        "tableColTime": "Time",
+        "tableColLatency": "Latency",
+        "tableNoData": "No 12-step realtime data yet",
+        "metricReadout": "Live: {{latest}} {{unit}} • Avg: {{avg}} • Peak: {{max}}",
+        "thresholdLabel": "Thresh: {{val}}{{unit}}"
       },
       "risks": {
         "threshold": "Thresh: {{pct}}%",
