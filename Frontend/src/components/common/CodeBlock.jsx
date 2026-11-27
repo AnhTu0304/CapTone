@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Check, Copy, Terminal } from 'lucide-react';
 
 export const CopyButton = ({ text, className = '' }) => {
+  const { t } = useTranslation('common');
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -18,8 +20,8 @@ export const CopyButton = ({ text, className = '' }) => {
     <button
       type="button"
       onClick={handleCopy}
-      title={copied ? 'Đã sao chép!' : 'Sao chép vào clipboard'}
-      aria-label="Sao chép mã"
+      title={copied ? t('app.copyBtn.copiedTitle') : t('app.copyBtn.copyTitle')}
+      aria-label={t('app.copyBtn.ariaLabel')}
       className={`copy-button ${className}`}
       style={{
         display: 'inline-flex',
@@ -45,7 +47,7 @@ export const CopyButton = ({ text, className = '' }) => {
       }}
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
-      <span>{copied ? 'Đã sao chép' : 'Sao chép'}</span>
+      <span>{copied ? t('app.copyBtn.copied') : t('app.copyBtn.copy')}</span>
     </button>
   );
 };

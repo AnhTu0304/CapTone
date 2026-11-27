@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { normalizeLanguage } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import { useToast } from '../../../context/ToastContext';
 import { request } from '../../../services/apiClient';
@@ -21,7 +22,8 @@ import {
 } from 'lucide-react';
 
 export const OrganizationPage = () => {
-  const { t } = useTranslation('dashAdmin');
+  const { t, i18n } = useTranslation('dashAdmin');
+  const isEnglish = normalizeLanguage(i18n.language) === 'en';
   const { currentOrg, setCurrentOrg, fetchUserOrgs } = useDashboard();
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -435,7 +437,8 @@ export const OrganizationPage = () => {
                 <MapPin size={12} /> {t('organization.contactCard.location')}
               </span>
               <span style={{ fontSize: '0.86rem', fontWeight: 600, color: '#0F172A' }}>
-                {formData.city || 'Hồ Chí Minh'}, {formData.country || 'Việt Nam'}
+                {isEnglish && (!formData.city || formData.city === 'Hồ Chí Minh') ? 'Ho Chi Minh City' : (formData.city || 'Hồ Chí Minh')},{' '}
+                {isEnglish && (!formData.country || formData.country === 'Việt Nam') ? 'Vietnam' : (formData.country || 'Việt Nam')}
               </span>
             </div>
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { usePermissions } from '../../hooks/usePermissions';
 
 /**
@@ -10,17 +11,19 @@ import { usePermissions } from '../../hooks/usePermissions';
  * @param {React.ReactNode} children - Component con được render khi đủ quyền
  * @param {React.ReactNode} [fallback=null] - Component thay thế khi không đủ quyền
  * @param {boolean} [renderDisabled=false] - Nếu true, thay vì ẩn đi thì render nút bấm ở trạng thái disabled kèm tooltip giải thích
- * @param {string} [disabledTooltip='Bạn không có quyền thực hiện thao tác này'] - Tooltip khi renderDisabled = true
+ * @param {string} [disabledTooltip] - Tooltip khi renderDisabled = true
  */
 export const PermissionGate = ({
   permission,
   children,
   fallback = null,
   renderDisabled = false,
-  disabledTooltip = 'Bạn không có quyền thực hiện thao tác này',
+  disabledTooltip,
 }) => {
+  const { t } = useTranslation('common');
   const { can } = usePermissions();
   const hasAccess = can(permission);
+  const resolvedTooltip = disabledTooltip || t('app.permissionGate.deniedTooltip');
 
   if (hasAccess) {
     return <>{children}</>;
@@ -30,7 +33,7 @@ export const PermissionGate = ({
     return React.cloneElement(children, {
       disabled: true,
       'aria-disabled': 'true',
-      title: disabledTooltip,
+      title: resolvedTooltip,
       style: {
         ...(children.props.style || {}),
         opacity: 0.5,

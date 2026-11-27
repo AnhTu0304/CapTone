@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
 import { useAuth } from '../../context/AuthContext';
 import UserProfileDropdown from '../common/UserProfileDropdown';
-import LanguageSwitcherCompact from '../common/LanguageSwitcherCompact';
 import {
   Building2,
   Users,
@@ -1125,8 +1124,6 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
             </div>
           )}
         </div>
-
-        <LanguageSwitcherCompact height="34px" />
 
         {/* User Profile Menu đồng bộ chuẩn /admin */}
         <UserProfileDropdown onNavigate={onNavigate} />

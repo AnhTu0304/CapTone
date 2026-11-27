@@ -30,7 +30,7 @@ describe('PersonalPreferencesPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Lưu Tùy Chỉnh Cá Nhân/i }));
 
     expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({ language: 'en' }));
-    expect(screen.getByText(/Đã lưu tùy chỉnh cá nhân thành công!/i)).toBeInTheDocument();
+    expect(screen.getByText(/Personal preferences saved successfully!|Đã lưu tùy chỉnh cá nhân thành công!/i)).toBeInTheDocument();
     saveSpy.mockRestore();
   });
 });

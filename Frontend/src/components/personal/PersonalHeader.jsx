@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 import { personalPortalService } from '../../services/personalPortalService';
 import UserProfileDropdown from '../common/UserProfileDropdown';
-import LanguageSwitcherCompact from '../common/LanguageSwitcherCompact';
 
 export const PersonalHeader = ({
   currentPath = '/portal',
@@ -128,8 +127,6 @@ export const PersonalHeader = ({
 
       {/* Right Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-        <LanguageSwitcherCompact height="36px" />
-
         {/* Notifications Icon Button */}
         <button
           type="button"

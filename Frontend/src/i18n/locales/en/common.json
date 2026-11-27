@@ -131,6 +131,16 @@
       "500Title": "Server Warning — 500",
       "500Message": "The server encountered an internal processing error."
     },
-    "authGuardLoading": "Verifying your session..."
+    "authGuardLoading": "Verifying your session...",
+    "copyBtn": {
+      "copiedTitle": "Copied!",
+      "copyTitle": "Copy to clipboard",
+      "ariaLabel": "Copy code",
+      "copied": "Copied",
+      "copy": "Copy"
+    },
+    "permissionGate": {
+      "deniedTooltip": "You do not have permission to perform this action"
+    }
   }
 }

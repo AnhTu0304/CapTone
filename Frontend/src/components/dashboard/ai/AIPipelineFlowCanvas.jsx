@@ -3672,7 +3672,7 @@ export const AIPipelineFlowCanvas = ({
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                      Nguyên nhân gốc (Root Cause)
+                      {t('pipeline.canvas.rcaCard.rootCauseHeader')}
                     </span>
                     {isScaleDownOptimization ? (
                       <span

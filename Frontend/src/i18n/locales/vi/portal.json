@@ -609,5 +609,9 @@
         "actionText": "Xem Danh Sách Thành Viên"
       }
     }
+  },
+  "notFound": {
+    "title": "404 — Không tìm thấy trang Cá nhân",
+    "message": "Đường dẫn \"{{path}}\" không tồn tại trong Cổng Cá Nhân."
   }
 }

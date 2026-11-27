@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import PersonalPortalLayout from '../../layouts/PersonalPortalLayout';
 import PersonalDashboardPage from './PersonalDashboardPage';
 import PersonalCompaniesPage from './PersonalCompaniesPage';
@@ -11,6 +12,7 @@ import PersonalHelpPage from './PersonalHelpPage';
 import { NotFoundPage } from '../Error/StatusPages';
 
 export const PersonalPortalPage = ({ currentPath = '/portal', onNavigate }) => {
+  const { t } = useTranslation('portal');
   const renderContent = () => {
     const rawNorm = currentPath.toLowerCase().split('?')[0].split('#')[0];
     const norm = rawNorm.length > 1 ? rawNorm.replace(/\/+$/, '') : rawNorm;
@@ -45,8 +47,8 @@ export const PersonalPortalPage = ({ currentPath = '/portal', onNavigate }) => {
         embedded
         onNavigate={onNavigate}
         warnPath={currentPath}
-        title="404 — Không tìm thấy trang Cá nhân"
-        message={`Đường dẫn "${currentPath}" không tồn tại trong Cổng Cá Nhân.`}
+        title={t('notFound.title')}
+        message={t('notFound.message', { path: currentPath })}
       />
     );
   };

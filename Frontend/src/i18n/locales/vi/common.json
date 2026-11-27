@@ -131,6 +131,16 @@
       "500Title": "Cảnh báo máy chủ — 500",
       "500Message": "Máy chủ gặp lỗi xử lý nội bộ."
     },
-    "authGuardLoading": "Đang xác thực phiên làm việc..."
+    "authGuardLoading": "Đang xác thực phiên làm việc...",
+    "copyBtn": {
+      "copiedTitle": "Đã sao chép!",
+      "copyTitle": "Sao chép vào clipboard",
+      "ariaLabel": "Sao chép mã",
+      "copied": "Đã sao chép",
+      "copy": "Sao chép"
+    },
+    "permissionGate": {
+      "deniedTooltip": "Bạn không có quyền thực hiện thao tác này"
+    }
   }
 }

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import OverviewPage from './Overview';
 import AgentsPage from './Agents';
@@ -24,6 +25,7 @@ import SettingsPage from './Settings/SettingsPage';
 import { NotFoundPage } from '../Error/StatusPages';
 
 export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
+  const { t } = useTranslation('dashboard');
   const path = currentPath.toLowerCase().split('?')[0].split('#')[0] || '/dashboard';
 
   // Compute Breadcrumbs based on path
@@ -34,6 +36,30 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
     const crumbs = [];
     let accumulatedPath = '';
 
+    const segmentKeyMap = {
+      clusters: 'clusters',
+      incidents: 'incidents',
+      monitoring: 'monitoring',
+      metrics: 'metrics',
+      logs: 'logs',
+      events: 'events',
+      'self-healing': 'selfHealing',
+      actions: 'actions',
+      history: 'history',
+      approvals: 'approvals',
+      policies: 'policies',
+      agents: 'agents',
+      infrastructure: 'infrastructure',
+      workloads: 'workloads',
+      organization: 'organization',
+      members: 'members',
+      alerts: 'alerts',
+      notifications: 'notifications',
+      'audit-logs': 'auditLogs',
+      reports: 'reports',
+      settings: 'settings',
+    };
+
     parts.forEach((part, index) => {
       accumulatedPath += `/${part}`;
       if (index === 0) return; // Skip 'dashboard' root crumb as layout handles it
@@ -43,12 +69,10 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ');
 
-      if (part === 'clusters') {
-        label = 'Cụm Kubernetes';
-      } else if (parts[index - 1] === 'clusters') {
-        label = 'Chi Tiết Cụm';
-      } else if (part === 'incidents') {
-        label = 'Quản Lý Sự Cố & RCA';
+      if (parts[index - 1] === 'clusters') {
+        label = t('layout.breadcrumbs.clusterDetail');
+      } else if (segmentKeyMap[part]) {
+        label = t(`layout.breadcrumbs.${segmentKeyMap[part]}`);
       }
 
       crumbs.push({
@@ -153,8 +177,8 @@ export const DashboardPage = ({ currentPath = '/dashboard', onNavigate }) => {
         embedded
         onNavigate={onNavigate}
         warnPath={currentPath}
-        title="404 — Không tìm thấy trang Dashboard"
-        message={`Đường dẫn "${currentPath}" không tồn tại trong không gian làm việc Dashboard.`}
+        title={t('layout.notFoundTitle')}
+        message={t('layout.notFoundMessage', { path: currentPath })}
       />
     );
   };

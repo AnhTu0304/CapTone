@@ -609,5 +609,9 @@
         "actionText": "View Member List"
       }
     }
+  },
+  "notFound": {
+    "title": "404 — Personal Page Not Found",
+    "message": "The path \"{{path}}\" does not exist in Personal Portal."
   }
 }

@@ -5,6 +5,7 @@ import {
   Bell,
   Save,
   CheckCircle2,
+  Check,
 } from 'lucide-react';
 import { personalPortalService } from '../../services/personalPortalService';
 import { normalizeLanguage } from '../../i18n';
@@ -41,25 +42,32 @@ export const PersonalPreferencesPage = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div
+      className="portal-preferences-page"
+      style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', boxSizing: 'border-box' }}
+    >
       {/* Title */}
       <div>
-        <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+        <h2
+          className="portal-preferences-title"
+          style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}
+        >
           {t('preferences.title')}
         </h2>
-        <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
+        <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0', lineHeight: 1.45 }}>
           {t('preferences.subtitle')}
         </p>
       </div>
 
       {isSaved && (
         <div
+          role="status"
           style={{
             backgroundColor: '#ECFDF5',
             border: '1px solid #A7F3D0',
             color: '#065F46',
             borderRadius: '10px',
-            padding: '12px 16px',
+            padding: '12px 14px',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
@@ -67,7 +75,7 @@ export const PersonalPreferencesPage = () => {
             fontWeight: 600,
           }}
         >
-          <CheckCircle2 size={18} color="#059669" />
+          <CheckCircle2 size={18} color="#059669" style={{ flexShrink: 0 }} />
           <span>{t('preferences.savedMessage')}</span>
         </div>
       )}
@@ -75,6 +83,7 @@ export const PersonalPreferencesPage = () => {
       <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* GROUP 1: LANGUAGE */}
         <div
+          className="portal-preferences-card"
           style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '12px',
@@ -86,7 +95,7 @@ export const PersonalPreferencesPage = () => {
             gap: '16px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
             <div
               style={{
                 width: '36px',
@@ -97,21 +106,25 @@ export const PersonalPreferencesPage = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               <Globe size={18} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                 {t('preferences.languageSection.title')}
               </h3>
-              <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0', lineHeight: 1.4 }}>
                 {t('preferences.languageSection.subtitle')}
               </p>
             </div>
           </div>
 
-          <div className="portal-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+          <div
+            className="portal-grid-2 portal-preferences-grid"
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}
+          >
             {[
               {
                 id: 'vi',
@@ -131,32 +144,40 @@ export const PersonalPreferencesPage = () => {
                 <button
                   key={lang.id}
                   type="button"
+                  data-testid={`pref-lang-${lang.id}`}
+                  aria-pressed={isSelected}
                   onClick={() => handleChange('language', lang.id)}
+                  className="portal-preferences-lang-btn"
                   style={{
                     padding: '16px',
+                    minHeight: '56px',
                     borderRadius: '10px',
                     border: isSelected ? '2px solid #059669' : '1px solid #CBD5E1',
                     backgroundColor: isSelected ? '#F0FDF4' : '#FFFFFF',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '14px',
+                    gap: '12px',
                     textAlign: 'left',
                     transition: 'all 0.15s ease',
+                    width: '100%',
+                    boxSizing: 'border-box',
                   }}
                 >
-                  <span style={{ fontSize: '1.75rem' }}>{lang.flag}</span>
-                  <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: '1.65rem', flexShrink: 0, lineHeight: 1 }}>{lang.flag}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: isSelected ? '#065F46' : '#1E293B' }}>
                       {lang.label}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>{lang.sub}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px', lineHeight: 1.35 }}>
+                      {lang.sub}
+                    </div>
                   </div>
                   {isSelected && (
                     <div
                       style={{
-                        width: '20px',
-                        height: '20px',
+                        width: '22px',
+                        height: '22px',
                         borderRadius: '50%',
                         backgroundColor: '#059669',
                         color: '#FFFFFF',
@@ -165,6 +186,7 @@ export const PersonalPreferencesPage = () => {
                         justifyContent: 'center',
                         fontSize: '0.75rem',
                         fontWeight: 800,
+                        flexShrink: 0,
                       }}
                     >
                       ✓
@@ -178,6 +200,7 @@ export const PersonalPreferencesPage = () => {
 
         {/* GROUP 2: NOTIFICATION PREFERENCES */}
         <div
+          className="portal-preferences-card"
           style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '12px',
@@ -189,7 +212,7 @@ export const PersonalPreferencesPage = () => {
             gap: '16px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
             <div
               style={{
                 width: '36px',
@@ -200,21 +223,25 @@ export const PersonalPreferencesPage = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               <Bell size={18} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                 {t('preferences.notificationsSection.title')}
               </h3>
-              <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
+              <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0', lineHeight: 1.4 }}>
                 {t('preferences.notificationsSection.subtitle')}
               </p>
             </div>
           </div>
 
-          <div className="portal-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+          <div
+            className="portal-grid-2 portal-preferences-grid"
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}
+          >
             {[
               {
                 key: 'inApp',
@@ -250,50 +277,69 @@ export const PersonalPreferencesPage = () => {
               const isChecked = Boolean(prefs.notifications[item.key]);
 
               return (
-                <div
+                <button
                   key={item.key}
+                  type="button"
+                  role="switch"
+                  aria-checked={isChecked}
                   onClick={() => handleNotifToggle(item.key)}
+                  className="portal-preferences-notif-item"
                   style={{
-                    padding: '12px 16px',
+                    width: '100%',
+                    minHeight: '48px',
+                    padding: '12px 14px',
                     borderRadius: '9px',
-                    border: '1px solid #E2E8F0',
+                    border: isChecked ? '1px solid #A7F3D0' : '1px solid #E2E8F0',
                     backgroundColor: isChecked ? '#F0FDF4' : '#FFFFFF',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: '12px',
+                    textAlign: 'left',
                     transition: 'all 0.15s ease',
+                    boxSizing: 'border-box',
                   }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => {}}
+                  <span
+                    aria-hidden="true"
                     style={{
                       width: '18px',
                       height: '18px',
-                      accentColor: '#059669',
-                      marginTop: '2px',
-                      cursor: 'pointer',
+                      borderRadius: '5px',
+                      marginTop: '1px',
+                      border: isChecked ? '1px solid #059669' : '1.5px solid #94A3B8',
+                      backgroundColor: isChecked ? '#059669' : '#FFFFFF',
+                      color: '#FFFFFF',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
                     }}
-                  />
-                  <div>
+                  >
+                    {isChecked && <Check size={12} strokeWidth={3} />}
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>{item.title}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px', lineHeight: 1.3 }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px', lineHeight: 1.35 }}>
                       {item.desc}
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
         </div>
 
         {/* Action Button */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+        <div
+          className="portal-preferences-actions"
+          style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}
+        >
           <button
             type="submit"
+            className="portal-preferences-save-btn"
             style={{
+              minHeight: '44px',
               padding: '11px 24px',
               borderRadius: '9px',
               backgroundColor: '#059669',
@@ -302,8 +348,9 @@ export const PersonalPreferencesPage = () => {
               fontSize: '0.875rem',
               fontWeight: 700,
               cursor: 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '8px',
               boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
             }}
@@ -313,6 +360,35 @@ export const PersonalPreferencesPage = () => {
           </button>
         </div>
       </form>
+
+      <style>{`
+        @media (max-width: 860px) {
+          .portal-preferences-page {
+            gap: 16px !important;
+          }
+          .portal-preferences-title {
+            font-size: 1.2rem !important;
+          }
+          .portal-preferences-card {
+            padding: 16px !important;
+            border-radius: 10px !important;
+            gap: 12px !important;
+          }
+          .portal-preferences-grid {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+          }
+          .portal-preferences-lang-btn {
+            padding: 12px 14px !important;
+          }
+          .portal-preferences-actions {
+            justify-content: stretch !important;
+          }
+          .portal-preferences-save-btn {
+            width: 100% !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
