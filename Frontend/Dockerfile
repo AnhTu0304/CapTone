@@ -16,6 +16,9 @@ COPY . .
 ENV NODE_ENV=production
 ENV INLINE_RUNTIME_CHUNK=false
 ENV REACT_APP_API_URL=/api/v1
+# .env* is dockerignored, so per-deploy client ID comes in as a build arg (empty -> code fallback)
+ARG REACT_APP_GOOGLE_CLIENT_ID=
+ENV REACT_APP_GOOGLE_CLIENT_ID=$REACT_APP_GOOGLE_CLIENT_ID
 RUN npm run build
 
 # Stage 2: Serve with Production Nginx

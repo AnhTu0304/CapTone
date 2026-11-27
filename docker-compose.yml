@@ -179,6 +179,8 @@ services:
     build:
       context: ./Frontend
       dockerfile: Dockerfile
+      args:
+        REACT_APP_GOOGLE_CLIENT_ID: ${REACT_APP_GOOGLE_CLIENT_ID:-}
     container_name: selfheal_platform_web
     restart: always
     security_opt:
