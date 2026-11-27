@@ -347,7 +347,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     : (activeTokenPrefix ? `${activeTokenPrefix}••••••••••••` : '••••••••••••');
   const tokenCopyValue = hasRawToken
     ? (rotatedTokenResult.raw_token || rotatedTokenResult.token)
-    : '<YOUR_AGENT_TOKEN>';
+    : '';
 
   const getWsBackendUrl = () => {
     if (typeof window === 'undefined') return 'ws://localhost:5000/api/v1/agent/connect';
@@ -879,10 +879,25 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
               {/* Active Token Display */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>
-                    {t('clusters.detail.tokenCard.activeToken')}
-                  </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>
+                      {t('clusters.detail.tokenCard.activeToken')}
+                    </label>
+                    <span
+                      style={{
+                        fontSize: '0.6875rem',
+                        fontWeight: 700,
+                        padding: '1px 7px',
+                        borderRadius: '999px',
+                        backgroundColor: hasRawToken ? '#ECFDF5' : '#F1F5F9',
+                        color: hasRawToken ? '#047857' : '#475569',
+                        border: `1px solid ${hasRawToken ? '#A7F3D0' : '#CBD5E1'}`,
+                      }}
+                    >
+                      {hasRawToken ? t('clusters.detail.tokenCard.rawReadyBadge') : t('clusters.detail.tokenCard.prefixOnlyBadge')}
+                    </span>
+                  </div>
                   {activeToken?.expires_at && (
                     <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
                       {t('clusters.detail.tokenCard.expiresAt', { date: new Date(activeToken.expires_at).toLocaleDateString(intlLocale) })}
@@ -891,14 +906,39 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <input
-                    type={hasRawToken ? 'text' : 'password'}
+                    type="text"
                     readOnly
                     value={tokenDisplay}
-                    style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', backgroundColor: '#F8FAFC', fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      border: `1px solid ${hasRawToken ? '#86EFAC' : 'var(--dash-border)'}`,
+                      borderRadius: '6px',
+                      backgroundColor: hasRawToken ? '#F0FDF4' : '#F8FAFC',
+                      color: hasRawToken ? '#065F46' : '#475569',
+                      fontWeight: hasRawToken ? 700 : 500,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.8125rem',
+                    }}
                   />
                   <button
+                    type="button"
+                    disabled={!hasRawToken}
+                    title={hasRawToken ? t('common.copy') : t('clusters.detail.tokenCard.copyRequiresRotate')}
                     onClick={() => handleCopy(tokenCopyValue, 'agent_token')}
-                    style={{ padding: '8px 12px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600 }}
+                    style={{
+                      padding: '8px 12px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid var(--dash-border)',
+                      borderRadius: '6px',
+                      cursor: hasRawToken ? 'pointer' : 'not-allowed',
+                      opacity: hasRawToken ? 1 : 0.55,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                    }}
                   >
                     {copiedField === 'agent_token' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
                     <span>{copiedField === 'agent_token' ? t('common.copiedShort') : t('common.copy')}</span>
@@ -1061,14 +1101,25 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
                       {t('clusters.detail.installer.step2DescPrefix')} <code>Nhập Token do SelfHeal cấp:</code>{t('clusters.detail.installer.step2DescSuffix')} <strong>Enter</strong>:
                     </p>
-                    <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '10px 105px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
-                      <code>{tokenCopyValue || '<YOUR_AGENT_TOKEN>'}</code>
-                      <button
-                        onClick={() => handleCopy(tokenCopyValue, 'step2_token')}
-                        style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        {copiedField === 'step2_token' ? <><Check size={12} color="#10B981" /> {t('common.copiedShort')}</> : <><Copy size={12} /> {t('clusters.detail.installer.step2CopyBtn')}</>}
-                      </button>
+                    <div style={{ backgroundColor: '#0F172A', color: hasRawToken ? '#38BDF8' : '#94A3B8', padding: '10px 125px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
+                      <code>{tokenCopyValue || t('clusters.detail.installer.step2MaskedPlaceholder')}</code>
+                      {hasRawToken ? (
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(tokenCopyValue, 'step2_token')}
+                          style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          {copiedField === 'step2_token' ? <><Check size={12} color="#10B981" /> {t('common.copiedShort')}</> : <><Copy size={12} /> {t('clusters.detail.installer.step2CopyBtn')}</>}
+                        </button>
+                      ) : can(PERMISSIONS.AGENT_MANAGE) ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowRotateModal(true)}
+                          style={{ position: 'absolute', top: '7px', right: '8px', background: '#059669', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <Key size={11} /> {t('clusters.detail.installer.step2NeedRotateBtn')}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 

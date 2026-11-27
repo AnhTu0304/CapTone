@@ -247,13 +247,15 @@ export const telemetryService = {
       const signal = typeof options === 'object' ? options?.signal : undefined;
       const clusterId = typeof options === 'object' && options?.cluster_id ? options.cluster_id : undefined;
       const activeOrgId = typeof options === 'object' && options?.organization_id ? options.organization_id : getActiveOrganizationId();
+      const hasFillPadding = typeof options === 'object' && typeof options?.fill_padding === 'boolean';
 
       const rangeParam = range ? `&range=${encodeURIComponent(range)}` : '';
       const clusterParam = clusterId ? `&cluster_id=${encodeURIComponent(clusterId)}` : '';
       const orgParam = activeOrgId ? `&organization_id=${encodeURIComponent(activeOrgId)}` : '';
+      const fillPaddingParam = hasFillPadding ? `&fill_padding=${String(options.fill_padding)}` : '';
 
       const res = await fetch(
-        `${API_BASE_URL}/telemetry/services/${encodeURIComponent(serviceId)}/metrics-sequence?limit=${limit}&bucket_seconds=${bucketSeconds}${rangeParam}${clusterParam}${orgParam}`,
+        `${API_BASE_URL}/telemetry/services/${encodeURIComponent(serviceId)}/metrics-sequence?limit=${limit}&bucket_seconds=${bucketSeconds}${rangeParam}${clusterParam}${orgParam}${fillPaddingParam}`,
         {
           method: 'GET',
           headers: getHeaders(),

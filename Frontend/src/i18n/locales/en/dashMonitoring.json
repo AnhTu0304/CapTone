@@ -737,6 +737,9 @@
         "title": "Authentication Token & Rotation",
         "rotateBtn": "Rotate Token",
         "activeToken": "Active Token",
+        "prefixOnlyBadge": "Prefix Only (SHA-256 Protected)",
+        "rawReadyBadge": "New token ready to copy",
+        "copyRequiresRotate": "The raw token is shown once upon creation. Click Rotate Token to issue a copyable key.",
         "expiresAt": "Expires: {{date}}",
         "oneTimeNotice": "The raw token is displayed only once upon creation and stored as a SHA-256 hash on the server. If you haven't saved it, click Rotate Token to issue a new key.",
         "singleAgentNotice": "Each cluster maintains 1 active Agent. Use Rotate Token whenever you need to replace the credential safely."
@@ -755,6 +758,8 @@
         "step2DescPrefix": "When the terminal prompts",
         "step2DescSuffix": ", paste the security token below and press",
         "step2CopyBtn": "Copy Token",
+        "step2MaskedPlaceholder": "<Raw token hashed with SHA-256 — Click Rotate Token above to issue a copyable key>",
+        "step2NeedRotateBtn": "Rotate Token",
         "step3Title": "Verify Agent Pod status",
         "step3Badge": "Verify",
         "step3DescPrefix": "Check the Agent Pod status in the cluster. Once the Pod reaches",

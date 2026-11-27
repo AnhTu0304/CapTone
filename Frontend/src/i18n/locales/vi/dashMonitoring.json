@@ -737,6 +737,9 @@
         "title": "Mã Token Xác Thực & Xoay Vòng",
         "rotateBtn": "Xoay Vòng / Đổi Token (Rotate Token)",
         "activeToken": "Active Token",
+        "prefixOnlyBadge": "Chỉ hiện Prefix (Bảo mật SHA-256)",
+        "rawReadyBadge": "Token mới đã sẵn sàng sao chép",
+        "copyRequiresRotate": "Token gốc chỉ hiển thị 1 lần lúc tạo. Nhấn Rotate Token để cấp mã mới rồi sao chép.",
         "expiresAt": "Hết hạn: {{date}}",
         "oneTimeNotice": "Token gốc chỉ hiển thị một lần lúc khởi tạo và được lưu trữ dưới dạng SHA-256 hash trên server. Nếu chưa lưu mã token, vui lòng nhấn Rotate Token ở bên dưới để cấp phát mã mới.",
         "singleAgentNotice": "Hệ thống duy trì 1 Agent duy nhất cho cụm này. Khi cần thay đổi, sử dụng chức năng Rotate Token để thay thế mã an toàn."
@@ -755,6 +758,8 @@
         "step2DescPrefix": "Khi màn hình terminal xuất hiện dòng nhắc",
         "step2DescSuffix": ", hãy dán mã Token bảo mật dưới đây vào rồi nhấn",
         "step2CopyBtn": "Sao chép Token",
+        "step2MaskedPlaceholder": "<Token gốc đã được băm SHA-256 — Bấm Rotate Token bên trên để lấy mã mới>",
+        "step2NeedRotateBtn": "Lấy Token Mới",
         "step3Title": "Kiểm tra trạng thái Agent Pod",
         "step3Badge": "Hoàn Tất",
         "step3DescPrefix": "Kiểm tra trạng thái Pod của Agent trong cụm. Khi thấy Pod đạt trạng thái",

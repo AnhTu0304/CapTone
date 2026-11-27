@@ -195,10 +195,15 @@ describe('Cluster, Token & Agent Management UI Test Suite [PB12 3.3]', () => {
         expect(screen.getByText('prod-k8s-cluster')).toBeInTheDocument();
       });
 
-      // Default active tab is 'agent' which displays token prefix
+      // Default active tab is 'agent' which displays visible token prefix in text input & blocks copying placeholder
       await waitFor(() => {
-        expect(screen.getByDisplayValue(/sh_live_sec_abcd1234/)).toBeInTheDocument();
+        const tokenInput = screen.getByDisplayValue(/sh_live_sec_abcd1234/);
+        expect(tokenInput).toBeInTheDocument();
+        expect(tokenInput).toHaveAttribute('type', 'text');
       });
+      const copyButtons = screen.getAllByRole('button', { name: /Sao chép/i });
+      expect(copyButtons[0]).toBeDisabled();
+      expect(navigator.clipboard.writeText).not.toHaveBeenCalledWith('<YOUR_AGENT_TOKEN>');
     });
 
     test('2.2. Xoay vòng Token (Rotate Token) hiển thị token mới một lần duy nhất', async () => {
