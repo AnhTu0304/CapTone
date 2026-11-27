@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Building2,
   CheckCircle2,
@@ -16,6 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import multiTabSync, { SYNC_EVENTS } from '../../services/multiTabSync';
 
 export const PersonalDashboardPage = ({ onNavigate }) => {
+  const { t } = useTranslation('portal');
   const { user, isViewer, isOwner, isSuperAdmin } = useAuth?.() || {};
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
@@ -50,7 +52,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
       );
     } catch (err) {
       console.error('[PersonalDashboardPage] Lỗi tải dữ liệu dashboard:', err);
-      setApiError(err.message || 'Không thể kết nối đến máy chủ hoặc cơ sở dữ liệu');
+      setApiError(err.message || t('dashboard.errors.loadFailedFallback'));
       setCompanies([]);
       setInvitations([]);
       setSummary({
@@ -64,7 +66,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadDashboardData();
@@ -96,7 +98,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
       }
       await loadDashboardData();
     } catch (e) {
-      alert(e.message || 'Không thể chấp nhận lời mời');
+      alert(e.message || t('dashboard.errors.acceptInviteFailed'));
     }
   };
 
@@ -105,7 +107,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
       personalPortalService.respondInvitation(invId, false);
       await loadDashboardData();
     } catch (e) {
-      alert(e.message || 'Không thể từ chối lời mời');
+      alert(e.message || t('dashboard.errors.rejectInviteFailed'));
     }
   };
 
@@ -134,7 +136,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
             <AlertCircle size={20} color="#DC2626" />
             <div>
               <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#991B1B' }}>
-                Không thể tải dữ liệu từ máy chủ hoặc cơ sở dữ liệu
+                {t('dashboard.errorBanner.title')}
               </div>
               <div style={{ fontSize: '0.78125rem', color: '#B91C1C', marginTop: '2px' }}>
                 {apiError}
@@ -159,7 +161,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
             }}
           >
             <RefreshCw size={13} />
-            <span>Thử lại</span>
+            <span>{t('dashboard.errorBanner.retry')}</span>
           </button>
         </div>
       )}
@@ -181,7 +183,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Bell size={18} color="#2563EB" />
               <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1E40AF' }}>
-                Bạn có {pendingInvites.length} lời mời tham gia Company đang chờ phản hồi
+                {t('dashboard.invitations.bannerTitle', { count: pendingInvites.length })}
               </span>
             </div>
             <button
@@ -196,7 +198,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 cursor: 'pointer',
               }}
             >
-              Xem chi tiết &rarr;
+              {t('dashboard.invitations.viewDetails')}
             </button>
           </div>
 
@@ -219,7 +221,8 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 <div>
                   <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1E293B' }}>{inv.organizationName}</div>
                   <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                    Từ {inv.inviterName} • Vai trò: <strong style={{ color: '#059669' }}>{inv.invitedRoleTitle}</strong>
+                    {t('dashboard.invitations.fromPrefix')} {inv.inviterName} • {t('dashboard.invitations.roleLabel')}{' '}
+                    <strong style={{ color: '#059669' }}>{inv.invitedRoleTitle}</strong>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -237,7 +240,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                       cursor: 'pointer',
                     }}
                   >
-                    Đồng ý
+                    {t('dashboard.invitations.accept')}
                   </button>
                   <button
                     type="button"
@@ -253,7 +256,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                       cursor: 'pointer',
                     }}
                   >
-                    Từ chối
+                    {t('dashboard.invitations.reject')}
                   </button>
                 </div>
               </div>
@@ -285,7 +288,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#64748B' }}>Tổng Company Tham Gia</span>
+            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#64748B' }}>{t('dashboard.kpi.totalCompanies')}</span>
             <div
               style={{
                 width: '36px',
@@ -304,7 +307,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
             {isLoading ? '...' : summary.totalCompanies}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '8px', fontWeight: 600 }}>
-            {isLoading ? 'Đang kiểm tra...' : `${summary.activeCompanies} công ty đang kích hoạt`}
+            {isLoading ? t('dashboard.kpi.checking') : t('dashboard.kpi.activeCompaniesSub', { count: summary.activeCompanies })}
           </div>
         </div>
 
@@ -322,7 +325,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#64748B' }}>Company Đang Hoạt Động</span>
+            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#64748B' }}>{t('dashboard.kpi.activeCompanies')}</span>
             <div
               style={{
                 width: '36px',
@@ -342,10 +345,10 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '8px' }}>
             {isLoading
-              ? 'Đang đồng bộ...'
+              ? t('dashboard.kpi.syncing')
               : summary.totalCompanies > 0
-              ? `${summary.activeCompanies}/${summary.totalCompanies} công ty đang hoạt động`
-              : 'Chưa có công ty nào kích hoạt'}
+              ? t('dashboard.kpi.activeRatio', { active: summary.activeCompanies, total: summary.totalCompanies })
+              : t('dashboard.kpi.noActiveCompanies')}
           </div>
         </div>
 
@@ -366,7 +369,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#64748B' }}>Thông Báo Chưa Đọc</span>
+            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#64748B' }}>{t('dashboard.kpi.unreadNotifs')}</span>
             <div
               style={{
                 width: '36px',
@@ -386,10 +389,10 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '8px' }}>
             {isLoading
-              ? 'Đang kiểm tra...'
+              ? t('dashboard.kpi.checking')
               : summary.unreadNotifs > 0
-              ? `${summary.unreadNotifs} thông báo mới cần xem`
-              : 'Đã xem hết toàn bộ thông báo'}
+              ? t('dashboard.kpi.unreadCountSub', { count: summary.unreadNotifs })
+              : t('dashboard.kpi.allReadSub')}
           </div>
         </div>
 
@@ -410,7 +413,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#64748B' }}>Bảo Mật Tài Khoản</span>
+            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#64748B' }}>{t('dashboard.kpi.accountSecurity')}</span>
             <div
               style={{
                 width: '36px',
@@ -426,10 +429,10 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
             </div>
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: summary.twoFactorEnabled ? '#059669' : '#D97706', lineHeight: 1 }}>
-            {isLoading ? '...' : summary.twoFactorEnabled ? 'Đã bật 2FA' : 'Chưa bật 2FA'}
+            {isLoading ? '...' : summary.twoFactorEnabled ? t('dashboard.kpi.twoFaEnabled') : t('dashboard.kpi.twoFaDisabled')}
           </div>
           <div style={{ fontSize: '0.75rem', color: summary.twoFactorEnabled ? '#059669' : '#B45309', marginTop: '8px', fontWeight: 600 }}>
-            {isLoading ? 'Đang kiểm tra...' : summary.twoFactorEnabled ? 'Tài khoản được bảo vệ lớp kép' : 'Khuyến nghị kích hoạt TOTP'}
+            {isLoading ? t('dashboard.kpi.checking') : summary.twoFactorEnabled ? t('dashboard.kpi.twoFaProtectedSub') : t('dashboard.kpi.twoFaRecommendSub')}
           </div>
         </div>
       </div>
@@ -451,10 +454,10 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Công Ty Của Tôi
+                {t('dashboard.companies.title')}
               </h3>
               <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                Danh sách các tổ chức bạn đang nắm giữ vai trò
+                {t('dashboard.companies.subtitle')}
               </p>
             </div>
             <button
@@ -472,7 +475,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 gap: '4px',
               }}
             >
-              <span>Xem tất cả ({companies.length})</span>
+              <span>{t('dashboard.companies.viewAll', { count: companies.length })}</span>
               <ArrowRight size={14} />
             </button>
           </div>
@@ -491,7 +494,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 }}
               >
                 <Loader2 size={20} className="animate-spin" color="#059669" />
-                <span>Đang tải danh sách Company...</span>
+                <span>{t('dashboard.companies.loading')}</span>
               </div>
             ) : apiError ? (
               <div
@@ -505,9 +508,9 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 }}
               >
                 <AlertCircle size={32} color="#E53E3E" style={{ margin: '0 auto 8px auto' }} />
-                <div style={{ fontSize: '0.875rem', fontWeight: 700 }}>Không thể hiển thị Company</div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 700 }}>{t('dashboard.companies.errorTitle')}</div>
                 <p style={{ fontSize: '0.75rem', color: '#742A2A', margin: '4px 0 0 0' }}>
-                  Đã xảy ra lỗi khi truy vấn backend. Vui lòng bấm "Thử lại" bên trên.
+                  {t('dashboard.companies.errorDesc')}
                 </p>
               </div>
             ) : companies.length === 0 ? (
@@ -541,7 +544,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 </div>
                 <div>
                   <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>
-                    Chưa tham gia Company nào
+                    {t('dashboard.companies.emptyTitle')}
                   </div>
                   <p
                     style={{
@@ -552,7 +555,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                       lineHeight: 1.5,
                     }}
                   >
-                    Hiện tại bạn chưa thuộc Company nào hoặc chưa được cấp quyền truy cập. Hãy tạo Company nếu bạn có quyền hoặc liên hệ quản trị viên để được mời tham gia.
+                    {t('dashboard.companies.emptyDesc')}
                   </p>
                 </div>
                 {canCreateCompany && (
@@ -576,7 +579,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                     }}
                   >
                     <Plus size={14} />
-                    <span>Tạo Company Mới</span>
+                    <span>{t('dashboard.companies.createNew')}</span>
                   </button>
                 )}
               </div>
@@ -647,7 +650,10 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                         </span>
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '3px' }}>
-                        {company.clustersCount || 0} Cụm K8s • {company.activeWorkloads || 0} Workloads
+                        {t('dashboard.companies.infraSummary', {
+                          clusters: company.clustersCount || 0,
+                          workloads: company.activeWorkloads || 0,
+                        })}
                       </div>
                     </div>
                   </div>
@@ -670,7 +676,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                       boxShadow: '0 2px 4px rgba(5, 150, 105, 0.2)',
                     }}
                   >
-                    <span>Vào Workspace</span>
+                    <span>{t('dashboard.companies.enterWorkspace')}</span>
                     <ArrowRight size={13} />
                   </button>
                 </div>
@@ -713,7 +719,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 }}
               >
                 <Bell size={13} color={activeRightTab === 'notifications' ? '#2563EB' : '#64748B'} />
-                <span>Thông Báo</span>
+                <span>{t('dashboard.rightPanel.tabNotifications')}</span>
                 {summary.unreadNotifs > 0 && (
                   <span
                     style={{
@@ -750,7 +756,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 }}
               >
                 <Activity size={13} color={activeRightTab === 'activity' ? '#059669' : '#64748B'} />
-                <span>Hoạt Động</span>
+                <span>{t('dashboard.rightPanel.tabActivity')}</span>
               </button>
             </div>
 
@@ -766,7 +772,9 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                 cursor: 'pointer',
               }}
             >
-              {activeRightTab === 'notifications' ? 'Xem tất cả thông báo →' : 'Xem nhật ký →'}
+              {activeRightTab === 'notifications'
+                ? t('dashboard.rightPanel.viewAllNotifications')
+                : t('dashboard.rightPanel.viewActivityLog')}
             </button>
           </div>
 
@@ -848,7 +856,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                     borderRadius: '8px',
                   }}
                 >
-                  Chưa có thông báo mới nào
+                  {t('dashboard.rightPanel.emptyNotifications')}
                 </div>
               )}
             </div>
@@ -905,7 +913,7 @@ export const PersonalDashboardPage = ({ onNavigate }) => {
                     borderRadius: '8px',
                   }}
                 >
-                  Chưa có hoạt động gần đây
+                  {t('dashboard.rightPanel.emptyActivities')}
                 </div>
               )}
             </div>

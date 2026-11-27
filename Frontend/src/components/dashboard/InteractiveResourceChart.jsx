@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../i18n';
 import {
   createChart,
   AreaSeries,
@@ -26,11 +28,11 @@ import {
  * Khoảng thời gian Preset chuẩn hóa đồng bộ với NodeMetricsChartsPanel
  */
 export const TIME_RANGE_PRESETS = [
-  { id: '15m', label: '15 phút', durationMs: 15 * 60 * 1000, limit: 180 },
-  { id: '1h', label: '1 giờ', durationMs: 60 * 60 * 1000, limit: 360 },
-  { id: '6h', label: '6 giờ', durationMs: 6 * 60 * 60 * 1000, limit: 720 },
-  { id: '24h', label: '24 giờ', durationMs: 24 * 60 * 60 * 1000, limit: 1440 },
-  { id: '7d', label: '7 ngày', durationMs: 7 * 24 * 60 * 60 * 1000, limit: 2000 },
+  { id: '15m', label: '15 phút', labelKey: 'charts.resourceChart.presets.15m', durationMs: 15 * 60 * 1000, limit: 180 },
+  { id: '1h', label: '1 giờ', labelKey: 'charts.resourceChart.presets.1h', durationMs: 60 * 60 * 1000, limit: 360 },
+  { id: '6h', label: '6 giờ', labelKey: 'charts.resourceChart.presets.6h', durationMs: 6 * 60 * 60 * 1000, limit: 720 },
+  { id: '24h', label: '24 giờ', labelKey: 'charts.resourceChart.presets.24h', durationMs: 24 * 60 * 60 * 1000, limit: 1440 },
+  { id: '7d', label: '7 ngày', labelKey: 'charts.resourceChart.presets.7d', durationMs: 7 * 24 * 60 * 60 * 1000, limit: 2000 },
 ];
 
 /**
@@ -96,8 +98,8 @@ export const InteractiveResourceChart = ({
   data: initialData,
   totalCpuCores = 12,
   totalMemoryGb = 8,
-  title = 'Biến thiên Tài nguyên Cụm máy chủ (CPU & RAM)',
-  subtitle = 'Dữ liệu viễn trắc đo đạc từ các DaemonSet eBPF theo thời gian thực',
+  title: titleProp,
+  subtitle: subtitleProp,
   className = '',
   height = 280,
   timeRange = '15m',
@@ -110,6 +112,11 @@ export const InteractiveResourceChart = ({
   error = null,
   onRetry,
 }) => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
+  const title = titleProp ?? t('charts.resourceChart.title');
+  const subtitle = subtitleProp ?? t('charts.resourceChart.subtitle');
+
   const [internalTimeRange, setInternalTimeRange] = useState(timeRange);
   const [showCpu, setShowCpu] = useState(true);
   const [showRam, setShowRam] = useState(true);
@@ -195,12 +202,12 @@ export const InteractiveResourceChart = ({
     if (typeof time === 'number') {
       const d = new Date(time * 1000);
       if (selectedRange === '7d' || selectedRange === '24h') {
-        return `${d.getDate()}/${d.getMonth() + 1} ${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+        return `${d.getDate()}/${d.getMonth() + 1} ${d.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit' })}`;
       }
-      return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return d.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
     return String(time);
-  }, [selectedRange]);
+  }, [selectedRange, intlLocale]);
 
   // Reset / Fit Content
   const handleFitContent = useCallback(() => {
@@ -376,7 +383,7 @@ export const InteractiveResourceChart = ({
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
-          title: 'NGƯỠNG 80%',
+          title: t('charts.resourceChart.threshold80'),
         });
       }
 
@@ -478,8 +485,10 @@ export const InteractiveResourceChart = ({
     showRam,
     showThreshold,
     height,
+    selectedRange,
     timeFormatter,
     valueFormatter,
+    t,
   ]);
 
   // Update series visibility & autoscale options when toggled
@@ -573,7 +582,7 @@ export const InteractiveResourceChart = ({
                   fontWeight: 600,
                 }}
               >
-                ● Ngoại tuyến
+                ● {t('charts.resourceChart.offline').replace(/^●\s*/, '')}
               </span>
             ) : isStale ? (
               <span
@@ -597,7 +606,7 @@ export const InteractiveResourceChart = ({
                     backgroundColor: '#D97706',
                   }}
                 />
-                DỮ LIỆU CŨ (Stale)
+                {t('charts.resourceChart.stale')}
               </span>
             ) : null}
             {isLoading && telemetryData && telemetryData.length > 0 && (
@@ -615,7 +624,7 @@ export const InteractiveResourceChart = ({
                 }}
               >
                 <RefreshCw size={10} className="animate-spin" />
-                Đang đồng bộ...
+                {t('charts.resourceChart.syncing')}
               </span>
             )}
           </div>
@@ -636,7 +645,7 @@ export const InteractiveResourceChart = ({
           {showTimeRange && (
             <div
               role="group"
-              aria-label="Khoảng thời gian"
+              aria-label={t('charts.resourceChart.timeRangeAria')}
               style={{
                 display: 'inline-flex',
                 backgroundColor: '#F1F5F9',
@@ -668,7 +677,7 @@ export const InteractiveResourceChart = ({
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    {preset.label}
+                    {t(preset.labelKey, { defaultValue: preset.label })}
                   </button>
                 );
               })}
@@ -678,7 +687,7 @@ export const InteractiveResourceChart = ({
           {/* Zoom & Pan Controls Group (chuẩn như Chỉ số viễn trắc hạ tầng) */}
           <div
             role="toolbar"
-            aria-label="Điều khiển thu phóng"
+            aria-label={t('charts.resourceChart.zoomToolbarAria')}
             data-testid="chart-zoom-pan-controls"
             style={{
               display: 'inline-flex',
@@ -693,7 +702,7 @@ export const InteractiveResourceChart = ({
             <button
               type="button"
               data-testid="chart-zoom-in"
-              title="Phóng to (Zoom In)"
+              title={t('charts.resourceChart.zoomInTitle')}
               onClick={handleZoomIn}
               style={{
                 display: 'inline-flex',
@@ -713,7 +722,7 @@ export const InteractiveResourceChart = ({
             <button
               type="button"
               data-testid="chart-zoom-out"
-              title="Thu nhỏ (Zoom Out)"
+              title={t('charts.resourceChart.zoomOutTitle')}
               onClick={handleZoomOut}
               style={{
                 display: 'inline-flex',
@@ -734,7 +743,7 @@ export const InteractiveResourceChart = ({
             <button
               type="button"
               data-testid="chart-pan-left"
-              title="Kéo lùi thời gian (Pan Left)"
+              title={t('charts.resourceChart.panLeftTitle')}
               onClick={() => handlePan('left')}
               style={{
                 display: 'inline-flex',
@@ -754,7 +763,7 @@ export const InteractiveResourceChart = ({
             <button
               type="button"
               data-testid="chart-pan-right"
-              title="Kéo tiến thời gian (Pan Right)"
+              title={t('charts.resourceChart.panRightTitle')}
               onClick={() => handlePan('right')}
               style={{
                 display: 'inline-flex',
@@ -775,7 +784,7 @@ export const InteractiveResourceChart = ({
             <button
               type="button"
               data-testid="chart-reset-zoom"
-              title="Đặt lại vùng nhìn (Reset Zoom)"
+              title={t('charts.resourceChart.resetZoomTitle')}
               onClick={handleFitContent}
               style={{
                 display: 'inline-flex',
@@ -798,7 +807,11 @@ export const InteractiveResourceChart = ({
           <button
             type="button"
             onClick={() => setScaleMode((m) => (m === 'auto' ? 'standard' : 'auto'))}
-            title={scaleMode === 'auto' ? 'Đang phóng to dao động (Auto-scale). Bấm để xem chuẩn 0-100%' : 'Đang ở chuẩn 0-100%. Bấm để phóng to dao động'}
+            title={
+              scaleMode === 'auto'
+                ? t('charts.resourceChart.scaleAutoTitle')
+                : t('charts.resourceChart.scaleStandardTitle')
+            }
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -814,14 +827,16 @@ export const InteractiveResourceChart = ({
             }}
           >
             <ZoomIn size={12} />
-            {scaleMode === 'auto' ? 'Phóng to dao động (Auto)' : 'Chuẩn (0-100%)'}
+            {scaleMode === 'auto'
+              ? t('charts.resourceChart.scaleAutoLabel')
+              : t('charts.resourceChart.scaleStandardLabel')}
           </button>
 
           {/* Reset Fit Content */}
           <button
             type="button"
             onClick={handleFitContent}
-            title="Khôi phục góc nhìn vừa khít dữ liệu"
+            title={t('charts.resourceChart.fitContentTitle')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -837,7 +852,7 @@ export const InteractiveResourceChart = ({
             }}
           >
             <Maximize2 size={12} />
-            Vừa khít
+            {t('charts.resourceChart.fitContentLabel')}
           </button>
 
           {/* Series Toggle: CPU */}
@@ -859,7 +874,7 @@ export const InteractiveResourceChart = ({
             }}
           >
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: showCpu ? '#059669' : '#CBD5E1' }} />
-            CPU (%)
+            {t('charts.resourceChart.cpuSeries')}
           </button>
 
           {/* Series Toggle: RAM */}
@@ -881,7 +896,7 @@ export const InteractiveResourceChart = ({
             }}
           >
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: showRam ? '#2563EB' : '#CBD5E1' }} />
-            RAM
+            {t('charts.resourceChart.ramSeries')}
           </button>
         </div>
       </div>
@@ -902,7 +917,7 @@ export const InteractiveResourceChart = ({
         >
           <RefreshCw className="animate-spin" size={24} color="#059669" />
           <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>
-            Đang tải dữ liệu chuỗi thời gian...
+            {t('charts.resourceChart.loading')}
           </span>
         </div>
       ) : error && (!telemetryData || telemetryData.length === 0) ? (
@@ -922,7 +937,7 @@ export const InteractiveResourceChart = ({
         >
           <AlertCircle size={28} color="#DC2626" />
           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#991B1B' }}>
-            Lỗi tải dữ liệu viễn trắc
+            {t('charts.resourceChart.errorTitle')}
           </span>
           <span style={{ fontSize: '0.75rem', color: '#B91C1C', textAlign: 'center', maxWidth: '420px' }}>
             {error}
@@ -947,7 +962,7 @@ export const InteractiveResourceChart = ({
               }}
             >
               <RefreshCw size={13} />
-              Thử lại
+              {t('charts.resourceChart.retry')}
             </button>
           )}
         </div>
@@ -968,10 +983,10 @@ export const InteractiveResourceChart = ({
         >
           <AlertTriangle size={28} color="#D97706" />
           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
-            Cụm Kubernetes đang ngoại tuyến hoặc chưa kết nối Agent.
+            {t('charts.resourceChart.offlineTitle')}
           </span>
           <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-            Vui lòng cài đặt hoặc kích hoạt selfheal-agent để truyền chuỗi viễn trắc eBPF.
+            {t('charts.resourceChart.offlineDesc')}
           </span>
         </div>
       ) : telemetryData.length === 0 ? (
@@ -991,10 +1006,10 @@ export const InteractiveResourceChart = ({
         >
           <Activity size={28} color="#94A3B8" />
           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
-            Chưa có dữ liệu viễn trắc đo đạc
+            {t('charts.resourceChart.emptyTitle')}
           </span>
           <span style={{ fontSize: '0.75rem', color: '#64748B', textAlign: 'center', maxWidth: '420px' }}>
-            Không tìm thấy dữ liệu metrics CPU/RAM từ các tác tử eBPF trong khoảng thời gian này.
+            {t('charts.resourceChart.emptyDesc')}
           </span>
           {onRetry && (
             <button
@@ -1016,7 +1031,7 @@ export const InteractiveResourceChart = ({
               }}
             >
               <RefreshCw size={13} />
-              Thử lại
+              {t('charts.resourceChart.retry')}
             </button>
           )}
         </div>
@@ -1059,7 +1074,7 @@ export const InteractiveResourceChart = ({
                   color: '#94A3B8',
                 }}
               >
-                <span>Thời gian:</span>
+                <span>{t('charts.resourceChart.tooltipTime')}</span>
                 <span style={{ color: '#F8FAFC', fontWeight: 700 }}>
                   {timeFormatter(hoverData.time)}
                 </span>
@@ -1125,11 +1140,11 @@ export const InteractiveResourceChart = ({
                   color: (hoverData.cpu || 0) >= 80 || (hoverData.ram || 0) >= 80 ? '#F87171' : '#34D399',
                 }}
               >
-                <span>TRẠNG THÁI:</span>
+                <span>{t('charts.resourceChart.tooltipStatus')}</span>
                 <span>
                   {(hoverData.cpu || 0) >= 80 || (hoverData.ram || 0) >= 80
-                    ? '🔴 VƯỢT NGƯỠNG AN TOÀN'
-                    : '🟢 HOẠT ĐỘNG TỐI ƯU'}
+                    ? t('charts.resourceChart.statusOverThreshold')
+                    : t('charts.resourceChart.statusOptimal')}
                 </span>
               </div>
             </div>
@@ -1150,36 +1165,42 @@ export const InteractiveResourceChart = ({
       >
         <div style={{ padding: '8px 12px', backgroundColor: 'rgba(5, 150, 105, 0.05)', borderRadius: '6px', border: '1px solid rgba(5, 150, 105, 0.2)' }}>
           <div style={{ fontSize: '0.6875rem', color: '#065F46', fontWeight: 700 }}>
-            CPU TRUNG BÌNH / ĐỈNH
+            {t('charts.resourceChart.cpuCardTitle')}
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: '#064E3B' }}>
             {stats.hasData ? (
               <>
-                {stats.avgCpu}% <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#047857' }}>/ Đỉnh {stats.maxCpu}%</span>
+                {stats.avgCpu}%{' '}
+                <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#047857' }}>
+                  {t('charts.resourceChart.peakPrefix', { val: `${stats.maxCpu}%` })}
+                </span>
               </>
             ) : (
               '—'
             )}
           </div>
           <div style={{ fontSize: '0.6875rem', color: '#059669' }}>
-            {stats.hasData ? (
-              `Quy đổi: ${((stats.avgCpu / 100) * totalCpuCores).toFixed(2)} / ${totalCpuCores} vCPUs`
-            ) : (
-              `Quy đổi: — / ${totalCpuCores} vCPUs`
-            )}
+            {stats.hasData
+              ? t('charts.resourceChart.cpuConversion', {
+                  used: ((stats.avgCpu / 100) * totalCpuCores).toFixed(2),
+                  total: totalCpuCores,
+                })
+              : t('charts.resourceChart.cpuConversionEmpty', { total: totalCpuCores })}
           </div>
         </div>
 
         <div style={{ padding: '8px 12px', backgroundColor: 'rgba(37, 99, 235, 0.05)', borderRadius: '6px', border: '1px solid rgba(37, 99, 235, 0.2)' }}>
           <div style={{ fontSize: '0.6875rem', color: '#1E40AF', fontWeight: 700 }}>
-            RAM TRUNG BÌNH / ĐỈNH
+            {t('charts.resourceChart.ramCardTitle')}
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: '#1E3A8A' }}>
             {stats.hasData ? (
               <>
                 {stats.avgRamMb > 0 ? `${stats.avgRamMb} MB` : `${stats.avgRam}%`}{' '}
                 <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#2563EB' }}>
-                  / Đỉnh {stats.maxRamMb > 0 ? `${stats.maxRamMb} MB` : `${stats.maxRam}%`}
+                  {t('charts.resourceChart.peakPrefix', {
+                    val: stats.maxRamMb > 0 ? `${stats.maxRamMb} MB` : `${stats.maxRam}%`,
+                  })}
                 </span>
               </>
             ) : (
@@ -1187,27 +1208,29 @@ export const InteractiveResourceChart = ({
             )}
           </div>
           <div style={{ fontSize: '0.6875rem', color: '#3B82F6' }}>
-            {stats.hasData ? (
-              `Quy đổi: ${stats.avgRam}% / ${totalMemoryGb} GB RSS`
-            ) : (
-              `Quy đổi: — / ${totalMemoryGb} GB RSS`
-            )}
+            {stats.hasData
+              ? t('charts.resourceChart.ramConversion', { pct: stats.avgRam, total: totalMemoryGb })
+              : t('charts.resourceChart.ramConversionEmpty', { total: totalMemoryGb })}
           </div>
         </div>
 
         <div style={{ padding: '8px 12px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
           <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted, #64748B)', fontWeight: 700 }}>
-            ĐIỀU PHỐI AUTONOMOUS
+            {t('charts.resourceChart.autonomousCardTitle')}
           </div>
           <div style={{ fontFamily: 'var(--font-display, inherit)', fontSize: '1.05rem', fontWeight: 800, color: 'var(--dash-text-primary, #0F172A)' }}>
-            {isLive ? 'Vòng lặp MAPE-K (Active)' : isClusterOnline ? 'Tự Động Giám Sát' : 'Tạm Dừng'}
+            {isLive
+              ? t('charts.resourceChart.statusMapekActive')
+              : isClusterOnline
+              ? t('charts.resourceChart.statusAutoMonitor')
+              : t('charts.resourceChart.statusPaused')}
           </div>
           <div style={{ fontSize: '0.6875rem', color: isLive ? '#059669' : '#64748B' }}>
             {stats.hasData && stats.maxCpu > 80
-              ? '⚠️ Tự động kích hoạt Scale Replicas'
+              ? t('charts.resourceChart.autonomousHighLoad')
               : isLive
-              ? 'Thu thập viễn trắc eBPF & suy luận AI liên tục'
-              : 'Đang chờ luồng dữ liệu viễn trắc'}
+              ? t('charts.resourceChart.autonomousLive')
+              : t('charts.resourceChart.autonomousWaiting')}
           </div>
         </div>
       </div>

@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
 import { useAuth } from '../../context/AuthContext';
 import UserProfileDropdown from '../common/UserProfileDropdown';
+import LanguageSwitcherCompact from '../common/LanguageSwitcherCompact';
 import {
   Building2,
   Users,
@@ -22,6 +24,7 @@ import {
 } from 'lucide-react';
 
 export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard' }) => {
+  const { t } = useTranslation('dashboard');
   const {
     currentOrg,
     currentUserRole,
@@ -129,14 +132,14 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
   const headerNavDropdowns = [
     {
       key: 'infra',
-      label: 'Hạ tầng',
-      headerTitle: 'Hạ tầng & Tác tử',
+      label: t('header.nav.infraLabel'),
+      headerTitle: t('header.nav.infraTitle'),
       icon: Server,
       isActive: isAgentsActive || isClustersActive || isInfraActive || isWorkloadsActive,
       items: [
         {
-          label: 'Tác tử Agent',
-          desc: 'Quản lý & cài đặt eBPF Agent',
+          label: t('header.nav.agentsLabel'),
+          desc: t('header.nav.agentsDesc'),
           path: '/dashboard/agents',
           icon: Radio,
           active: isAgentsActive,
@@ -144,8 +147,8 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
         ...(canViewClusters
           ? [
               {
-                label: 'Cụm K8s',
-                desc: 'Danh sách cụm & cấu hình kết nối',
+                label: t('header.nav.clustersLabel'),
+                desc: t('header.nav.clustersDesc'),
                 path: '/dashboard/clusters',
                 icon: Server,
                 active: isClustersActive,
@@ -153,15 +156,15 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
             ]
           : []),
         {
-          label: 'Hạ tầng máy chủ',
-          desc: 'Tài nguyên Node & Safe Drain',
+          label: t('header.nav.infraHostsLabel'),
+          desc: t('header.nav.infraHostsDesc'),
           path: '/dashboard/infrastructure',
           icon: Layers,
           active: isInfraActive,
         },
         {
-          label: 'Khối lượng công việc',
-          desc: 'Deployments, Pods & khởi động lại',
+          label: t('header.nav.workloadsLabel'),
+          desc: t('header.nav.workloadsDesc'),
           path: '/dashboard/workloads',
           icon: Box,
           active: isWorkloadsActive,
@@ -172,21 +175,21 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
       ? [
           {
             key: 'org',
-            label: 'Tổ chức',
-            headerTitle: 'Quản trị Tổ chức',
+            label: t('header.nav.orgLabel'),
+            headerTitle: t('header.nav.orgTitle'),
             icon: Building2,
             isActive: isOrgInfoActive || isOrgMembersActive,
             items: [
               {
-                label: 'Thông tin Tổ chức',
-                desc: 'Hồ sơ doanh nghiệp & thông tin liên hệ',
+                label: t('header.nav.orgInfoLabel'),
+                desc: t('header.nav.orgInfoDesc'),
                 path: '/dashboard/organization',
                 icon: Building2,
                 active: isOrgInfoActive,
               },
               {
-                label: 'Thành viên & Phân quyền',
-                desc: 'Quản lý nhân sự & ma trận RBAC',
+                label: t('header.nav.orgMembersLabel'),
+                desc: t('header.nav.orgMembersDesc'),
                 path: '/dashboard/organization/members',
                 icon: Users,
                 active: isOrgMembersActive,
@@ -197,16 +200,16 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
       : []),
     {
       key: 'system',
-      label: 'Hệ thống',
-      headerTitle: 'Quản trị Hệ thống',
+      label: t('header.nav.systemLabel'),
+      headerTitle: t('header.nav.systemTitle'),
       icon: Settings,
       isActive: isAuditLogsActive || isReportsActive || isPoliciesActive || isSettingsActive,
       items: [
         ...(canViewPolicies
           ? [
               {
-                label: 'Chính sách tự động',
-                desc: 'Luật tự phục hồi & ngưỡng an toàn',
+                label: t('header.nav.policiesLabel'),
+                desc: t('header.nav.policiesDesc'),
                 path: '/dashboard/self-healing/policies',
                 icon: ShieldAlert,
                 active: isPoliciesActive,
@@ -214,15 +217,15 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
             ]
           : []),
         {
-          label: 'Nhật ký kiểm toán',
-          desc: 'Truy vết thao tác người dùng & AI',
+          label: t('header.nav.auditLogsLabel'),
+          desc: t('header.nav.auditLogsDesc'),
           path: '/dashboard/audit-logs',
           icon: ScrollText,
           active: isAuditLogsActive,
         },
         {
-          label: 'Báo cáo SLA & Vận hành',
-          desc: 'Thống kê SLA, chi phí & xuất Excel',
+          label: t('header.nav.reportsLabel'),
+          desc: t('header.nav.reportsDesc'),
           path: '/dashboard/reports',
           icon: BarChart3,
           active: isReportsActive,
@@ -230,8 +233,8 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
         ...(canViewOrgNav
           ? [
               {
-                label: 'Cài đặt hệ thống',
-                desc: 'Cảnh báo Email khẩn cấp & cooldown',
+                label: t('header.nav.settingsLabel'),
+                desc: t('header.nav.settingsDesc'),
                 path: '/dashboard/settings',
                 icon: Settings,
                 active: isSettingsActive,
@@ -333,7 +336,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
           type="button"
           className="dashboard-mobile-toggle"
           onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
-          aria-label="Mở menu điều hướng"
+          aria-label={t('header.mobileToggleAria')}
           style={{
             display: 'none',
             width: '36px',
@@ -357,7 +360,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
             className="topheader-org-btn"
             aria-haspopup="listbox"
             aria-expanded={isOrgDropdownOpen}
-            aria-label="Chọn tổ chức"
+            aria-label={t('header.selectOrgAria')}
             disabled={isSwitchingOrg}
             onClick={() => setIsOrgDropdownOpen(!isOrgDropdownOpen)}
             onKeyDown={handleOrgKeyDown}
@@ -395,8 +398,8 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
               }}
             >
               {isSwitchingOrg
-                ? 'Đang chuyển...'
-                : currentOrg?.name || (isLoadingOrgs ? 'Đang tải...' : 'Chưa có Tổ chức')}
+                ? t('header.switchingOrg')
+                : currentOrg?.name || (isLoadingOrgs ? t('header.loading') : t('header.noOrg'))}
             </span>
             <span
               className="topheader-org-name topheader-org-mobile"
@@ -405,7 +408,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                 display: 'none',
               }}
             >
-              {isSwitchingOrg ? '...' : (currentOrg?.name?.split(' ')[0] || 'Org')}
+              {isSwitchingOrg ? '...' : (currentOrg?.name?.split(' ')[0] || t('header.orgShort'))}
             </span>
             {currentOrg?.role_in_org && (
               <span
@@ -439,13 +442,14 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
           {isOrgDropdownOpen && (
             <div
               role="listbox"
-              aria-label="Danh sách tổ chức của bạn"
+              aria-label={t('header.orgListAria')}
               style={{
                 position: 'absolute',
                 top: '100%',
                 left: 0,
                 marginTop: '6px',
                 width: '260px',
+                maxWidth: 'calc(100vw - 24px)',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid var(--dash-border)',
                 borderRadius: 'var(--dash-radius-md)',
@@ -468,7 +472,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                   marginBottom: '4px',
                 }}
               >
-                <span>Tổ Chức Của Bạn</span>
+                <span>{t('header.yourOrgs')}</span>
                 {isLoadingOrgs && (
                   <Loader2 size={12} color="var(--dash-text-muted)" style={{ animation: 'spin 1s linear infinite' }} />
                 )}
@@ -476,13 +480,13 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
 
               {isLoadingOrgs && orgList.length === 0 && (
                 <div style={{ padding: '12px 10px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)', textAlign: 'center' }}>
-                  Đang tải danh sách...
+                  {t('header.loadingList')}
                 </div>
               )}
 
               {!isLoadingOrgs && orgList.length === 0 && (
                 <div style={{ padding: '12px 10px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)', textAlign: 'center' }}>
-                  Chưa có tổ chức nào.
+                  {t('header.emptyOrgs')}
                 </div>
               )}
 
@@ -566,7 +570,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                 fetchOrgEnvironmentsAndClusters(currentOrg.id);
               }
             }}
-            title="Chọn Môi Trường & Cụm Kubernetes"
+            title={t('header.selectEnvClusterTitle')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -598,10 +602,10 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
               }
             >
               {isLoadingEnvs
-                ? 'Đang tải cụm...'
+                ? t('header.loadingClusters')
                 : currentEnv?.cluster
                 ? `${currentEnv.envName || 'Production'} / ${currentEnv.cluster}`
-                : currentEnv?.displayName || currentEnv?.name || (envList.length === 0 ? 'Chưa có Cụm K8s' : 'Chọn Cụm K8s')}
+                : currentEnv?.displayName || currentEnv?.name || (envList.length === 0 ? t('header.noK8sCluster') : t('header.chooseK8sCluster'))}
             </span>
             <span
               className="topheader-cluster-name topheader-cluster-mobile"
@@ -618,8 +622,8 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
               }
             >
               {isLoadingEnvs
-                ? 'Đang tải...'
-                : currentEnv?.cluster || currentEnv?.name || (envList.length === 0 ? 'K8s' : 'Chọn')}
+                ? t('header.loading')
+                : currentEnv?.cluster || currentEnv?.name || (envList.length === 0 ? 'K8s' : t('header.chooseShort'))}
             </span>
             {currentEnv?.agentStatus === 'ONLINE' ? (
               <span
@@ -631,7 +635,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                   display: 'inline-block',
                   flexShrink: 0,
                 }}
-                title="Agent eBPF Online"
+                title={t('header.agentEbpfOnline')}
               />
             ) : currentEnv?.agentStatus === 'OFFLINE' ? (
               <span
@@ -643,7 +647,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                   display: 'inline-block',
                   flexShrink: 0,
                 }}
-                title="Agent Offline"
+                title={t('header.agentOffline')}
               />
             ) : null}
             <ChevronDown size={14} color="var(--dash-text-muted)" style={{ flexShrink: 0 }} />
@@ -657,6 +661,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                 left: 0,
                 marginTop: '6px',
                 width: '280px',
+                maxWidth: 'calc(100vw - 24px)',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid var(--dash-border)',
                 borderRadius: 'var(--dash-radius-md)',
@@ -679,12 +684,12 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                   marginBottom: '4px',
                 }}
               >
-                <span>Môi Trường & Cụm K8s</span>
+                <span>{t('header.envAndClusters')}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '0.625rem', color: 'var(--dash-primary)' }}>{envList.length} Cụm</span>
+                  <span style={{ fontSize: '0.625rem', color: 'var(--dash-primary)' }}>{t('header.clusterCount', { count: envList.length })}</span>
                   <button
                     type="button"
-                    title="Tải lại danh sách cụm K8s"
+                    title={t('header.reloadClustersTitle')}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (currentOrg?.id && fetchOrgEnvironmentsAndClusters) {
@@ -708,13 +713,13 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
 
               {isLoadingEnvs && envList.length === 0 && (
                 <div style={{ padding: '12px 10px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)', textAlign: 'center' }}>
-                  Đang tải danh sách cụm...
+                  {t('header.loadingClusterList')}
                 </div>
               )}
 
               {!isLoadingEnvs && envList.length === 0 && (
                 <div style={{ padding: '12px 10px', fontSize: '0.8125rem', color: 'var(--dash-text-muted)', textAlign: 'center' }}>
-                  <p style={{ margin: '0 0 8px 0' }}>Chưa có cụm K8s nào trong tổ chức.</p>
+                  <p style={{ margin: '0 0 8px 0' }}>{t('header.emptyOrgClusters')}</p>
                   <button
                     type="button"
                     onClick={() => {
@@ -733,7 +738,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                       cursor: 'pointer',
                     }}
                   >
-                    Tải lại danh sách cụm
+                    {t('header.reloadClusterList')}
                   </button>
                 </div>
               )}
@@ -777,18 +782,18 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                         </span>
                         {isOnline ? (
                           <span style={{ fontSize: '0.5625rem', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#D1FAE5', color: '#065F46', fontWeight: 700 }}>
-                            ONLINE
+                            {t('header.statusOnline')}
                           </span>
                         ) : (
                           <span style={{ fontSize: '0.5625rem', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: 600 }}>
-                            {env.agentStatus || 'OFFLINE'}
+                            {env.agentStatus || t('header.statusOffline')}
                           </span>
                         )}
                       </div>
                       <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span>{env.envName || env.name}</span>
-                        {env.nodes > 0 && <span>&bull; {env.nodes} Node</span>}
-                        {env.pods > 0 && <span>&bull; {env.pods} Pods</span>}
+                        {env.nodes > 0 && <span>&bull; {t('header.nodeCount', { count: env.nodes })}</span>}
+                        {env.pods > 0 && <span>&bull; {t('header.podCount', { count: env.pods })}</span>}
                       </div>
                     </div>
                     {isSelected && <Check size={14} color="var(--dash-primary)" style={{ flexShrink: 0 }} />}
@@ -823,7 +828,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                     gap: '6px',
                   }}
                 >
-                  <span>+ Quản Lý & Thêm Cụm Kubernetes</span>
+                  <span>{t('header.manageAddClusters')}</span>
                 </button>
               </div>
             </div>
@@ -986,8 +991,8 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
           <button
             type="button"
             onClick={() => setIsNotifPopoverOpen(!isNotifPopoverOpen)}
-            title="Thông báo"
-            aria-label="Thông báo"
+            title={t('header.notificationsLabel')}
+            aria-label={t('header.notificationsLabel')}
             style={{
               ...getHeaderIconBtnStyle(isNotificationsActive),
               position: 'relative',
@@ -1026,6 +1031,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                 right: 0,
                 marginTop: '8px',
                 width: '320px',
+                maxWidth: 'calc(100vw - 24px)',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid var(--dash-border)',
                 borderRadius: 'var(--dash-radius-md)',
@@ -1043,7 +1049,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                 }}
               >
                 <span style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--dash-text-primary)' }}>
-                  Thông Báo Hệ Thống
+                  {t('header.systemNotifications')}
                 </span>
                 {unreadNotifsCount > 0 && (
                   <button
@@ -1057,7 +1063,7 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                       cursor: 'pointer',
                     }}
                   >
-                    Đánh dấu đã đọc
+                    {t('header.markAllRead')}
                   </button>
                 )}
               </div>
@@ -1113,12 +1119,14 @@ export const TopHeader = ({ isFloatingCanvas = false, currentPath = '/dashboard'
                     cursor: 'pointer',
                   }}
                 >
-                  Xem tất cả trong Trung tâm thông báo &rarr;
+                  {t('header.viewAllNotifications')}
                 </button>
               </div>
             </div>
           )}
         </div>
+
+        <LanguageSwitcherCompact height="34px" />
 
         {/* User Profile Menu đồng bộ chuẩn /admin */}
         <UserProfileDropdown onNavigate={onNavigate} />

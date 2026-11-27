@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   createChart,
   AreaSeries,
@@ -36,6 +37,7 @@ import {
   formatThroughput,
   formatPercent,
 } from '../../utils/nodeMetricsChartUtils';
+import i18n, { getIntlLocale } from '../../i18n';
 
 /**
  * Format Unix seconds timestamp for chart axis and crosshair tooltip
@@ -43,8 +45,9 @@ import {
 function formatUnixTime(unixSec, includeDate = false) {
   if (typeof unixSec !== 'number' || !Number.isFinite(unixSec)) return '';
   const d = new Date(unixSec * 1000);
+  const locale = getIntlLocale(i18n.language);
   if (includeDate) {
-    return d.toLocaleString('vi-VN', {
+    return d.toLocaleString(locale, {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
@@ -52,7 +55,7 @@ function formatUnixTime(unixSec, includeDate = false) {
       month: '2-digit',
     });
   }
-  return d.toLocaleTimeString('vi-VN', {
+  return d.toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -353,6 +356,7 @@ export const NodeMetricsChartsPanel = ({
   nodesOverride = null,
   onRawItemsLoaded,
 }) => {
+  const { t } = useTranslation('dashMonitoring');
   const [nodesList, setNodesList] = useState(Array.isArray(nodesOverride) ? nodesOverride : []);
   const [selectedNodeKey, setSelectedNodeKey] = useState(initialNodeName || '');
   const [timeRange, setTimeRange] = useState('15m');
@@ -620,7 +624,7 @@ export const NodeMetricsChartsPanel = ({
         if (currentSeq !== requestSeqRef.current) {
           return;
         }
-        setErrorMessage(err.message || 'Không thể tải dữ liệu Node Metrics từ máy chủ');
+        setErrorMessage(err.message || t('metrics.fetchError'));
         setRawItems([]);
       } finally {
         if (currentSeq === requestSeqRef.current && !controller.signal.aborted) {
@@ -629,7 +633,7 @@ export const NodeMetricsChartsPanel = ({
         }
       }
     },
-    [orgId, clusterId, agentId, selectedNodeKey, timeRange, nodesList, onRawItemsLoaded]
+    [orgId, clusterId, agentId, selectedNodeKey, timeRange, nodesList, onRawItemsLoaded, t]
   );
 
   useEffect(() => {
@@ -741,7 +745,7 @@ export const NodeMetricsChartsPanel = ({
                 color: 'var(--dash-text-primary, #0F172A)',
               }}
             >
-              Máy chủ (Node):
+              {t('nodeCharts.nodeLabel')}
             </label>
             <select
               id="node-metrics-node-select"
@@ -762,11 +766,11 @@ export const NodeMetricsChartsPanel = ({
               }}
             >
               {nodeOptions.length === 0 ? (
-                <option value="">Tất cả máy chủ trong cụm</option>
+                <option value="">{t('nodeCharts.allNodesOption')}</option>
               ) : (
                 nodeOptions.map((n) => (
                   <option key={n.key} value={n.key}>
-                    {n.name} ({n.name === 'minikube' ? 13 : 11} Pods)
+                    {t('nodeCharts.nodeOption', { name: n.name, count: n.name === 'minikube' ? 13 : 11 })}
                   </option>
                 ))
               )}
@@ -784,7 +788,7 @@ export const NodeMetricsChartsPanel = ({
                   color: 'var(--dash-text-secondary, #64748B)',
                 }}
               >
-                Phân vùng Đĩa:
+                {t('nodeCharts.diskPartitionLabel')}
               </label>
               <select
                 id="node-metrics-fs-select"
@@ -804,7 +808,7 @@ export const NodeMetricsChartsPanel = ({
               >
                 {chartModel.filesystems.map((fs) => (
                   <option key={fs} value={fs}>
-                    {fs === 'ALL' ? 'Tất cả (Tổng hợp)' : `Mount: ${fs}`}
+                    {fs === 'ALL' ? t('nodeCharts.diskAllOption') : t('nodeCharts.diskMountOption', { mount: fs })}
                   </option>
                 ))}
               </select>
@@ -817,7 +821,7 @@ export const NodeMetricsChartsPanel = ({
           {/* Time Range Presets */}
           <div
             role="group"
-            aria-label="Khoảng thời gian"
+            aria-label={t('nodeCharts.timeRangeAria')}
             style={{
               display: 'flex',
               backgroundColor: '#F1F5F9',
@@ -848,7 +852,7 @@ export const NodeMetricsChartsPanel = ({
                     cursor: 'pointer',
                   }}
                 >
-                  {preset.label}
+                  {t(`timeRanges.${preset.id}`, preset.label)}
                 </button>
               );
             })}
@@ -857,7 +861,7 @@ export const NodeMetricsChartsPanel = ({
           {/* Zoom & Pan Controls Group */}
           <div
             role="toolbar"
-            aria-label="Điều khiển thu phóng"
+            aria-label={t('nodeCharts.zoomToolbarAria')}
             data-testid="chart-zoom-pan-controls"
             style={{
               display: 'flex',
@@ -872,7 +876,7 @@ export const NodeMetricsChartsPanel = ({
             <button
               type="button"
               data-testid="chart-zoom-in"
-              title="Phóng to (Zoom In)"
+              title={t('nodeCharts.zoomInTitle')}
               onClick={handleZoomIn}
               style={{
                 display: 'inline-flex',
@@ -892,7 +896,7 @@ export const NodeMetricsChartsPanel = ({
             <button
               type="button"
               data-testid="chart-zoom-out"
-              title="Thu nhỏ (Zoom Out)"
+              title={t('nodeCharts.zoomOutTitle')}
               onClick={handleZoomOut}
               style={{
                 display: 'inline-flex',
@@ -913,7 +917,7 @@ export const NodeMetricsChartsPanel = ({
             <button
               type="button"
               data-testid="chart-pan-left"
-              title="Kéo lùi thời gian (Pan Left)"
+              title={t('nodeCharts.panLeftTitle')}
               onClick={() => handlePan('left')}
               style={{
                 display: 'inline-flex',
@@ -933,7 +937,7 @@ export const NodeMetricsChartsPanel = ({
             <button
               type="button"
               data-testid="chart-pan-right"
-              title="Kéo tiến thời gian (Pan Right)"
+              title={t('nodeCharts.panRightTitle')}
               onClick={() => handlePan('right')}
               style={{
                 display: 'inline-flex',
@@ -954,7 +958,7 @@ export const NodeMetricsChartsPanel = ({
             <button
               type="button"
               data-testid="chart-reset-zoom"
-              title="Đặt lại vùng nhìn (Reset Zoom)"
+              title={t('nodeCharts.resetZoomTitle')}
               onClick={handleResetZoom}
               style={{
                 display: 'inline-flex',
@@ -1000,7 +1004,7 @@ export const NodeMetricsChartsPanel = ({
                 backgroundColor: isAutoRefresh ? '#10B981' : '#94A3B8',
               }}
             />
-            <span>Auto 5s</span>
+            <span>{t('common.auto5s')}</span>
           </button>
 
           {/* Manual Refresh Button */}
@@ -1024,7 +1028,7 @@ export const NodeMetricsChartsPanel = ({
             }}
           >
             <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
+            <span>{t('common.refresh')}</span>
           </button>
         </div>
       </div>
@@ -1047,8 +1051,8 @@ export const NodeMetricsChartsPanel = ({
         >
           <Clock size={16} color="#D97706" />
           <span>
-            <strong>Dữ liệu cũ (Stale Metrics):</strong> Mẫu gần nhất được ghi nhận lúc{' '}
-            <code>{formatUnixTime(chartModel.latestSample.time, true)}</code>. Agent có thể đã tạm dừng gửi telemetry.
+            <strong>{t('nodeCharts.staleBannerTitle')}</strong> {t('nodeCharts.staleBannerDesc')}{' '}
+            <code>{formatUnixTime(chartModel.latestSample.time, true)}</code>{t('nodeCharts.staleBannerSuffix')}
           </span>
         </div>
       )}
@@ -1070,7 +1074,7 @@ export const NodeMetricsChartsPanel = ({
         >
           <AlertTriangle size={16} color="#2563EB" />
           <span>
-            <strong>Thu thập một phần (PARTIAL):</strong> Một số chỉ số phần cứng không đọc được trên mẫu gần nhất.
+            <strong>{t('nodeCharts.partialBannerTitle')}</strong> {t('nodeCharts.partialBannerDesc')}
           </span>
         </div>
       )}
@@ -1096,7 +1100,7 @@ export const NodeMetricsChartsPanel = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B' }}>
-              TÀI NGUYÊN CPU
+              {t('nodeCharts.cards.cpuTitle')}
             </span>
             <Cpu size={16} color="#059669" />
           </div>
@@ -1118,7 +1122,7 @@ export const NodeMetricsChartsPanel = ({
             )}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px', fontFamily: 'var(--font-mono, monospace)' }}>
-            TB: {formatPercent(summary.cpu.avg, 1)} &bull; Đỉnh: {formatPercent(summary.cpu.max, 1)}
+            {t('nodeCharts.cards.cpuAvgMax', { avg: formatPercent(summary.cpu.avg, 1), max: formatPercent(summary.cpu.max, 1) })}
           </div>
         </div>
 
@@ -1135,7 +1139,7 @@ export const NodeMetricsChartsPanel = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B' }}>
-              BỘ NHỚ RAM
+              {t('nodeCharts.cards.ramTitle')}
             </span>
             <Database size={16} color="#2563EB" />
           </div>
@@ -1157,7 +1161,7 @@ export const NodeMetricsChartsPanel = ({
             )}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px', fontFamily: 'var(--font-mono, monospace)' }}>
-            Còn trống: {formatBytes(summary.ram.availableBytes)} &bull; Đỉnh: {formatPercent(summary.ram.maxPercent, 1)}
+            {t('nodeCharts.cards.availableAndPeak', { avail: formatBytes(summary.ram.availableBytes), peak: formatPercent(summary.ram.maxPercent, 1) })}
           </div>
         </div>
 
@@ -1174,7 +1178,7 @@ export const NodeMetricsChartsPanel = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B' }}>
-              DUNG LƯỢNG Ổ CỨNG {selectedMount !== 'ALL' ? `(${selectedMount})` : ''}
+              {t('nodeCharts.cards.diskTitle')} {selectedMount !== 'ALL' ? `(${selectedMount})` : ''}
             </span>
             <HardDrive size={16} color="#7C3AED" />
           </div>
@@ -1196,7 +1200,7 @@ export const NodeMetricsChartsPanel = ({
             )}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px', fontFamily: 'var(--font-mono, monospace)' }}>
-            Còn trống: {formatBytes(summary.disk.availableBytes)} &bull; Đỉnh: {formatPercent(summary.disk.maxPercent, 1)}
+            {t('nodeCharts.cards.availableAndPeak', { avail: formatBytes(summary.disk.availableBytes), peak: formatPercent(summary.disk.maxPercent, 1) })}
           </div>
         </div>
 
@@ -1213,7 +1217,7 @@ export const NodeMetricsChartsPanel = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B' }}>
-              TỐC ĐỘ TRUYỀN TẢI MẠNG
+              {t('nodeCharts.cards.networkTitle')}
             </span>
             <Wifi size={16} color="#0891B2" />
           </div>
@@ -1226,7 +1230,7 @@ export const NodeMetricsChartsPanel = ({
                 color: '#0891B2',
               }}
             >
-              &darr; Nhận: {hasData ? formatThroughput(summary.network.currentRxPerSec) : '0 B/s'}
+              &darr; {t('nodeCharts.cards.rxLabel', { value: hasData ? formatThroughput(summary.network.currentRxPerSec) : '0 B/s' })}
             </span>
             <span
               style={{
@@ -1236,11 +1240,11 @@ export const NodeMetricsChartsPanel = ({
                 color: '#EA580C',
               }}
             >
-              &uarr; Gửi: {hasData ? formatThroughput(summary.network.currentTxPerSec) : '0 B/s'}
+              &uarr; {t('nodeCharts.cards.txLabel', { value: hasData ? formatThroughput(summary.network.currentTxPerSec) : '0 B/s' })}
             </span>
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px', fontFamily: 'var(--font-mono, monospace)' }}>
-            Tổng nhận: {formatBytes(summary.network.totalRxBytes)} &bull; Tổng gửi: {formatBytes(summary.network.totalTxBytes)}
+            {t('nodeCharts.cards.totalRxTx', { rx: formatBytes(summary.network.totalRxBytes), tx: formatBytes(summary.network.totalTxBytes) })}
           </div>
         </div>
       </div>
@@ -1264,7 +1268,7 @@ export const NodeMetricsChartsPanel = ({
         >
           <AlertCircle size={32} color="#DC2626" />
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#991B1B' }}>
-            Không thể tải biểu đồ Node Metrics
+            {t('nodeFlow.error.title')}
           </h3>
           <p style={{ margin: 0, fontSize: '0.8125rem', color: '#7F1D1D', maxWidth: '480px' }}>
             {errorMessage}
@@ -1284,7 +1288,7 @@ export const NodeMetricsChartsPanel = ({
               cursor: 'pointer',
             }}
           >
-            Thử lại
+            {t('common.retry')}
           </button>
         </div>
       ) : !isLoading && !hasData ? (
@@ -1305,12 +1309,13 @@ export const NodeMetricsChartsPanel = ({
         >
           <Activity size={32} color="#64748B" />
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1E293B' }}>
-            Chưa có dữ liệu Node Metrics trong khoảng thời gian đã chọn
+            {t('nodeFlow.emptyCharts.title')}
           </h3>
           <p style={{ margin: 0, fontSize: '0.8125rem', color: '#64748B', maxWidth: '520px' }}>
-            Hệ thống không ghi nhận mẫu dữ liệu nào cho máy chủ{' '}
-            <strong>{selectedNodeKey || 'đang chọn'}</strong> trong cửa sổ{' '}
-            <strong>{presetConfig.label}</strong>. Hãy mở rộng khoảng thời gian (vd: 6 giờ, 24 giờ, 7 ngày) hoặc kiểm tra kết nối của Agent.
+            {t('nodeCharts.emptyDescription', {
+              node: selectedNodeKey || t('nodeFlow.emptyCharts.selectedNodeFallback'),
+              range: t(`timeRanges.${presetConfig.id}`, presetConfig.label),
+            })}
           </p>
         </div>
       ) : (
@@ -1338,11 +1343,11 @@ export const NodeMetricsChartsPanel = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Cpu size={16} color="#059669" />
                   <h4 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
-                    Mức Sử Dụng CPU (%)
+                    {t('nodeFlow.charts.cpuTitle')}
                   </h4>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  Tỷ lệ tải của chip xử lý CPU trên máy chủ (0–100%)
+                  {t('nodeCharts.panels.cpuSubtitle')}
                 </span>
               </div>
               {activeSample && (
@@ -1389,11 +1394,11 @@ export const NodeMetricsChartsPanel = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Database size={16} color="#2563EB" />
                   <h4 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
-                    Mức Sử Dụng Bộ Nhớ RAM (%)
+                    {t('nodeFlow.charts.ramTitle')}
                   </h4>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  Dung lượng RAM đang chạy và còn trống trên máy chủ
+                  {t('nodeCharts.panels.ramSubtitle')}
                 </span>
               </div>
               {activeSample && (
@@ -1402,7 +1407,7 @@ export const NodeMetricsChartsPanel = ({
                     {formatPercent(activeSample.ram_usage_percent, 1)} ({formatBytes(activeSample.ram_used_bytes)} / {formatBytes(activeSample.ram_total_bytes)})
                   </div>
                   <div style={{ color: '#94A3B8', fontSize: '0.6875rem' }}>
-                    Còn trống: {formatBytes(activeSample.ram_available_bytes)}
+                    {t('nodeCharts.panels.available', { value: formatBytes(activeSample.ram_available_bytes) })}
                   </div>
                 </div>
               )}
@@ -1440,11 +1445,11 @@ export const NodeMetricsChartsPanel = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <HardDrive size={16} color="#7C3AED" />
                   <h4 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
-                    Dung Lượng Ổ Đĩa (%) {selectedMount !== 'ALL' ? `[${selectedMount}]` : ''}
+                    {t('nodeFlow.charts.diskTitle')} {selectedMount !== 'ALL' ? `[${selectedMount}]` : ''}
                   </h4>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  Không gian lưu trữ đã dùng và còn trống trên ổ đĩa
+                  {t('nodeCharts.panels.diskSubtitle')}
                 </span>
               </div>
               {activeSample && (
@@ -1453,7 +1458,7 @@ export const NodeMetricsChartsPanel = ({
                     {formatPercent(activeSample.disk_usage_percent, 1)} ({formatBytes(activeSample.disk_used_bytes)} / {formatBytes(activeSample.disk_total_bytes)})
                   </div>
                   <div style={{ color: '#94A3B8', fontSize: '0.6875rem' }}>
-                    Còn trống: {formatBytes(activeSample.disk_available_bytes)}
+                    {t('nodeCharts.panels.available', { value: formatBytes(activeSample.disk_available_bytes) })}
                   </div>
                 </div>
               )}
@@ -1491,18 +1496,18 @@ export const NodeMetricsChartsPanel = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Wifi size={16} color="#0891B2" />
                   <h4 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
-                    Tốc Độ Mạng (Tải Về &amp; Tải Lên)
+                    {t('nodeCharts.panels.networkTitle')}
                   </h4>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  Lưu lượng dữ liệu mạng truyền nhận mỗi giây
+                  {t('nodeCharts.panels.networkSubtitle')}
                 </span>
               </div>
 
               {/* Interactive Legend & Series Visibility Toggles */}
               <div
                 role="group"
-                aria-label="Hiện/Ẩn luồng mạng"
+                aria-label={t('nodeCharts.panels.netToggleAria')}
                 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
               >
                 <button
@@ -1531,7 +1536,7 @@ export const NodeMetricsChartsPanel = ({
                       backgroundColor: showNetRx ? '#0891B2' : '#CBD5E1',
                     }}
                   />
-                  <span>&darr; Tải về (RX): {hasData ? formatThroughput(summary.network.currentRxPerSec) : '0 B/s'}</span>
+                  <span>&darr; {t('nodeCharts.panels.rxToggle', { value: hasData ? formatThroughput(summary.network.currentRxPerSec) : '0 B/s' })}</span>
                 </button>
                 <button
                   type="button"
@@ -1559,7 +1564,7 @@ export const NodeMetricsChartsPanel = ({
                       backgroundColor: showNetTx ? '#EA580C' : '#CBD5E1',
                     }}
                   />
-                  <span>&uarr; Tải lên (TX): {hasData ? formatThroughput(summary.network.currentTxPerSec) : '0 B/s'}</span>
+                  <span>&uarr; {t('nodeCharts.panels.txToggle', { value: hasData ? formatThroughput(summary.network.currentTxPerSec) : '0 B/s' })}</span>
                 </button>
               </div>
             </div>
@@ -1603,11 +1608,11 @@ export const NodeMetricsChartsPanel = ({
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
             <CheckCircle2 size={13} color="#059669" />
-            Node: <strong>{chartModel.latestSample?.node_name}</strong> &bull; Hiển thị{' '}
-            <strong>{summary.plottedCount}</strong> / {summary.rawCount} mẫu (Lightweight Charts v5.2.1)
+            Node: <strong>{chartModel.latestSample?.node_name}</strong> &bull; {t('nodeCharts.footer.showing')}{' '}
+            <strong>{summary.plottedCount}</strong> / {summary.rawCount} {t('nodeCharts.footer.samplesSuffix')}
           </span>
           <span>
-            Cập nhật mẫu cuối: {formatUnixTime(chartModel.latestSample?.time, true)}
+            {t('nodeCharts.footer.lastUpdated', { time: formatUnixTime(chartModel.latestSample?.time, true) })}
           </span>
         </div>
       )}

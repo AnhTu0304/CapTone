@@ -1,0 +1,613 @@
+{
+  "header": {
+    "centerTitle": "Control Center",
+    "navAria": "Open mobile navigation menu",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
+    "notificationsTitle": "Personal Notifications",
+    "titles": {
+      "dashboard": "Dashboard",
+      "companies": "My Organizations",
+      "profile": "Personal Profile",
+      "security": "Account Security",
+      "preferences": "Preferences",
+      "notifications": "Notification Center",
+      "activity": "Activity History",
+      "help": "Help & Support"
+    }
+  },
+  "sidebar": {
+    "brandSubtitle": "Personal Workspace",
+    "centerSubtitle": "Control Center",
+    "backToPublic": "Back to Homepage",
+    "ariaLabel": "Personal Portal Navigation",
+    "sectionTitle": "Personal Features",
+    "collapseLabel": "COLLAPSE SIDEBAR",
+    "nav": {
+      "dashboard": "Dashboard",
+      "companies": "My Organizations",
+      "profile": "Personal Profile",
+      "security": "Account Security",
+      "preferences": "Preferences",
+      "notifications": "Notifications",
+      "activity": "Activity History",
+      "help": "Help & Support"
+    }
+  },
+  "layout": {
+    "mobileMenuLabel": "Mobile navigation menu",
+    "closeMobileMenu": "Close menu",
+    "closeNavMenu": "Close navigation menu"
+  },
+  "profileDropdown": {
+    "profile": "Personal Profile",
+    "portal": "Personal Workspace (Portal)",
+    "dashboard": "Operations Dashboard",
+    "admin": "System Administration",
+    "security": "Security & 2FA",
+    "preferences": "Preferences & Language",
+    "logout": "Sign out",
+    "defaultAdminName": "Administrator",
+    "noSystemRole": "No System Role assigned",
+    "switchToPortal": "Control Center",
+    "switchToDashboard": "Organization Dashboard",
+    "switchToAdmin": "System Admin Console",
+    "adminProfile": "Admin Profile",
+    "viewProfile": "View Personal Profile",
+    "securityAndPassword": "Security & Password",
+    "auditLogs": "SHA-256 Audit Logs",
+    "systemSettings": "System Settings",
+    "accountSettings": "Account Settings",
+    "logoutAdmin": "Sign Out of Admin",
+    "logoutAccount": "Sign Out",
+    "ariaAdminMenu": "Administrator profile menu",
+    "ariaUserMenu": "User profile menu",
+    "ariaAccountOptions": "Account options"
+  },
+  "dashboard": {
+    "errors": {
+      "loadFailedFallback": "Unable to connect to the server or database",
+      "acceptInviteFailed": "Unable to accept invitation",
+      "rejectInviteFailed": "Unable to decline invitation"
+    },
+    "errorBanner": {
+      "title": "Unable to load data from server or database",
+      "retry": "Retry"
+    },
+    "invitations": {
+      "bannerTitle": "You have {{count}} pending organization invitation(s)",
+      "viewDetails": "View details →",
+      "fromPrefix": "From",
+      "roleLabel": "Role:",
+      "accept": "Accept",
+      "reject": "Decline"
+    },
+    "kpi": {
+      "totalCompanies": "Total Organizations",
+      "checking": "Checking...",
+      "activeCompaniesSub": "{{count}} active organization(s)",
+      "activeCompanies": "Active Organizations",
+      "syncing": "Syncing...",
+      "activeRatio": "{{active}}/{{total}} active organizations",
+      "noActiveCompanies": "No active organizations yet",
+      "unreadNotifs": "Unread Notifications",
+      "unreadCountSub": "{{count}} new notification(s) to review",
+      "allReadSub": "All notifications read",
+      "accountSecurity": "Account Security",
+      "twoFaEnabled": "2FA Enabled",
+      "twoFaDisabled": "2FA Disabled",
+      "twoFaProtectedSub": "Two-layer account protection",
+      "twoFaRecommendSub": "TOTP activation recommended"
+    },
+    "companies": {
+      "title": "My Organizations",
+      "subtitle": "Organizations where you currently hold a member role",
+      "viewAll": "View all ({{count}})",
+      "loading": "Loading organizations...",
+      "errorTitle": "Unable to display organizations",
+      "errorDesc": "An error occurred while querying the backend. Please click \"Retry\" above.",
+      "emptyTitle": "No organizations joined yet",
+      "emptyDesc": "You do not belong to any organization or have not been granted access yet. Create an organization if permitted, or contact an administrator for an invitation.",
+      "createNew": "Create New Organization",
+      "infraSummary": "{{clusters}} K8s Clusters • {{workloads}} Workloads",
+      "enterWorkspace": "Enter Workspace"
+    },
+    "rightPanel": {
+      "tabNotifications": "Notifications",
+      "tabActivity": "Activity",
+      "viewAllNotifications": "View all notifications →",
+      "viewActivityLog": "View activity log →",
+      "emptyNotifications": "No new notifications",
+      "emptyActivities": "No recent activity"
+    }
+  },
+  "companies": {
+    "title": "My Organizations",
+    "subtitle": "Manage the organizations you belong to, switch workspaces, or create a new organization.",
+    "createButton": "Create Organization",
+    "tabs": {
+      "joined": "Joined Organizations ({{count}})",
+      "invitations": "Pending Invitations ({{count}})"
+    },
+    "filters": {
+      "searchPlaceholder": "Search by organization name or slug...",
+      "allRoles": "All roles",
+      "roleOwner": "SME Owner",
+      "roleDevops": "DevOps Lead",
+      "roleViewer": "Viewer"
+    },
+    "card": {
+      "statusActive": "Active",
+      "statusSuspended": "Suspended",
+      "yourRole": "Your role:",
+      "k8sInfra": "K8s Infrastructure:",
+      "infraValue": "{{clusters}} Clusters • {{workloads}} Workloads",
+      "members": "Members:",
+      "membersCount": "{{count}} members",
+      "enterWorkspace": "Enter Workspace",
+      "leaveTooltip": "Leave this organization"
+    },
+    "empty": {
+      "noMatchTitle": "No matching organizations found",
+      "noJoinedTitle": "No organizations joined yet",
+      "noMatchDesc": "Try adjusting your search keywords or role filter.",
+      "noJoinedDesc": "You do not belong to any organization or have not been granted access yet. Create an organization if permitted, or contact an administrator for an invitation.",
+      "noInvitationsTitle": "No pending invitations",
+      "noInvitationsDesc": "When an organization invites your email to join a project, the invitation will appear here for confirmation."
+    },
+    "invitation": {
+      "fromPrefix": "Invited by:",
+      "assignedRole": "Assigned role:",
+      "expiresAt": "Response deadline:",
+      "accept": "Accept Invitation",
+      "reject": "Decline"
+    },
+    "createModal": {
+      "title": "Create New Organization",
+      "nameRequired": "Please enter an organization name",
+      "createFailed": "Failed to create organization",
+      "nameLabel": "Company / Organization Name *",
+      "namePlaceholder": "e.g., TechHub Vietnam Co., Ltd",
+      "slugLabel": "URL Slug Identifier (Auto-generated) *",
+      "domainLabel": "Corporate Domain",
+      "domainPlaceholder": "e.g., techhub.vn",
+      "descLabel": "Short Description",
+      "descPlaceholder": "Business domain or cluster purpose...",
+      "cancel": "Cancel",
+      "confirm": "Confirm Create"
+    },
+    "leaveModal": {
+      "title": "Confirm Leave Organization",
+      "confirmPrefix": "Are you sure you want to leave",
+      "confirmSuffix": "? You will lose all access to this organization's Kubernetes clusters and resources.",
+      "cancel": "Cancel",
+      "confirm": "Confirm Leave",
+      "leaveFailed": "Unable to leave organization"
+    },
+    "errors": {
+      "acceptInviteFailed": "Unable to accept invitation"
+    }
+  },
+  "profile": {
+    "title": "Personal Profile",
+    "subtitle": "View and update your identity details, avatar image, and member role.",
+    "defaultAdminInitials": "Administrator",
+    "noSystemRole": "No System Role assigned",
+    "defaultUserName": "User",
+    "defaultJobTitle": "SRE & DevOps Lead",
+    "changeAvatarTitle": "Change profile picture",
+    "statusLabel": "Account status:",
+    "statusActive": "ACTIVE",
+    "highestRoleLabel": "Highest role:",
+    "joinedDateLabel": "Joined date:",
+    "lastLoginLabel": "Last login:",
+    "formTitle": "Identity & Contact Information",
+    "formSubtitle": "Keep your details updated so organization teammates can identify and collaborate with you",
+    "fields": {
+      "fullName": "Full Name *",
+      "email": "Email Address (Login ID)",
+      "phone": "Phone Number",
+      "phonePlaceholder": "e.g., 0912345678",
+      "jobTitle": "Job Title",
+      "jobTitlePlaceholder": "e.g., Senior DevOps Engineer",
+      "department": "Department / Unit",
+      "bio": "Short Bio"
+    },
+    "submit": "Save Profile Changes",
+    "submitting": "Saving Profile...",
+    "messages": {
+      "invalidImage": "Please select a valid image file (PNG, JPG, WEBP).",
+      "imageTooLarge": "Profile image size must not exceed 3MB.",
+      "fullNameRequired": "Full name cannot be empty.",
+      "savedSuccess": "Personal profile updated successfully!",
+      "savedToast": "Profile saved to database successfully!",
+      "saveFailed": "Unable to save profile details"
+    }
+  },
+  "security": {
+    "title": "Account Security",
+    "subtitle": "Configure a strong password, enable two-factor authentication, and manage active login sessions.",
+    "password": {
+      "title": "Change Login Password",
+      "subHasPassword": "Recommended to rotate your password at least every 90 days",
+      "subGoogleOAuth": "Authenticated via Google OAuth",
+      "googleTitle": "Signed in with Google",
+      "googleDesc": "Your account is authenticated directly via Google OAuth and does not use a local password. Please manage your password and sign-in security in your Google Account settings.",
+      "oldLabel": "Current Password *",
+      "oldPlaceholder": "Enter your current password",
+      "newLabel": "New Password (Minimum 8 characters) *",
+      "newPlaceholder": "Enter a strong new password",
+      "confirmLabel": "Confirm New Password *",
+      "confirmPlaceholder": "Re-enter your new password",
+      "strengthLabel": "Password strength:",
+      "strengthEmpty": "Empty",
+      "strengthWeak": "Weak",
+      "strengthFair": "Fair",
+      "strengthGood": "Good",
+      "strengthStrong": "Strong (Best)",
+      "updating": "Updating...",
+      "submit": "Update Password",
+      "mismatch": "Confirmation password does not match!",
+      "tooShort": "New password must be at least 8 characters long!",
+      "success": "Password updated successfully! Please store your new password securely.",
+      "failed": "Failed to change password"
+    },
+    "twoFactor": {
+      "title": "Two-Factor Authentication (2FA)",
+      "subtitle": "Protect your account with Google Authenticator or TOTP apps",
+      "enabledTitle": "2FA Is Enabled",
+      "disabledTitle": "2FA Is Disabled",
+      "enabledDesc": "Every sign-in requires a 6-digit OTP verification code",
+      "disabledDesc": "Your account lacks a second protection layer and may be at risk",
+      "badgeProtected": "MAXIMUM PROTECTION",
+      "badgeRisk": "AT RISK",
+      "info": "With 2FA enabled, in addition to your password you will need to enter a verification code from your mobile authenticator app (Google Authenticator, Microsoft Authenticator, or Authy).",
+      "disableBtn": "Disable 2FA",
+      "enableBtn": "Enable 2FA Now",
+      "errors": {
+        "setupInit": "Unable to initialize 2FA QR code",
+        "otpLength": "Please enter the full 6-digit OTP code from your app",
+        "otpInvalid": "Invalid or expired 2FA verification code",
+        "disableFailed": "Unable to disable 2FA"
+      }
+    },
+    "sessions": {
+      "title": "Active Login Sessions",
+      "connectedBadge": "{{count}} connected session(s)",
+      "singleSessionDesc": "Secure status: Your account is currently signed in on only this device.",
+      "multiSessionDesc": "Devices and browsers currently holding active sessions for your account.",
+      "revokeOthersBtn": "Sign Out Other Devices ({{count}})",
+      "currentDeviceBadge": "This device",
+      "noOtherSessions": "Your account is only signed in on this device; there are no other active sessions.",
+      "revokedSuccess": "Successfully signed out from all other devices!"
+    },
+    "loginHistory": {
+      "title": "Recent Login History",
+      "subtitle": "Detailed timestamp, IP address, and sign-in status recorded in the system audit database",
+      "syncing": "Syncing...",
+      "refreshTitle": "Refresh history from database",
+      "refresh": "Refresh",
+      "colTime": "Timestamp",
+      "colMethod": "Method",
+      "colIp": "IP Address",
+      "colLocation": "Estimated Location",
+      "colDevice": "Device",
+      "colStatus": "Status",
+      "loadingRow": "Syncing login history from database...",
+      "emptyRow": "No login history records have been recorded yet.",
+      "statusSuccess": "Success",
+      "statusFailed": "Failed",
+      "perPageLabel": "Rows per page:",
+      "perPageAria": "Rows per page",
+      "pageInfo": "Page {{current}} of {{total}}",
+      "prev": "‹ Prev",
+      "next": "Next ›"
+    },
+    "setupModal": {
+      "title": "Enable 2FA Authentication",
+      "descPrefix": "Open",
+      "descOr": "or",
+      "descSuffix": "on your phone and scan the QR code below to add your account:",
+      "manualKeyLabel": "Manual setup key",
+      "copied": "Copied",
+      "copy": "Copy",
+      "otpLabel": "Enter the 6-digit code from your authenticator app",
+      "cancel": "Cancel",
+      "confirm": "Verify & Enable"
+    },
+    "backupModal": {
+      "title": "2FA Enabled Successfully!",
+      "desc": "Save these 8 backup codes in a safe place. Each code can be used once to sign in if you do not have your phone.",
+      "copiedAll": "All codes copied",
+      "copyAll": "Copy 8 codes",
+      "done": "Saved & Done"
+    },
+    "disableModal": {
+      "title": "Disable 2FA",
+      "descPassword": "Are you sure you want to disable Two-Factor Authentication? Your account will only be protected by your password.",
+      "descGoogle": "Are you sure you want to disable Two-Factor Authentication? Your account will only be protected by Google sign-in.",
+      "labelPasswordOrOtp": "Account password or 6-digit 2FA OTP code",
+      "labelOtpOnly": "6-digit 2FA OTP code",
+      "placeholderPasswordOrOtp": "Enter password or 6-digit OTP code...",
+      "placeholderOtpOnly": "Enter 6-digit OTP code from your authenticator app...",
+      "cancel": "Cancel",
+      "confirm": "Confirm Disable 2FA"
+    }
+  },
+  "preferences": {
+    "title": "Preferences",
+    "subtitle": "Configure display language and personal notification delivery channels.",
+    "savedMessage": "Personal preferences saved successfully! Settings have been applied.",
+    "languageSection": {
+      "title": "1. Interface Language",
+      "subtitle": "Select the language used across all menus, buttons, alerts, and documentation",
+      "viLabel": "Tiếng Việt",
+      "viSub": "Default language for the platform and Vietnamese users",
+      "enLabel": "English (US)",
+      "enSub": "Global cloud operations standard terminology"
+    },
+    "notificationsSection": {
+      "title": "2. Personal Notification Preferences",
+      "subtitle": "Enable or disable individual alert categories and channels (In-App & Email). CPU, RAM, and Pod alert rules remain configured per Organization Workspace.",
+      "items": {
+        "inApp": {
+          "title": "In-App Notifications",
+          "desc": "Show red badge and alert feed under the bell icon in the top header"
+        },
+        "email": {
+          "title": "Email Notifications",
+          "desc": "Forward urgent alerts to your registered account email address"
+        },
+        "companyInvites": {
+          "title": "Organization Invitations",
+          "desc": "Receive notifications when an administrator invites you to a new organization"
+        },
+        "roleChanges": {
+          "title": "Role & Permission Changes",
+          "desc": "Get notified when your role is updated (SME Owner, DevOps Lead, Viewer)"
+        },
+        "securityAlerts": {
+          "title": "Unusual Sign-in & Security Alerts",
+          "desc": "Instant alerts for unfamiliar IP sign-ins or password/2FA changes"
+        },
+        "systemMaintenance": {
+          "title": "System & Maintenance Notices",
+          "desc": "Receive server maintenance schedules and new SelfAI engine releases"
+        }
+      }
+    },
+    "saveButton": "Save Preferences"
+  },
+  "notifications": {
+    "title": "Personal Notification Center",
+    "subtitle": "Review organization invitations, sign-in alerts, and platform updates. You have {{count}} unread item(s).",
+    "markAllRead": "Mark All as Read",
+    "settingsBtn": "Notification Settings",
+    "types": {
+      "INFRASTRUCTURE": "K8s Incident",
+      "SECURITY": "Security",
+      "BROADCAST": "Admin Broadcast",
+      "INVITATION": "Organization Invite",
+      "ROLE": "Role Change",
+      "SYSTEM": "Platform System"
+    },
+    "filters": {
+      "label": "Filter:",
+      "all": "All ({{count}})",
+      "unread": "Unread ({{count}})",
+      "read": "Read ({{count}})",
+      "typeAll": "All notification types",
+      "typeInfrastructure": "K8s Infrastructure Incidents (Urgent)",
+      "typeBroadcast": "Administrator Broadcasts",
+      "typeSystem": "AI / Platform System",
+      "typeSecurity": "Security Alerts",
+      "typeInvitation": "Organization Invitations",
+      "typeRole": "Role Changes"
+    },
+    "item": {
+      "newBadge": "NEW",
+      "companyLabel": "Organization:",
+      "clusterLabel": "K8s Cluster:",
+      "serviceLabel": "Service:",
+      "viewIncident": "View Incident",
+      "viewInvitation": "View Organization Invite",
+      "markReadTitle": "Mark as read"
+    },
+    "empty": {
+      "title": "No notifications found",
+      "desc": "You have read all notifications or none match your active filters."
+    },
+    "settingsModal": {
+      "title": "Notification Settings",
+      "savedSuccess": "Notification settings saved successfully!",
+      "webNotify": "Website In-App Notifications",
+      "emailNotify": "Send notifications to registered Email",
+      "companyInvitations": "New organization invitation alerts",
+      "securityAlerts": "Unfamiliar login and security change alerts",
+      "criticalAlerts": "Urgent K8s infrastructure incident alerts",
+      "weeklyDigest": "Weekly activity summary digest",
+      "close": "Close",
+      "save": "Save Settings"
+    }
+  },
+  "activity": {
+    "title": "Personal Activity History",
+    "subtitle": "Comprehensive audit log capturing your sign-ins, security changes, token rotations, and K8s cluster actions.",
+    "refreshTitle": "Refresh data",
+    "refresh": "Refresh",
+    "exportCsv": "Export CSV Report",
+    "csvHeader": "ID,Action,Description,Organization,K8s Cluster,Timestamp,IP,Category,Status\n",
+    "searchPlaceholder": "Search by action, IP, event details...",
+    "categories": {
+      "all": "All actions ({{count}})",
+      "auth": "Sign-in / Sign-out",
+      "profile": "Profile updates",
+      "company": "Organizations & K8s Clusters",
+      "companyBadge": "Organizations & Infra",
+      "security": "Security & Agent Tokens",
+      "securityBadge": "Security & Tokens",
+      "generalBadge": "General"
+    },
+    "table": {
+      "colAction": "Action & Details",
+      "colCategory": "Category",
+      "colIp": "IP Address",
+      "colTime": "Executed At",
+      "colStatus": "Status",
+      "clusterPrefix": "Cluster: {{name}}",
+      "statusFailed": "Failed",
+      "statusCompleted": "Completed",
+      "itemLabel": "activities"
+    },
+    "empty": {
+      "title": "No activities found",
+      "desc": "No events match your search query or selected filter."
+    }
+  },
+  "help": {
+    "title": "Help Center & Technical Guides",
+    "subtitle": "Browse operational runbooks and frequently asked questions about eBPF monitoring and AI Self-Healing.",
+    "tabs": {
+      "docs": "1. Technical Documentation",
+      "faq": "2. Frequently Asked Questions (FAQ)"
+    },
+    "docs": {
+      "tocTitle": "SelfAI Standard Runbooks",
+      "stepsTitle": "Step-by-step instructions:",
+      "commandTitle": "Sample Command-line:",
+      "tipsTitle": "Troubleshooting & Common Issues:"
+    },
+    "faq": {
+      "searchPlaceholder": "Search questions (Agent, Metrics, RCA, Self-Healing, Invite members)...",
+      "categories": {
+        "all": "All question categories",
+        "agent": "Agent & Connectivity",
+        "infra": "Infrastructure & Metrics",
+        "ai": "AI & Self-Healing",
+        "org": "Organizations & Members",
+        "rbac": "Permissions & Security"
+      }
+    },
+    "docsData": {
+      "doc-org-invite": {
+        "title": "1. Create Organization & Invite Members",
+        "category": "Business & Organization",
+        "summary": "Guide to creating an organization, assigning roles (Owner, DevOps, Viewer), and sending email invitations.",
+        "steps": [
+          "Step 1: Go to \"My Organizations\" in the Personal Portal or open the Organization Dashboard.",
+          "Step 2: Click \"+ Create Organization\", enter the company name and URL slug identifier.",
+          "Step 3: Under \"Members & Permissions\", click \"+ Invite Member\", enter the work email, and assign a role (SME_OWNER, DEVOPS, or VIEWER).",
+          "Step 4: The invited member receives an email notification and can click \"Accept\" directly in the Notification Center."
+        ],
+        "tips": "Note: Only SME_OWNER or Administrator accounts have permission to invite members or revoke member access."
+      },
+      "doc-agent-k8s": {
+        "title": "2. Register Agent & Connect Kubernetes Cluster",
+        "category": "Infrastructure & Kubernetes",
+        "summary": "How to deploy the selfheal-agent Helm chart on K8s clusters (AWS EKS, GKE, or On-Premise bare-metal).",
+        "steps": [
+          "Step 1: Navigate to \"K8s Clusters\" (/dashboard/clusters) -> click \"Register New Cluster\".",
+          "Step 2: Name your cluster (e.g., `k8s-prod-hn-01`) and select the infrastructure provider.",
+          "Step 3: Copy the auto-generated Helm install command containing your secret Agent Token.",
+          "Step 4: Run `helm install selfheal-agent ./charts/selfheal-agent --set clusterId=...` from your admin workstation."
+        ],
+        "tips": "Requires Linux kernel >= 5.8 with BPF CO-RE (Compile Once - Run Everywhere) enabled."
+      },
+      "doc-agent-health": {
+        "title": "3. Verify Agent Connection Health",
+        "category": "Infrastructure & Kubernetes",
+        "summary": "Verify eBPF Telemetry Probe status, WebSocket heartbeat, and real-time telemetry streaming.",
+        "steps": [
+          "Step 1: Open the K8s Clusters list or Agent Management page (/dashboard/agents).",
+          "Step 2: Locate your Agent name and verify the green \"100% ONLINE\" status badge.",
+          "Step 3: Check the latest Heartbeat latency (must be under 5 seconds).",
+          "Step 4: If the status shows \"DEGRADED\" or \"DISCONNECTED\", inspect egress firewall rules for ports 443 and 5000."
+        ],
+        "tips": "You can run `kubectl logs -n selfheal-system daemonset/selfheal-agent` to inspect live startup logs."
+      },
+      "doc-metrics-ai": {
+        "title": "4. View Metrics, Logs, Events & AI Predictions",
+        "category": "AI & Monitoring",
+        "summary": "Leverage the time-series AI engine to detect CPU saturation, memory leaks, and Pod conflicts early.",
+        "steps": [
+          "Step 1: Open \"Resource Metrics\" (/dashboard/monitoring/metrics) to view CPU, RAM, and Network I/O charts.",
+          "Step 2: Open \"AI Risk Forecast\" (/dashboard/ai/predictions) to inspect early saturation risk warnings.",
+          "Step 3: Review growth slope rate and estimated time remaining before an OOM (Out Of Memory) event."
+        ],
+        "tips": "The AI model forecasts incident risks 15 to 45 minutes in advance, giving engineers ample time to prepare mitigation."
+      },
+      "doc-rca": {
+        "title": "5. Inspect Root Cause Analysis (RCA)",
+        "category": "AI & Incidents",
+        "summary": "Use causal graph AI to pinpoint the exact Pod or service triggering cascading failures.",
+        "steps": [
+          "Step 1: When an incident triggers, go to \"Incident Management\" -> select the \"Root Cause Analysis (RCA)\" tab.",
+          "Step 2: Inspect the Dependency Call Graph and Confidence Score (e.g., 94.2%).",
+          "Step 3: Review recommended actions such as \"Increase memory limit from 512Mi to 1Gi\" or \"Restart Pod payment-gw-7b9\"."
+        ],
+        "tips": "RCA automatically correlates Kubernetes Events (Evicted, Unhealthy, BackOff) with telemetry signals."
+      },
+      "doc-self-healing": {
+        "title": "6. Configure & Track Self-Healing",
+        "category": "Self-Healing",
+        "summary": "Configure automated remediation policies and Human-in-the-Loop (HITL) emergency approvals.",
+        "steps": [
+          "Step 1: On \"Automation Policies\" (/dashboard/self-healing/policies), enable rules such as Restart Pod or Scale Up Replica.",
+          "Step 2: For high-risk actions (Drain Node, Rollback Deployment), the system creates an approval request in \"Approval Gate (HITL)\".",
+          "Step 3: An SME Owner or DevOps Lead reviews the rationale and clicks \"Approve Action\".",
+          "Step 4: Track execution outcomes in \"Healing History\" to confirm the workload returns to Healthy status."
+        ],
+        "tips": "The Safe Remediation Rate-Limiter automatically pauses an action if it fails 3 consecutive times."
+      },
+      "doc-rbac-security": {
+        "title": "7. Configure Roles & Security Policies",
+        "category": "Security & Permissions",
+        "summary": "Least Privilege separation across Super Admin, Admin, SME Owner, DevOps, and Viewer roles.",
+        "steps": [
+          "Step 1: Super Administrators configure the role matrix in the System Admin Console (/admin/roles).",
+          "Step 2: Maintain strict separation between Platform-level permissions and Tenant-level permissions.",
+          "Step 3: Audit all role assignments via \"SHA-256 Audit Logs\" (/admin/audit-logs)."
+        ],
+        "tips": "Do not grant SUPER_ADMIN privileges to engineers who only manage a single organization."
+      }
+    },
+    "faqsData": {
+      "faq-1": {
+        "category": "Agent & Connectivity",
+        "question": "Why can't the Agent connect to the Backend?",
+        "answer": "The most common cause is a firewall blocking the WebSocket endpoint (/api/v1/telemetry/ws) or an expired Agent Token. Verify outbound HTTPS/WSS connectivity from the K8s cluster to the Backend domain and regenerate a fresh Token on the Agent Management page.",
+        "actionText": "Inspect Agent List"
+      },
+      "faq-2": {
+        "category": "Infrastructure & Metrics",
+        "question": "Why is my Cluster not showing Metrics?",
+        "answer": "The platform requires the selfheal-agent DaemonSet to run on at least 1 worker node with kubelet cAdvisor healthy. If using OpenShift or Bottlerocket, please verify SELinux policies for the eBPF socket.",
+        "actionText": "View K8s Cluster Details"
+      },
+      "faq-3": {
+        "category": "AI & Self-Healing",
+        "question": "Why did AI predict an anomaly without triggering self-healing?",
+        "answer": "Automated remediation only runs when the matching policy is set to \"AUTOMATIC\" and the AI confidence score exceeds the threshold (default > 85%). If the policy is set to \"HITL_REQUIRED\", the action waits for manual approval.",
+        "actionText": "Go to Approval Gate (HITL)"
+      },
+      "faq-4": {
+        "category": "Self-Healing",
+        "question": "Why was a Restart Pod action rejected?",
+        "answer": "The platform enforces a Circuit Breaker: if healthy Pods in a Deployment would fall below the PodDisruptionBudget (PDB) or the Pod has restarted more than 5 times in the past hour, automated restarts are blocked to prevent full service outage.",
+        "actionText": "View Automation Policies"
+      },
+      "faq-5": {
+        "category": "Organizations & Members",
+        "question": "How do I invite members to my Organization?",
+        "answer": "Open the Organization Dashboard -> \"Organization\" -> \"Members & Permissions\" -> click \"+ Invite Member\". Enter their email and select the desired role. The invitee will see the invitation in their Personal Portal.",
+        "actionText": "Manage Organization Members"
+      },
+      "faq-6": {
+        "category": "Permissions & Security",
+        "question": "How do I revoke a member's access?",
+        "answer": "In the organization member list, locate the user, open the three-dot menu -> select \"Remove from Organization\" or \"Change Role\" to Viewer. Infrastructure and resource access is revoked immediately.",
+        "actionText": "View Member List"
+      }
+    }
+  }
+}

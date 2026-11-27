@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Menu,
   PanelLeftClose,
@@ -7,6 +8,7 @@ import {
 } from 'lucide-react';
 import { personalPortalService } from '../../services/personalPortalService';
 import UserProfileDropdown from '../common/UserProfileDropdown';
+import LanguageSwitcherCompact from '../common/LanguageSwitcherCompact';
 
 export const PersonalHeader = ({
   currentPath = '/portal',
@@ -15,19 +17,20 @@ export const PersonalHeader = ({
   onToggleCollapse,
   onToggleMobileDrawer,
 }) => {
+  const { t } = useTranslation('portal');
   const notifs = personalPortalService.getNotifications();
   const unreadCount = notifs.filter((n) => !n.read).length;
 
   // Compute breadcrumb title based on path
   const getPageTitle = () => {
-    if (currentPath.includes('/companies')) return 'Công Ty Của Tôi';
-    if (currentPath.includes('/profile')) return 'Hồ Sơ Cá Nhân';
-    if (currentPath.includes('/security')) return 'Bảo Mật Tài Khoản';
-    if (currentPath.includes('/preferences')) return 'Tùy Chỉnh Cá Nhân';
-    if (currentPath.includes('/notifications')) return 'Trung Tâm Thông Báo';
-    if (currentPath.includes('/activity')) return 'Lịch Sử Hoạt Động';
-    if (currentPath.includes('/help')) return 'Trợ Giúp & Hỗ Trợ';
-    return 'Bảng Điều Khiển';
+    if (currentPath.includes('/companies')) return t('header.titles.companies');
+    if (currentPath.includes('/profile')) return t('header.titles.profile');
+    if (currentPath.includes('/security')) return t('header.titles.security');
+    if (currentPath.includes('/preferences')) return t('header.titles.preferences');
+    if (currentPath.includes('/notifications')) return t('header.titles.notifications');
+    if (currentPath.includes('/activity')) return t('header.titles.activity');
+    if (currentPath.includes('/help')) return t('header.titles.help');
+    return t('header.titles.dashboard');
   };
 
   return (
@@ -53,7 +56,7 @@ export const PersonalHeader = ({
           type="button"
           className="portal-collapse-toggle"
           onClick={onToggleCollapse}
-          aria-label={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+          aria-label={isCollapsed ? t('header.expandSidebar') : t('header.collapseSidebar')}
           style={{
             width: '36px',
             height: '36px',
@@ -78,7 +81,7 @@ export const PersonalHeader = ({
             type="button"
             onClick={onToggleMobileDrawer}
             className="portal-mobile-toggle"
-            aria-label="Mở menu điều hướng di động"
+            aria-label={t('header.navAria')}
             style={{
               width: '36px',
               height: '36px',
@@ -103,7 +106,7 @@ export const PersonalHeader = ({
             className="portal-breadcrumb-sub"
             style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#64748B' }}
           >
-            <span>Trung Tâm Điều Khiển</span>
+            <span>{t('header.centerTitle')}</span>
             <span>/</span>
             <span style={{ color: '#059669', fontWeight: 600 }}>{getPageTitle()}</span>
           </div>
@@ -125,11 +128,13 @@ export const PersonalHeader = ({
 
       {/* Right Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+        <LanguageSwitcherCompact height="36px" />
+
         {/* Notifications Icon Button */}
         <button
           type="button"
           onClick={() => onNavigate && onNavigate('/portal/notifications')}
-          title="Thông Báo Cá Nhân"
+          title={t('header.notificationsTitle')}
           style={{
             position: 'relative',
             width: '36px',

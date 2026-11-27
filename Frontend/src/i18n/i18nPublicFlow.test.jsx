@@ -63,6 +63,7 @@ describe('Public & Auth i18n Flow (VI <-> EN via .header-lang-btn)', () => {
     // Default VI
     expect(screen.getByText('VI')).toBeInTheDocument();
     expect(screen.getByText('HƯỚNG DẪN')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'xem cơ chế hoạt động →' })).toHaveAttribute('href', '/features');
     expect(screen.getByRole('heading', { level: 1, name: /Thực tiễn & Chính sách Bảo mật/i })).toBeInTheDocument();
     expect(screen.getByText(/Phiên đăng nhập đã hết hạn\./i)).toBeInTheDocument();
     expect(document.documentElement.lang).toBe('vi');
@@ -76,6 +77,7 @@ describe('Public & Auth i18n Flow (VI <-> EN via .header-lang-btn)', () => {
     expect(screen.getByText('EN')).toBeInTheDocument();
     expect(screen.getByText('GUIDE')).toBeInTheDocument();
     expect(screen.getByText('PLATFORM')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'see how it works →' })).toHaveAttribute('href', '/features');
     expect(screen.getByText(/AI predicts emerging incidents/i)).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: /Security Practices & Policy/i })).toBeInTheDocument();
     expect(screen.getByText(/Your session has expired\./i)).toBeInTheDocument();

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import LogsPage from './LogsPage';
 import EventsPage from './EventsPage';
 import { FileText, Activity } from 'lucide-react';
 
 export const LogsAndEventsPage = ({ currentPath = '/dashboard/monitoring/logs', onNavigate }) => {
+  const { t } = useTranslation('dashMonitoring');
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -65,7 +67,7 @@ export const LogsAndEventsPage = ({ currentPath = '/dashboard/monitoring/logs', 
           }}
         >
           <FileText size={16} />
-          <span>1. Nhật Ký Container (Logs)</span>
+          <span>{t('events.tabs.logs')}</span>
         </button>
 
         <button
@@ -89,7 +91,7 @@ export const LogsAndEventsPage = ({ currentPath = '/dashboard/monitoring/logs', 
           }}
         >
           <Activity size={16} />
-          <span>2. Sự Kiện Kubernetes (Events)</span>
+          <span>{t('events.tabs.events')}</span>
         </button>
       </div>
 

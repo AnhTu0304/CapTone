@@ -1,19 +1,16 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   X,
   Shield,
-  Sliders,
   CheckCircle2,
   AlertTriangle,
   Server,
   Zap,
   Lock,
   Trash2,
-  Clock,
   Activity,
   Layers,
-  ShieldCheck,
-  RotateCcw
 } from 'lucide-react';
 
 export const PolicyDetailModal = ({
@@ -25,12 +22,13 @@ export const PolicyDetailModal = ({
   currentEnv,
   deletingPolicyId,
 }) => {
+  const { t } = useTranslation('dashHealing');
   if (!isOpen || !policy) return null;
 
   const isHighRisk = policy.riskLevel === 'HIGH' || policy.riskLevel === 'CRITICAL';
   const isMedRisk = policy.riskLevel === 'MEDIUM';
 
-  const clusterName = currentEnv?.cluster || currentEnv?.name || policy.targetCluster || 'Tất cả cụm';
+  const clusterName = currentEnv?.cluster || currentEnv?.name || policy.targetCluster || t('policies.table.allClusters');
   const isAgentOnline = currentEnv?.agentStatus === 'ONLINE';
 
   return (
@@ -116,7 +114,7 @@ export const PolicyDetailModal = ({
                     border: `1px solid ${policy.enabled ? '#A7F3D0' : '#CBD5E1'}`,
                   }}
                 >
-                  {policy.enabled ? '● Đang Bật' : '○ Đã Tắt'}
+                  {policy.enabled ? t('policyDetail.statusOn') : t('policyDetail.statusOff')}
                 </span>
 
                 <span
@@ -130,7 +128,9 @@ export const PolicyDetailModal = ({
                     border: `1px solid ${isHighRisk ? '#FECACA' : isMedRisk ? '#FDE68A' : '#A7F3D0'}`,
                   }}
                 >
-                  Rủi ro: {isHighRisk ? 'Cao' : isMedRisk ? 'Vừa' : 'Thấp'}
+                  {t('policyDetail.riskPrefix', {
+                    level: isHighRisk ? t('policies.table.riskHigh') : isMedRisk ? t('policies.table.riskMed') : t('policies.table.riskLow'),
+                  })}
                 </span>
 
                 <span
@@ -148,11 +148,11 @@ export const PolicyDetailModal = ({
                   }}
                 >
                   {policy.hitlRequired ? <Lock size={10} /> : <Zap size={10} />}
-                  <span>{policy.hitlRequired ? 'Cần duyệt (HITL)' : 'Tự động chạy'}</span>
+                  <span>{policy.hitlRequired ? t('policyDetail.hitlRequired') : t('policyDetail.hitlAuto')}</span>
                 </span>
               </div>
               <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>
-                Chi tiết quy tắc tự phục hồi MAPE-K
+                {t('policyDetail.subtitle')}
               </div>
             </div>
           </div>
@@ -160,7 +160,7 @@ export const PolicyDetailModal = ({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Đóng cửa sổ"
+            aria-label={t('common.closeWindow')}
             style={{
               padding: '6px',
               borderRadius: '8px',
@@ -192,7 +192,7 @@ export const PolicyDetailModal = ({
             }}
           >
             <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
-              TÊN QUY TẮC PHỤC HỒI
+              {t('policyDetail.nameBanner')}
             </div>
             <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.4 }}>
               {policy.name}
@@ -210,39 +210,39 @@ export const PolicyDetailModal = ({
             <div style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', marginBottom: '4px' }}>
                 <Server size={12} />
-                <span>CỤM KUBERNETES</span>
+                <span>{t('policyDetail.clusterLabel')}</span>
               </div>
               <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
                 {clusterName}
               </div>
               <div style={{ fontSize: '0.6875rem', color: isAgentOnline ? '#059669' : '#D97706', marginTop: '2px', fontWeight: 600 }}>
-                {isAgentOnline ? '● Tác tử eBPF Trực tuyến' : '▲ Tác tử Ngoại tuyến'}
+                {isAgentOnline ? t('policyDetail.agentOnline') : t('policyDetail.agentOffline')}
               </div>
             </div>
 
             <div style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', marginBottom: '4px' }}>
                 <Layers size={12} />
-                <span>KHÔNG GIAN TÊN (NAMESPACE)</span>
+                <span>{t('policyDetail.namespaceLabel')}</span>
               </div>
               <div style={{ fontSize: '0.875rem', fontWeight: 700, fontFamily: 'monospace', color: '#0F172A' }}>
                 {policy.targetNamespace || 'production'}
               </div>
               <div style={{ fontSize: '0.6875rem', color: '#64748B', marginTop: '2px' }}>
-                Phạm vi bảo vệ workload
+                {t('policyDetail.namespaceSub')}
               </div>
             </div>
 
             <div style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', marginBottom: '4px' }}>
                 <Activity size={12} />
-                <span>PHÂN LOẠI QUY TẮC</span>
+                <span>{t('policyDetail.categoryLabel')}</span>
               </div>
               <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
                 {policy.category}
               </div>
               <div style={{ fontSize: '0.6875rem', color: '#64748B', marginTop: '2px' }}>
-                Hệ điều phối MAPE-K
+                {t('policyDetail.categorySub')}
               </div>
             </div>
           </div>
@@ -253,13 +253,13 @@ export const PolicyDetailModal = ({
             <div style={{ padding: '14px 16px', borderRadius: '10px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem', fontWeight: 700, color: '#2563EB', textTransform: 'uppercase', marginBottom: '6px' }}>
                 <Activity size={13} />
-                <span>ĐIỀU KIỆN VIỄN TRẮC KÍCH HOẠT (TRIGGER CONDITION)</span>
+                <span>{t('policyDetail.triggerLabel')}</span>
               </div>
               <div style={{ fontSize: '0.875rem', color: '#1E293B', fontWeight: 600, lineHeight: 1.5 }}>
                 {policy.condition}
               </div>
               <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px' }}>
-                Được giám sát liên tục qua eBPF Kernel Probe và đường truyền viễn trắc thời gian thực.
+                {t('policyDetail.triggerSub')}
               </div>
             </div>
 
@@ -267,7 +267,7 @@ export const PolicyDetailModal = ({
             <div style={{ padding: '14px 16px', borderRadius: '10px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase', marginBottom: '6px' }}>
                 <Zap size={13} />
-                <span>HÀNH ĐỘNG TỰ KHẮC PHỤC K8S (REMEDIATION ACTION)</span>
+                <span>{t('policyDetail.actionLabel')}</span>
               </div>
               <div style={{ fontSize: '0.875rem', color: '#1E293B', fontWeight: 700, lineHeight: 1.5 }}>
                 {policy.action}
@@ -289,7 +289,7 @@ export const PolicyDetailModal = ({
                     }}
                   >
                     <CheckCircle2 size={11} />
-                    <span>Đã cấp quyền thực thi tự động trên cụm {clusterName}</span>
+                    <span>{t('policyDetail.actionAuthorized', { cluster: clusterName })}</span>
                   </span>
                 ) : (
                   <span
@@ -307,7 +307,7 @@ export const PolicyDetailModal = ({
                     }}
                   >
                     <AlertTriangle size={11} />
-                    <span>Chưa cấp quyền (Tác tử eBPF Ngoại tuyến)</span>
+                    <span>{t('policyDetail.actionUnauthorized')}</span>
                   </span>
                 )}
               </div>
@@ -328,28 +328,28 @@ export const PolicyDetailModal = ({
           >
             <div>
               <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', marginBottom: '2px' }}>
-                CỔNG PHÊ DUYỆT (HITL):
+                {t('policyDetail.hitlGateLabel')}
               </div>
               <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: policy.hitlRequired ? '#2563EB' : '#059669' }}>
-                {policy.hitlRequired ? 'Bắt buộc phê duyệt kỹ sư' : 'Tự động kích hoạt ngay'}
+                {policy.hitlRequired ? t('policyDetail.hitlGateRequired') : t('policyDetail.hitlGateAuto')}
               </div>
             </div>
 
             <div>
               <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', marginBottom: '2px' }}>
-                THỜI GIAN HẠ NHIỆT (COOLDOWN):
+                {t('policyDetail.cooldownLabel')}
               </div>
               <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>
-                {policy.cooldown || 300} giây (Chống giật xung)
+                {t('policyDetail.cooldownVal', { seconds: policy.cooldown || 300 })}
               </div>
             </div>
 
             <div>
               <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', marginBottom: '2px' }}>
-                BẢO VỆ BÁN KÍNH SỰ CỐ:
+                {t('policyDetail.blastRadiusLabel')}
               </div>
               <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#059669' }}>
-                Bảo vệ qua Pod Disruption Budget
+                {t('policyDetail.blastRadiusVal')}
               </div>
             </div>
           </div>
@@ -396,12 +396,12 @@ export const PolicyDetailModal = ({
               }}
               title={
                 !canManagePolicies
-                  ? 'Chỉ SME Owner và DevOps mới có quyền xóa quy tắc'
-                  : 'Xóa vĩnh viễn quy tắc này khỏi cụm'
+                  ? t('policyDetail.deleteDeniedTitle')
+                  : t('policyDetail.deleteTitle')
               }
             >
               <Trash2 size={14} />
-              <span>{deletingPolicyId === policy.id ? 'Đang xóa...' : 'Xóa Quy Tắc Này'}</span>
+              <span>{deletingPolicyId === policy.id ? t('policyDetail.deletingBtn') : t('policyDetail.deleteBtn')}</span>
             </button>
           </div>
 
@@ -424,7 +424,7 @@ export const PolicyDetailModal = ({
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1E293B')}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#0F172A')}
             >
-              Đóng
+              {t('common.close')}
             </button>
           </div>
         </div>

@@ -1,4 +1,6 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../i18n';
 import { Users, Cpu, UserCheck, Clock, CheckCircle2, XCircle, Ban } from 'lucide-react';
 
 /**
@@ -12,6 +14,9 @@ export const ActionActorBreakdownChart = ({
   onSelectActor = null,
   className = '',
 }) => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
+
   const maxTotal = useMemo(() => {
     if (!Array.isArray(byActor) || byActor.length === 0) return 1;
     return Math.max(...byActor.map((a) => Number(a.total) || 0), 1);
@@ -32,7 +37,7 @@ export const ActionActorBreakdownChart = ({
   const getActorBadge = (actorType, executionMode) => {
     if (actorType === 'AI') {
       return {
-        label: 'AI Tự Trị (AUTO)',
+        label: t('charts.actorBreakdown.badgeAi'),
         bg: '#EFF6FF',
         color: '#1D4ED8',
         border: '#BFDBFE',
@@ -41,7 +46,10 @@ export const ActionActorBreakdownChart = ({
     }
     if (actorType === 'HUMAN') {
       return {
-        label: executionMode === 'MIXED' ? 'Con Người (Thủ công & HITL)' : 'Con Người (HITL / Manual)',
+        label:
+          executionMode === 'MIXED'
+            ? t('charts.actorBreakdown.badgeHumanMixed')
+            : t('charts.actorBreakdown.badgeHuman'),
         bg: '#ECFDF5',
         color: '#047857',
         border: '#A7F3D0',
@@ -49,7 +57,7 @@ export const ActionActorBreakdownChart = ({
       };
     }
     return {
-      label: 'Hàng Chờ HITL / Chưa Gán',
+      label: t('charts.actorBreakdown.badgePending'),
       bg: '#FFFBEB',
       color: '#B45309',
       border: '#FDE68A',
@@ -77,24 +85,27 @@ export const ActionActorBreakdownChart = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Users size={19} color="#2563EB" />
             <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: '#0F172A' }}>
-              Hiệu Suất Action Theo Đối Tượng Thực Thi (AI / Người Vận Hành)
+              {t('charts.actorBreakdown.title')}
             </h3>
           </div>
           <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '4px 0 0 0' }}>
-            So sánh khối lượng xử lý, tỷ lệ thành công và thời lượng trung bình giữa AI MAPE-K và từng thành viên phê duyệt/thực thi (Nhấp vào dòng để lọc bảng truy vết)
+            {t('charts.actorBreakdown.subtitle')}
           </p>
         </div>
 
         {/* Legend */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', fontSize: '0.75rem' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#047857', fontWeight: 600 }}>
-            <CheckCircle2 size={13} color="#10B981" /> Thành công ({totals.succeeded.toLocaleString('vi-VN')})
+            <CheckCircle2 size={13} color="#10B981" />{' '}
+            {t('charts.actorBreakdown.legendSuccess', { count: totals.succeeded.toLocaleString(intlLocale) })}
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#B91C1C', fontWeight: 600 }}>
-            <XCircle size={13} color="#EF4444" /> Thất bại ({totals.failed.toLocaleString('vi-VN')})
+            <XCircle size={13} color="#EF4444" />{' '}
+            {t('charts.actorBreakdown.legendFailed', { count: totals.failed.toLocaleString(intlLocale) })}
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#B45309', fontWeight: 600 }}>
-            <Ban size={13} color="#F59E0B" /> Hủy / HITL ({totals.cancelled.toLocaleString('vi-VN')})
+            <Ban size={13} color="#F59E0B" />{' '}
+            {t('charts.actorBreakdown.legendCancelled', { count: totals.cancelled.toLocaleString(intlLocale) })}
           </span>
         </div>
       </div>
@@ -102,7 +113,7 @@ export const ActionActorBreakdownChart = ({
       {/* Horizontal Stacked Bars */}
       {(!byActor || byActor.length === 0) ? (
         <div style={{ padding: '28px 16px', textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '10px', color: '#64748B', fontSize: '0.8125rem' }}>
-          Chưa ghi nhận hành động phục hồi nào trong chu kỳ đang chọn.
+          {t('charts.actorBreakdown.empty')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -172,10 +183,22 @@ export const ActionActorBreakdownChart = ({
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
-                    <span style={{ color: '#047857', fontWeight: 700 }}>{ok.toLocaleString('vi-VN')} OK</span>
-                    {fail > 0 && <span style={{ color: '#DC2626', fontWeight: 700 }}>{fail.toLocaleString('vi-VN')} Lỗi</span>}
-                    {cancel > 0 && <span style={{ color: '#D97706', fontWeight: 700 }}>{cancel.toLocaleString('vi-VN')} Hủy</span>}
-                    <span style={{ color: '#475569' }}>| Tổng: <strong>{total.toLocaleString('vi-VN')}</strong></span>
+                    <span style={{ color: '#047857', fontWeight: 700 }}>
+                      {t('charts.actorBreakdown.okCount', { count: ok.toLocaleString(intlLocale) })}
+                    </span>
+                    {fail > 0 && (
+                      <span style={{ color: '#DC2626', fontWeight: 700 }}>
+                        {t('charts.actorBreakdown.failedCount', { count: fail.toLocaleString(intlLocale) })}
+                      </span>
+                    )}
+                    {cancel > 0 && (
+                      <span style={{ color: '#D97706', fontWeight: 700 }}>
+                        {t('charts.actorBreakdown.cancelledCount', { count: cancel.toLocaleString(intlLocale) })}
+                      </span>
+                    )}
+                    <span style={{ color: '#475569' }}>
+                      | {t('charts.actorBreakdown.totalLabel')} <strong>{total.toLocaleString(intlLocale)}</strong>
+                    </span>
                     <span
                       style={{
                         padding: '2px 7px',
@@ -185,10 +208,12 @@ export const ActionActorBreakdownChart = ({
                         fontWeight: 800,
                       }}
                     >
-                      {actor.successRate}% đạt
+                      {t('charts.actorBreakdown.ratePass', { rate: actor.successRate })}
                     </span>
                     {actor.avgDurationSeconds > 0 && (
-                      <span style={{ color: '#64748B' }}>TB {actor.avgDurationSeconds}s</span>
+                      <span style={{ color: '#64748B' }}>
+                        {t('charts.actorBreakdown.avgSec', { sec: actor.avgDurationSeconds })}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -207,25 +232,25 @@ export const ActionActorBreakdownChart = ({
                   >
                     {okW > 0 && (
                       <div
-                        title={`Thành công: ${ok.toLocaleString('vi-VN')}`}
+                        title={t('charts.actorBreakdown.tooltipSuccess', { count: ok.toLocaleString(intlLocale) })}
                         style={{ width: `${okW}%`, height: '100%', backgroundColor: '#10B981' }}
                       />
                     )}
                     {failW > 0 && (
                       <div
-                        title={`Thất bại: ${fail.toLocaleString('vi-VN')}`}
+                        title={t('charts.actorBreakdown.tooltipFailed', { count: fail.toLocaleString(intlLocale) })}
                         style={{ width: `${failW}%`, height: '100%', backgroundColor: '#EF4444' }}
                       />
                     )}
                     {cancelW > 0 && (
                       <div
-                        title={`Hủy / Từ chối HITL: ${cancel.toLocaleString('vi-VN')}`}
+                        title={t('charts.actorBreakdown.tooltipCancelled', { count: cancel.toLocaleString(intlLocale) })}
                         style={{ width: `${cancelW}%`, height: '100%', backgroundColor: '#F59E0B' }}
                       />
                     )}
                     {pendingW > 0 && (
                       <div
-                        title={`Đang chờ: ${pending.toLocaleString('vi-VN')}`}
+                        title={t('charts.actorBreakdown.tooltipPending', { count: pending.toLocaleString(intlLocale) })}
                         style={{ width: `${pendingW}%`, height: '100%', backgroundColor: '#64748B' }}
                       />
                     )}

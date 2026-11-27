@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   User,
   LayoutDashboard,
@@ -52,6 +53,7 @@ export const UserProfileDropdown = ({
   logoutLabel,
   ariaLabel,
 }) => {
+  const { t } = useTranslation('portal');
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -92,7 +94,7 @@ export const UserProfileDropdown = ({
     user?.full_name ||
     user?.name ||
     (isProfileDataOwnedByCurrentUser ? profileData?.fullName : null) ||
-    (user?.email ? user.email.split('@')[0] : 'Quản Trị Viên');
+    (user?.email ? user.email.split('@')[0] : t('profileDropdown.defaultAdminName'));
 
   // Chuẩn hóa họ tên, xóa hậu tố (Super Admin) hoặc (Admin) nếu có
   const displayName = useMemo(() => {
@@ -143,10 +145,10 @@ export const UserProfileDropdown = ({
   // Nhãn hiển thị System Role cho Menu cá nhân (Header trigger & Card Badge)
   const roleDisplay = useMemo(() => {
     if (!activeSystemRole) {
-      return 'Chưa được gán System Role';
+      return t('profileDropdown.noSystemRole');
     }
     return activeSystemRole;
-  }, [activeSystemRole]);
+  }, [activeSystemRole, t]);
 
   const roleSubtitle = roleDisplay;
 
@@ -210,13 +212,13 @@ export const UserProfileDropdown = ({
     const list = [
       {
         id: 'switch_to_portal',
-        label: 'Trung Tâm Điều Khiển',
+        label: t('profileDropdown.switchToPortal'),
         icon: User,
         path: '/portal',
       },
       {
         id: 'switch_to_dashboard',
-        label: 'Bảng Điều Khiển Doanh Nghiệp',
+        label: t('profileDropdown.switchToDashboard'),
         icon: LayoutDashboard,
         path: '/dashboard',
       },
@@ -225,7 +227,7 @@ export const UserProfileDropdown = ({
     if (canAccessAdmin) {
       list.push({
         id: 'switch_to_admin',
-        label: 'Bảng Quản Trị Hệ Thống',
+        label: t('profileDropdown.switchToAdmin'),
         icon: Shield,
         path: '/admin',
       });
@@ -233,14 +235,14 @@ export const UserProfileDropdown = ({
 
     list.push({
       id: 'profile',
-      label: variant === 'admin' ? 'Hồ Sơ Quản Trị Viên' : 'Xem Hồ Sơ Cá Nhân',
+      label: variant === 'admin' ? t('profileDropdown.adminProfile') : t('profileDropdown.viewProfile'),
       icon: User,
       path: '/portal/profile',
     });
 
     list.push({
       id: 'security',
-      label: 'Bảo Mật & Đổi Mật Khẩu',
+      label: t('profileDropdown.securityAndPassword'),
       icon: ShieldCheck,
       path: '/portal/security',
     });
@@ -248,21 +250,21 @@ export const UserProfileDropdown = ({
     if (canAccessAdmin) {
       list.push({
         id: 'audit',
-        label: 'Nhật Ký Kiểm Toán SHA-256',
+        label: t('profileDropdown.auditLogs'),
         icon: FileText,
         path: '/admin/audit-logs',
       });
       if (isSuperAdmin) {
         list.push({
           id: 'settings',
-          label: 'Thiết Lập Hệ Thống',
+          label: t('profileDropdown.systemSettings'),
           icon: Settings,
           path: '/admin/settings',
         });
       } else {
         list.push({
           id: 'settings',
-          label: 'Cài Đặt Tài Khoản',
+          label: t('profileDropdown.accountSettings'),
           icon: Settings,
           path: '/admin/account-settings',
         });
@@ -270,23 +272,23 @@ export const UserProfileDropdown = ({
     } else {
       list.push({
         id: 'settings',
-        label: 'Cài Đặt Tài Khoản',
+        label: t('profileDropdown.accountSettings'),
         icon: Settings,
         path: '/portal/preferences',
       });
     }
 
     return list;
-  }, [canAccessAdmin, isSuperAdmin, variant]);
+  }, [canAccessAdmin, isSuperAdmin, variant, t]);
 
   const defaultLogoutText =
-    logoutLabel || (variant === 'admin' ? 'Đăng Xuất Khỏi Admin' : 'Đăng Xuất Tài Khoản');
+    logoutLabel || (variant === 'admin' ? t('profileDropdown.logoutAdmin') : t('profileDropdown.logoutAccount'));
 
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
       <button
         type="button"
-        aria-label={ariaLabel || (variant === 'admin' ? 'Menu hồ sơ quản trị viên' : 'Menu hồ sơ người dùng')}
+        aria-label={ariaLabel || (variant === 'admin' ? t('profileDropdown.ariaAdminMenu') : t('profileDropdown.ariaUserMenu'))}
         aria-expanded={isOpen}
         onClick={() => setIsOpen((prev) => !prev)}
         style={{
@@ -398,7 +400,7 @@ export const UserProfileDropdown = ({
       {isOpen && (
         <div
           role="menu"
-          aria-label={ariaLabel || 'Tùy chọn tài khoản'}
+          aria-label={ariaLabel || t('profileDropdown.ariaAccountOptions')}
           style={{
             position: 'absolute',
             top: 'calc(100% + 8px)',

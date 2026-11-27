@@ -153,6 +153,20 @@
 
 /* Responsive & Mobile Drawer Rules */
 @media (max-width: 1024px) {
+  .dash-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .dash-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .dash-grid-split {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 860px) {
   .dashboard-desktop-sidebar {
     display: none !important;
   }
@@ -174,12 +188,65 @@
   }
 
   .dashboard-top-header {
-    padding: 0 16px !important;
+    padding: 0 12px !important;
   }
 
   .dashboard-root-layout main:not(.dashboard-overview-main) {
-    padding: 16px !important;
+    padding: 14px 12px !important;
   }
+}
+
+@media (max-width: 768px) {
+  .dash-grid-3,
+  .dash-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dash-grid-cards {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dash-search-box {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .dash-modal-card {
+    padding: 16px !important;
+    border-radius: 12px !important;
+    max-height: 92vh !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .dash-grid-4 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Mobile preview device mode parity inside DashboardLayout */
+.device-mode-mobile .dash-grid-4,
+.device-mode-mobile .dash-grid-3,
+.device-mode-mobile .dash-grid-2,
+.device-mode-mobile .dash-grid-split,
+.device-mode-mobile .dash-grid-cards {
+  grid-template-columns: 1fr !important;
+}
+
+.device-mode-mobile .dash-search-box {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+.device-mode-mobile .dash-modal-card {
+  padding: 16px !important;
+  border-radius: 12px !important;
+}
+
+.device-mode-mobile main:not(.dashboard-overview-main) {
+  padding: 14px 12px !important;
 }
 
 .dash-table-container {

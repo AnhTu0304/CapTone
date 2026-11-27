@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   createChart,
   AreaSeries,
@@ -11,18 +12,36 @@ import {
   Clock,
   Activity,
   AlertTriangle,
-  Zap,
   TrendingUp,
   Cpu,
-  Layers,
   ShieldAlert,
 } from 'lucide-react';
 import {
-  formatUnixTime,
   formatLatency,
   formatRps,
   formatErrorRate,
 } from '../../utils/apmChartUtils';
+import i18n, { getIntlLocale } from '../../i18n';
+
+function formatUnixTime(unixSec, includeDate = false) {
+  if (typeof unixSec !== 'number' || !Number.isFinite(unixSec)) return '';
+  const d = new Date(unixSec * 1000);
+  const locale = getIntlLocale(i18n.language);
+  if (includeDate) {
+    return d.toLocaleString(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      day: '2-digit',
+      month: '2-digit',
+    });
+  }
+  return d.toLocaleTimeString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
 
 /**
  * Reusable single Lightweight Chart Panel for APM
@@ -226,6 +245,7 @@ export const ApmChartsPanel = ({
   errorMessage = null,
   onRetry,
 }) => {
+  const { t } = useTranslation('dashMonitoring');
   const [hoveredTime, setHoveredTime] = useState(null);
 
   const activeSample = useMemo(() => {
@@ -254,7 +274,7 @@ export const ApmChartsPanel = ({
           <Activity size={32} color="#0284C7" />
         </div>
         <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#334155' }}>
-          Đang tải dữ liệu viễn trắc APM cho dịch vụ <code>{serviceName}</code>...
+          {t('apm.charts.loadingPrefix')} <code>{serviceName}</code>...
         </div>
       </div>
     );
@@ -280,7 +300,7 @@ export const ApmChartsPanel = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <AlertTriangle size={24} color="#DC2626" />
           <div>
-            <div style={{ fontWeight: 700, fontSize: '0.9375rem' }}>Lỗi truy vấn số liệu APM</div>
+            <div style={{ fontWeight: 700, fontSize: '0.9375rem' }}>{t('apm.charts.errorTitle')}</div>
             <div style={{ fontSize: '0.8125rem', marginTop: '2px' }}>{errorMessage}</div>
           </div>
         </div>
@@ -300,7 +320,7 @@ export const ApmChartsPanel = ({
               cursor: 'pointer',
             }}
           >
-            Thử lại
+            {t('common.retry')}
           </button>
         )}
       </div>
@@ -321,10 +341,10 @@ export const ApmChartsPanel = ({
       >
         <Activity size={36} color="#94A3B8" style={{ marginBottom: '12px' }} />
         <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
-          Chưa có số liệu APM cho dịch vụ "{serviceName}"
+          {t('apm.charts.emptyTitle', { serviceName })}
         </h3>
         <p style={{ fontSize: '0.8125rem', color: '#64748B', maxWidth: '460px', margin: '6px auto 0' }}>
-          Đảm bảo Agent eBPF / K8s đang thu thập dữ liệu lưu lượng truy vấn cho service này hoặc chuyển sang dịch vụ khác.
+          {t('apm.charts.emptyDesc')}
         </p>
       </div>
     );
@@ -354,8 +374,8 @@ export const ApmChartsPanel = ({
         >
           <Clock size={16} color="#D97706" />
           <span>
-            <strong>Dữ liệu cũ (Stale APM):</strong> Mẫu gần nhất được ghi nhận lúc{' '}
-            <code>{formatUnixTime(chartModel.latestSample.time, true)}</code>. Hãy kiểm tra Agent thu thập.
+            <strong>{t('apm.charts.staleTitle')}</strong> {t('apm.charts.staleDesc')}{' '}
+            <code>{formatUnixTime(chartModel.latestSample.time, true)}</code>{t('apm.charts.staleSuffix')}
           </span>
         </div>
       )}
@@ -390,7 +410,7 @@ export const ApmChartsPanel = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Clock size={16} color="#0284C7" />
               <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
-                Thời Gian Phản Hồi (Response Time)
+                {t('apm.charts.latencyTitle')}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -455,13 +475,13 @@ export const ApmChartsPanel = ({
             }}
           >
             <span>
-              Hiện tại:{' '}
+              {t('apm.charts.current')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>
                 {formatLatency(activeSample ? activeSample.latency : summary?.latency?.current)}
               </strong>
             </span>
             <span>
-              Trung bình: <strong style={{ fontFamily: 'monospace' }}>{formatLatency(summary?.latency?.avg)}</strong>
+              {t('apm.charts.average')} <strong style={{ fontFamily: 'monospace' }}>{formatLatency(summary?.latency?.avg)}</strong>
             </span>
           </div>
         </div>
@@ -488,7 +508,7 @@ export const ApmChartsPanel = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <TrendingUp size={16} color="#6366F1" />
               <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
-                Lưu Lượng Truy Cập (Throughput - RPS)
+                {t('apm.charts.throughputTitle')}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -503,7 +523,7 @@ export const ApmChartsPanel = ({
                   fontWeight: 700,
                 }}
               >
-                Đỉnh: {formatRps(summary?.throughput?.max)}
+                {t('apm.charts.peak')} {formatRps(summary?.throughput?.max)}
               </span>
             </div>
           </div>
@@ -527,13 +547,13 @@ export const ApmChartsPanel = ({
             }}
           >
             <span>
-              Hiện tại:{' '}
+              {t('apm.charts.current')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>
                 {formatRps(activeSample ? activeSample.request_rate : summary?.throughput?.current)}
               </strong>
             </span>
             <span>
-              Trung bình: <strong style={{ fontFamily: 'monospace' }}>{formatRps(summary?.throughput?.avg)}</strong>
+              {t('apm.charts.average')} <strong style={{ fontFamily: 'monospace' }}>{formatRps(summary?.throughput?.avg)}</strong>
             </span>
           </div>
         </div>
@@ -560,7 +580,7 @@ export const ApmChartsPanel = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <ShieldAlert size={16} color="#EF4444" />
               <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
-                Tỷ Lệ Lỗi (HTTP 5xx Rate)
+                {t('apm.charts.errorRateTitle')}
               </span>
             </div>
             <span
@@ -574,7 +594,7 @@ export const ApmChartsPanel = ({
                 fontWeight: 700,
               }}
             >
-              Đỉnh: {formatErrorRate(summary?.errorRate?.max)}
+              {t('apm.charts.peak')} {formatErrorRate(summary?.errorRate?.max)}
             </span>
           </div>
           <LightweightApmChart
@@ -597,13 +617,13 @@ export const ApmChartsPanel = ({
             }}
           >
             <span>
-              Hiện tại:{' '}
+              {t('apm.charts.current')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>
                 {formatErrorRate(activeSample ? activeSample.http_5xx_rate : summary?.errorRate?.current)}
               </strong>
             </span>
             <span>
-              Trung bình: <strong style={{ fontFamily: 'monospace' }}>{formatErrorRate(summary?.errorRate?.avg)}</strong>
+              {t('apm.charts.average')} <strong style={{ fontFamily: 'monospace' }}>{formatErrorRate(summary?.errorRate?.avg)}</strong>
             </span>
           </div>
         </div>
@@ -630,7 +650,7 @@ export const ApmChartsPanel = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Cpu size={16} color="#3B82F6" />
               <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
-                Tài Nguyên Workload (CPU &amp; RAM)
+                {t('apm.charts.resourcesTitle')}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

@@ -1,5 +1,6 @@
 import { request, getAuthToken } from './apiClient';
 import multiTabSync, { SYNC_EVENTS } from './multiTabSync';
+import i18n, { LANG_STORAGE_KEY, normalizeLanguage } from '../i18n';
 /**
  * @file personalPortalService.js
  * @description Dịch vụ quản lý dữ liệu Tầng Cá Nhân (Personal Space / User Portal)
@@ -1108,8 +1109,12 @@ export const personalPortalService = {
   getPreferences() {
     try {
       const raw = localStorage.getItem(STORAGE_PREFERENCES_KEY);
-      if (!raw) return INITIAL_PREFERENCES;
-      return { ...INITIAL_PREFERENCES, ...JSON.parse(raw) };
+      const langFromGlobal = localStorage.getItem(LANG_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      const resolvedLanguage = langFromGlobal
+        ? normalizeLanguage(langFromGlobal)
+        : normalizeLanguage(parsed.language || i18n.language || INITIAL_PREFERENCES.language);
+      return { ...INITIAL_PREFERENCES, ...parsed, language: resolvedLanguage };
     } catch {
       return INITIAL_PREFERENCES;
     }
@@ -1118,7 +1123,13 @@ export const personalPortalService = {
   savePreferences(prefs) {
     try {
       const updated = { ...this.getPreferences(), ...prefs };
+      if (updated.language) {
+        updated.language = normalizeLanguage(updated.language);
+      }
       localStorage.setItem(STORAGE_PREFERENCES_KEY, JSON.stringify(updated));
+      if (updated.language && normalizeLanguage(i18n.language) !== updated.language) {
+        i18n.changeLanguage(updated.language);
+      }
       this.applyTheme(updated.appearance);
       this.logActivity('PREFERENCES_UPDATE', 'Cập nhật tùy chỉnh cá nhân', 'Đã lưu ngôn ngữ, giao diện và cài đặt vùng', 'PROFILE');
       return updated;

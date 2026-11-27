@@ -1,5 +1,7 @@
 // CapTone Enterprise: Members & RBAC Management
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../../../context/AuthContext';
 import { usePermissions } from '../../../hooks/usePermissions';
@@ -30,14 +32,14 @@ import {
 } from 'lucide-react';
 
 const RBAC_PERMISSIONS = [
-  { feature: 'Xem Bảng Điều Khiển Tổng Quan & Metrics', owner: true, devops: true, viewer: true },
-  { feature: 'Truy cập Logs Container & Sự Kiện K8s', owner: true, devops: true, viewer: true },
-  { feature: 'Xem Phân Tích Nguyên Nhân Gốc Rễ (RCA)', owner: true, devops: true, viewer: true },
-  { feature: 'Cài đặt Tác tử eBPF & Quản lý Cụm Máy Chủ', owner: true, devops: true, viewer: false },
-  { feature: 'Kích hoạt Hành Động Sửa Lỗi Tự Động L1/L2', owner: true, devops: true, viewer: false },
-  { feature: 'Cấu hình Ma Trận Chính Sách Tự Phục Hồi', owner: true, devops: false, viewer: false },
-  { feature: 'Ký Duyệt Hành Động Khẩn Cấp (HITL Gate)', owner: true, devops: false, viewer: false },
-  { feature: 'Quản lý Hồ sơ Tổ chức & Gói Dịch Vụ', owner: true, devops: false, viewer: false },
+  { featureKey: 'members.rbac.features.viewOverview', owner: true, devops: true, viewer: true },
+  { featureKey: 'members.rbac.features.accessLogs', owner: true, devops: true, viewer: true },
+  { featureKey: 'members.rbac.features.viewRca', owner: true, devops: true, viewer: true },
+  { featureKey: 'members.rbac.features.installAgent', owner: true, devops: true, viewer: false },
+  { featureKey: 'members.rbac.features.triggerHealing', owner: true, devops: true, viewer: false },
+  { featureKey: 'members.rbac.features.configPolicies', owner: true, devops: false, viewer: false },
+  { featureKey: 'members.rbac.features.approveHitl', owner: true, devops: false, viewer: false },
+  { featureKey: 'members.rbac.features.manageOrg', owner: true, devops: false, viewer: false },
 ];
 
 const getMemberInitials = (name) => {
@@ -50,6 +52,8 @@ const getMemberInitials = (name) => {
 };
 
 export const MembersPage = () => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
   const { currentOrg } = useDashboard();
   const { user: currentUser } = useAuth();
   const { success: toastSuccess, warning: toastWarning, error: toastError } = useToast();
@@ -101,11 +105,11 @@ export const MembersPage = () => {
       setMembers(result?.items || []);
     } catch (err) {
       console.error('Lỗi khi tải danh sách thành viên:', err);
-      setError('Không thể tải danh sách thành viên từ máy chủ. Vui lòng thử lại sau.');
+      setError(t('members.toasts.loadError'));
     } finally {
       setIsLoading(false);
     }
-  }, [currentOrg?.id, searchTerm, selectedRole, activeTab]);
+  }, [currentOrg?.id, searchTerm, selectedRole, activeTab, t]);
 
   useEffect(() => {
     let isMounted = true;
@@ -125,7 +129,7 @@ export const MembersPage = () => {
       } catch (err) {
         if (isMounted) {
           console.error('Lỗi khi tải danh sách thành viên:', err);
-          setError('Không thể tải danh sách thành viên từ máy chủ. Vui lòng thử lại sau.');
+          setError(t('members.toasts.loadError'));
         }
       } finally {
         if (isMounted) {
@@ -138,7 +142,7 @@ export const MembersPage = () => {
     return () => {
       isMounted = false;
     };
-  }, [currentOrg?.id, searchTerm, selectedRole, activeTab]);
+  }, [currentOrg?.id, searchTerm, selectedRole, activeTab, t]);
 
   // Đếm số lượng theo trạng thái
   const counts = useMemo(() => {
@@ -155,7 +159,7 @@ export const MembersPage = () => {
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!inviteEmail || !emailRegex.test(inviteEmail.trim())) {
-      setInviteError('Vui lòng nhập địa chỉ email hợp lệ.');
+      setInviteError(t('members.toasts.invalidEmail'));
       return;
     }
 
@@ -170,11 +174,14 @@ export const MembersPage = () => {
       setShowInviteModal(false);
       setInviteEmail('');
             setInviteRole('DEVOPS');
-      toastSuccess(`Đã gửi thư mời tham gia tổ chức tới ${inviteEmail}!`, 'Mời Thành Viên');
+      toastSuccess(
+        t('members.toasts.inviteSuccess', { email: inviteEmail }),
+        t('members.toasts.inviteSuccessTitle')
+      );
       await fetchMembers();
     } catch (err) {
-      setInviteError(err.message || 'Không thể gửi thư mời. Vui lòng thử lại.');
-      toastError(err.message || 'Gửi thư mời thất bại', 'Lỗi Mời Thành Viên');
+      setInviteError(err.message || t('members.toasts.inviteFailed'));
+      toastError(err.message || t('members.toasts.inviteErrorShort'), t('members.toasts.inviteErrorTitle'));
     } finally {
       setIsInviting(false);
     }
@@ -191,7 +198,7 @@ export const MembersPage = () => {
         (m) => m.status === 'ACTIVE' && (m.role?.code === 'SME_OWNER' || m.role === 'SME_OWNER')
       );
       if (activeOwners.length <= 1) {
-        toastError('Không thể hạ quyền SME Owner duy nhất của tổ chức.', 'Bảo Vệ Quyền Hạn');
+        toastError(t('members.toasts.cannotDemoteOnlyOwner'), t('members.toasts.protectPrivilegeTitle'));
         return;
       }
     }
@@ -205,13 +212,13 @@ export const MembersPage = () => {
       });
 
       toastSuccess(
-        `Đã cập nhật vai trò của ${editingMember.user?.full_name || editingMember.name} thành công.`,
-        'Phân Quyền Thành Viên'
+        t('members.toasts.updateRoleSuccess', { name: editingMember.user?.full_name || editingMember.name }),
+        t('members.toasts.updateRoleSuccessTitle')
       );
       setEditingMember(null);
       await fetchMembers();
     } catch (err) {
-      toastError(err.message || 'Cập nhật vai trò thất bại', 'Lỗi Phân Quyền');
+      toastError(err.message || t('members.toasts.updateRoleFailed'), t('members.toasts.updateRoleErrorTitle'));
     } finally {
       setIsUpdatingRole(false);
     }
@@ -228,13 +235,13 @@ export const MembersPage = () => {
       await organizationMemberService.removeMember(orgId, targetUserId);
 
       toastWarning(
-        `Đã loại bỏ ${deletingMember.user?.full_name || deletingMember.name} khỏi tổ chức.`,
-        'Quản Lý Nhân Sự'
+        t('members.toasts.removeSuccess', { name: deletingMember.user?.full_name || deletingMember.name }),
+        t('members.toasts.removeSuccessTitle')
       );
       setDeletingMember(null);
       await fetchMembers();
     } catch (err) {
-      toastError(err.message || 'Không thể loại bỏ thành viên', 'Lỗi Thao Tác');
+      toastError(err.message || t('members.toasts.removeFailed'), t('members.toasts.removeErrorTitle'));
     } finally {
       setIsDeleting(false);
     }
@@ -263,10 +270,10 @@ export const MembersPage = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Thành Viên &amp; Phân Quyền
+              {t('members.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Quản lý nhân sự và phân quyền truy cập theo vai trò SME Owner, DevOps &amp; Viewer
+              {t('members.subtitle')}
             </p>
           </div>
         </div>
@@ -292,7 +299,7 @@ export const MembersPage = () => {
             }}
           >
             <UserPlus size={15} />
-            <span>Mời Thành Viên</span>
+            <span>{t('members.inviteBtn')}</span>
           </button>
         ) : (
           <div
@@ -311,43 +318,49 @@ export const MembersPage = () => {
             }}
           >
             <Eye size={14} />
-            <span>Chế độ Chỉ Đọc</span>
+            <span>{t('members.readOnlyBadge')}</span>
           </div>
         )}
       </div>
 
       {/* Hàng 3 Thẻ KPI Tóm Tắt Nhân Sự */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #059669', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG NHÂN SỰ &amp; LỜI MỜI</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('members.kpis.totalLabel')}
+            </span>
             <Users size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{counts.all}</span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Tài khoản liên kết</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('members.kpis.totalSub')}</span>
           </div>
         </div>
 
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #10B981', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐANG HOẠT ĐỘNG</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('members.kpis.activeLabel')}
+            </span>
             <CheckCircle2 size={14} color="#10B981" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#059669' }}>{counts.active}</span>
-            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>Thành viên chính thức</span>
+            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>{t('members.kpis.activeSub')}</span>
           </div>
         </div>
 
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #F59E0B', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>LỜI MỜI ĐANG CHỜ</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('members.kpis.invitedLabel')}
+            </span>
             <Mail size={14} color="#F59E0B" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: counts.invited > 0 ? '#D97706' : '#0F172A' }}>{counts.invited}</span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Chờ xác nhận qua email</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('members.kpis.invitedSub')}</span>
           </div>
         </div>
       </div>
@@ -359,7 +372,7 @@ export const MembersPage = () => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
             <div>
               <h3 style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Quản Lý Danh Sách Nhân Sự &amp; Lời Mời
+                {t('members.list.title')}
               </h3>
             </div>
 
@@ -382,10 +395,10 @@ export const MembersPage = () => {
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
-              title="Tải lại danh sách"
+              title={t('members.list.refreshTitle')}
             >
               <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
-              <span>Làm mới</span>
+              <span>{t('members.list.refresh')}</span>
             </button>
           </div>
 
@@ -409,7 +422,7 @@ export const MembersPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                Tất Cả ({counts.all})
+                {t('members.list.tabAll', { count: counts.all })}
               </button>
               <button
                 type="button"
@@ -427,7 +440,7 @@ export const MembersPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                Đang Hoạt Động ({counts.active})
+                {t('members.list.tabActive', { count: counts.active })}
               </button>
               <button
                 type="button"
@@ -445,7 +458,7 @@ export const MembersPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                Lời Mời Đang Chờ ({counts.invited})
+                {t('members.list.tabInvited', { count: counts.invited })}
               </button>
             </div>
 
@@ -455,7 +468,7 @@ export const MembersPage = () => {
                 <Search size={14} style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
                 <input
                   type="text"
-                  placeholder="Tìm theo tên hoặc email..."
+                  placeholder={t('members.list.searchPlaceholder')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   style={{
@@ -487,10 +500,10 @@ export const MembersPage = () => {
                   outline: 'none',
                 }}
               >
-                <option value="ALL">Tất Cả Vai Trò</option>
-                <option value="SME_OWNER">SME Owner</option>
-                <option value="DEVOPS">DevOps Lead</option>
-                <option value="VIEWER">Viewer</option>
+                <option value="ALL">{t('members.list.allRoles')}</option>
+                <option value="SME_OWNER">{t('members.list.roleSmeOwnerShort')}</option>
+                <option value="DEVOPS">{t('members.list.roleDevopsShort')}</option>
+                <option value="VIEWER">{t('members.list.roleViewerShort')}</option>
               </select>
             </div>
           </div>
@@ -513,7 +526,7 @@ export const MembersPage = () => {
                 cursor: 'pointer',
               }}
             >
-              Thử Lại
+              {t('members.list.retry')}
             </button>
           </div>
         )}
@@ -523,12 +536,12 @@ export const MembersPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)' }}>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Thành Viên / Ứng Viên</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Vai Trò</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>{t('members.list.colMember')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>{t('members.list.colRole')}</th>
                 
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Hoạt Động / Tham Gia</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Trạng Thái</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', textAlign: 'right' }}>Thao Tác</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>{t('members.list.colActivity')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>{t('members.list.colStatus')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', textAlign: 'right' }}>{t('members.list.colActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -537,7 +550,7 @@ export const MembersPage = () => {
                   <td colSpan={5} style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                       <RefreshCw size={16} className="animate-spin" />
-                      <span>Đang tải danh sách thành viên và lời mời...</span>
+                      <span>{t('members.list.loading')}</span>
                     </div>
                   </td>
                 </tr>
@@ -546,24 +559,24 @@ export const MembersPage = () => {
                   <td colSpan={5} style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                       <Users size={28} color="#94A3B8" />
-                      <span style={{ fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Không tìm thấy thành viên hoặc lời mời nào</span>
-                      <span style={{ fontSize: '0.75rem' }}>Thử thay đổi bộ lọc tìm kiếm hoặc mời thêm nhân sự vào tổ chức</span>
+                      <span style={{ fontWeight: 600, color: 'var(--dash-text-secondary)' }}>{t('members.list.emptyTitle')}</span>
+                      <span style={{ fontSize: '0.75rem' }}>{t('members.list.emptyDesc')}</span>
                     </div>
                   </td>
                 </tr>
               ) : (
                 members.map((m) => {
-                  const memberName = m.user?.full_name || m.name || 'Thành viên mới';
+                  const memberName = m.user?.full_name || m.name || t('members.row.defaultName');
                   const memberEmail = m.user?.email || m.email || '';
                   const roleCode = m.role?.code || m.role || 'VIEWER';
                   const roleName =
                     m.role?.name ||
                     m.roleLabel ||
                     (roleCode === 'SME_OWNER'
-                      ? 'Chủ DN (SME Owner)'
+                      ? t('members.row.roleSmeOwner')
                       : roleCode === 'DEVOPS'
-                      ? 'Kỹ Sư DevOps Lead'
-                      : 'Người Xem (Viewer)');
+                      ? t('members.row.roleDevops')
+                      : t('members.row.roleViewer'));
                   const isInvited = m.status === 'INVITED';
                   const isOwnerRole = roleCode === 'SME_OWNER';
                   const isSelf = Boolean(
@@ -601,7 +614,7 @@ export const MembersPage = () => {
                         <div
                           onClick={() => setSelectedMemberDetail(m)}
                           style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
-                          title="Bấm để xem chi tiết hồ sơ cá nhân"
+                          title={t('members.row.viewProfileTitle')}
                         >
                                                     {memberAvatar ? (
                             <img
@@ -673,22 +686,27 @@ export const MembersPage = () => {
                         {isInvited ? (
                           <div>
                             <div style={{ color: 'var(--dash-text-primary)', fontWeight: 600 }}>
-                              {m.expires_at ? `Hạn chót: ${new Date(m.expires_at).toLocaleDateString('vi-VN')}` : 'Hạn chót: 7 ngày sau'}
+                              {m.expires_at
+                                ? t('members.row.deadline', { date: new Date(m.expires_at).toLocaleDateString(intlLocale) })
+                                : t('members.row.deadlineDefault')}
                             </div>
                             {m.inviter && (
                               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
-                                Mời bởi: {m.inviter.full_name || m.inviter.email}
+                                {t('members.row.invitedBy', { name: m.inviter.full_name || m.inviter.email })}
                               </div>
                             )}
                           </div>
                         ) : (
                           <div>
                             <div style={{ color: 'var(--dash-text-primary)', fontWeight: 600 }}>
-                              {m.lastActive || (m.user?.last_login_at ? `Đăng nhập: ${new Date(m.user.last_login_at).toLocaleDateString('vi-VN')}` : 'Hoạt động gần đây')}
+                              {m.lastActive ||
+                                (m.user?.last_login_at
+                                  ? t('members.row.lastLogin', { date: new Date(m.user.last_login_at).toLocaleDateString(intlLocale) })
+                                  : t('members.row.recentActivity'))}
                             </div>
                             {m.joined_at && (
                               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginTop: '2px' }}>
-                                Tham gia: {new Date(m.joined_at).toLocaleDateString('vi-VN')}
+                                {t('members.row.joinedAt', { date: new Date(m.joined_at).toLocaleDateString(intlLocale) })}
                               </div>
                             )}
                           </div>
@@ -709,7 +727,13 @@ export const MembersPage = () => {
                         >
                           {m.status === 'ACTIVE' && <CheckCircle2 size={13} color="#059669" />}
                           {m.status === 'INVITED' && <Clock size={13} color="#D97706" />}
-                          <span>{m.status === 'ACTIVE' ? 'Hoạt Động' : m.status === 'INVITED' ? 'Chờ Chấp Nhận' : 'Vô Hiệu Hóa'}</span>
+                          <span>
+                            {m.status === 'ACTIVE'
+                              ? t('members.row.statusActive')
+                              : m.status === 'INVITED'
+                              ? t('members.row.statusInvited')
+                              : t('members.row.statusDisabled')}
+                          </span>
                         </span>
                       </td>
 
@@ -729,7 +753,7 @@ export const MembersPage = () => {
                               display: 'inline-flex',
                               alignItems: 'center',
                             }}
-                            title="Xem chi tiết hồ sơ cá nhân"
+                            title={t('members.row.viewProfileBtnTitle')}
                           >
                             <Eye size={15} />
                           </button>
@@ -747,10 +771,10 @@ export const MembersPage = () => {
                               border: '1px solid #A7F3D0',
                               fontWeight: 700,
                             }}
-                            title="Chủ sở hữu tổ chức được bảo vệ tối cao (Không thể tự hạ cấp vai trò hoặc xóa tài khoản)"
+                            title={t('members.row.ownerTitle')}
                           >
                             <ShieldCheck size={13} color="#059669" />
-                            <span>Chủ Sở Hữu</span>
+                            <span>{t('members.row.ownerBadge')}</span>
                           </span>
                         ) : isSelf ? (
                           <span
@@ -766,10 +790,10 @@ export const MembersPage = () => {
                               border: '1px solid #BFDBFE',
                               fontWeight: 700,
                             }}
-                            title="Tài khoản đăng nhập của bạn (Không thể tự xóa khỏi tổ chức tại đây)"
+                            title={t('members.row.yourAccountTitle')}
                           >
                             <Lock size={12} color="#2563EB" />
-                            <span>Tài Khoản Của Bạn</span>
+                            <span>{t('members.row.yourAccountBadge')}</span>
                           </span>
                         ) : canManageMembers ? (
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
@@ -788,7 +812,7 @@ export const MembersPage = () => {
                                 padding: '4px',
                                 borderRadius: '4px',
                               }}
-                              title="Thay đổi vai trò RBAC"
+                              title={t('members.row.changeRoleTitle')}
                             >
                               <Edit3 size={15} />
                             </button>
@@ -805,7 +829,7 @@ export const MembersPage = () => {
                                 padding: '4px',
                                 borderRadius: '4px',
                               }}
-                              title={isInvited ? 'Thu hồi lời mời' : 'Loại bỏ thành viên khỏi tổ chức'}
+                              title={isInvited ? t('members.row.revokeInviteTitle') : t('members.row.removeMemberTitle')}
                             >
                               {isInvited ? <UserX size={15} /> : <Trash2 size={15} />}
                             </button>
@@ -828,10 +852,10 @@ export const MembersPage = () => {
       <div className="dash-card" style={{ padding: '0', overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--dash-border)' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-            Ma Trận So Sánh Quyền Hạn Chi Tiết
+            {t('members.rbac.title')}
           </h3>
           <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-            Đối chiếu phân quyền rõ ràng giữa các vai trò nhằm bảo vệ an toàn cho hệ thống
+            {t('members.rbac.subtitle')}
           </p>
         </div>
 
@@ -839,16 +863,16 @@ export const MembersPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)' }}>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>Tính Năng / Thao Tác Hệ Thống</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>SME Owner</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>DevOps Lead</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>Viewer</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)' }}>{t('members.rbac.colFeature')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>{t('members.rbac.colOwner')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>{t('members.rbac.colDevops')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>{t('members.rbac.colViewer')}</th>
               </tr>
             </thead>
             <tbody>
               {RBAC_PERMISSIONS.map((perm, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid var(--dash-border)' }}>
-                  <td style={{ padding: '12px 16px', color: 'var(--dash-text-primary)', fontWeight: 500 }}>{perm.feature}</td>
+                  <td style={{ padding: '12px 16px', color: 'var(--dash-text-primary)', fontWeight: 500 }}>{t(perm.featureKey)}</td>
                   <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                     {perm.owner ? <Check size={16} color="#059669" style={{ margin: '0 auto' }} /> : <span style={{ color: '#CBD5E1' }}>&mdash;</span>}
                   </td>
@@ -905,7 +929,7 @@ export const MembersPage = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <UserPlus size={18} color="var(--dash-primary)" />
                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                  Mời Thành Viên Mới Vào Tổ Chức
+                  {t('members.inviteModal.title')}
                 </h3>
               </div>
               <button
@@ -926,12 +950,12 @@ export const MembersPage = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Email Thành Viên <span style={{ color: '#EF4444' }}>*</span>
+                  {t('members.inviteModal.emailLabel')} <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="email"
                   required
-                  placeholder="thanhvien@gmail.com"
+                  placeholder={t('members.inviteModal.emailPlaceholder')}
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--dash-border)', borderRadius: 'var(--dash-radius-md)', fontSize: '0.875rem' }}
@@ -942,19 +966,19 @@ export const MembersPage = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Phân Quyền Vai Trò (Organization Role) <span style={{ color: '#EF4444' }}>*</span>
+                  {t('members.inviteModal.roleLabel')} <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value)}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--dash-border)', borderRadius: 'var(--dash-radius-md)', fontSize: '0.875rem', backgroundColor: '#FFFFFF' }}
                 >
-                  <option value="DEVOPS">Kỹ Sư DevOps Lead (Quản trị cụm & xem viễn trắc)</option>
-                  <option value="VIEWER">Người Xem / Kiểm Toán (Chỉ đọc số liệu & SLA)</option>
-                  <option value="SME_OWNER">Chủ DN (SME Owner - Toàn quyền & Duyệt HITL)</option>
+                  <option value="DEVOPS">{t('members.inviteModal.roleDevops')}</option>
+                  <option value="VIEWER">{t('members.inviteModal.roleViewer')}</option>
+                  <option value="SME_OWNER">{t('members.inviteModal.roleOwner')}</option>
                 </select>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.71875rem', color: 'var(--dash-text-muted)' }}>
-                  Lưu ý: Vai trò này quyết định quyền hạn thao tác tài nguyên trong tổ chức và có thể thay đổi bất kỳ lúc nào.
+                  {t('members.inviteModal.note')}
                 </p>
               </div>
 
@@ -973,7 +997,7 @@ export const MembersPage = () => {
                     cursor: 'pointer',
                   }}
                 >
-                  Hủy
+                  {t('members.inviteModal.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -994,7 +1018,7 @@ export const MembersPage = () => {
                   }}
                 >
                   {isInviting && <RefreshCw size={14} className="animate-spin" />}
-                  <span>{isInviting ? 'Đang gửi...' : 'Gửi Thư Mời'}</span>
+                  <span>{isInviting ? t('members.inviteModal.sending') : t('members.inviteModal.submit')}</span>
                 </button>
               </div>
             </form>
@@ -1042,7 +1066,7 @@ export const MembersPage = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Shield size={18} color="var(--dash-primary)" />
                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                  Thay Đổi Vai Trò
+                  {t('members.editModal.title')}
                 </h3>
               </div>
               <button
@@ -1056,7 +1080,7 @@ export const MembersPage = () => {
 
             <form onSubmit={handleUpdateRole} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', display: 'block' }}>Thành viên:</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', display: 'block' }}>{t('members.editModal.memberLabel')}</span>
                 <strong style={{ fontSize: '0.9375rem', color: 'var(--dash-text-primary)' }}>
                   {editingMember.user?.full_name || editingMember.name} ({editingMember.user?.email || editingMember.email})
                 </strong>
@@ -1064,16 +1088,16 @@ export const MembersPage = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '4px' }}>
-                  Vai Trò Cấp Mới
+                  {t('members.editModal.newRoleLabel')}
                 </label>
                 <select
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value)}
                   style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--dash-border)', borderRadius: 'var(--dash-radius-md)', fontSize: '0.875rem', backgroundColor: '#FFFFFF' }}
                 >
-                  <option value="SME_OWNER">Chủ DN (SME Owner - Toàn quyền & Duyệt HITL)</option>
-                  <option value="DEVOPS">Kỹ Sư DevOps Lead (Quản trị cụm máy chủ & Agent)</option>
-                  <option value="VIEWER">Người Xem / Kiểm Toán (Chỉ đọc số liệu & SLA)</option>
+                  <option value="SME_OWNER">{t('members.editModal.roleOwner')}</option>
+                  <option value="DEVOPS">{t('members.editModal.roleDevops')}</option>
+                  <option value="VIEWER">{t('members.editModal.roleViewer')}</option>
                 </select>
               </div>
 
@@ -1092,7 +1116,7 @@ export const MembersPage = () => {
                     cursor: 'pointer',
                   }}
                 >
-                  Hủy
+                  {t('members.editModal.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -1109,7 +1133,7 @@ export const MembersPage = () => {
                     opacity: isUpdatingRole ? 0.7 : 1,
                   }}
                 >
-                  {isUpdatingRole ? 'Đang cập nhật...' : 'Lưu Thay Đổi'}
+                  {isUpdatingRole ? t('members.editModal.updating') : t('members.editModal.save')}
                 </button>
               </div>
             </form>
@@ -1122,17 +1146,17 @@ export const MembersPage = () => {
       {/* 8. Modal: Chi Tiết Hồ Sơ Cá Nhân Thành Viên */}
       {selectedMemberDetail && (() => {
         const m = selectedMemberDetail;
-        const memberName = m.user?.full_name || m.name || 'Thành viên mới';
+        const memberName = m.user?.full_name || m.name || t('members.row.defaultName');
         const memberEmail = m.user?.email || m.email || '';
         const roleCode = m.role?.code || m.role || 'VIEWER';
         const roleName =
           m.role?.name ||
           m.roleLabel ||
           (roleCode === 'SME_OWNER'
-            ? 'Chủ Doanh Nghiệp (SME Owner)'
+            ? t('members.detailModal.roleOwnerFull')
             : roleCode === 'DEVOPS'
-            ? 'Kỹ Sư DevOps Lead'
-            : 'Người Xem / Kiểm Toán (Viewer)');
+            ? t('members.detailModal.roleDevopsFull')
+            : t('members.detailModal.roleViewerFull'));
         const isOwner = roleCode === 'SME_OWNER';
         const isDevOps = roleCode === 'DEVOPS';
 
@@ -1158,10 +1182,24 @@ export const MembersPage = () => {
           localStoredAvatar ||
           null;
 
-        const phone = m.user?.phone || 'Chưa cập nhật';
-        const jobTitle = m.user?.job_title || (isOwner ? 'Chủ Doanh Nghiệp' : isDevOps ? 'Kỹ Sư Hạ Tầng & SRE Lead' : 'Chuyên Viên Phân Tích / Kiểm Toán');
-        const joinDate = m.joined_at ? new Date(m.joined_at).toLocaleDateString('vi-VN') : (m.created_at ? new Date(m.created_at).toLocaleDateString('vi-VN') : 'Mới tham gia');
-        const lastActive = m.lastActive || (m.user?.last_login_at ? `Đăng nhập: ${new Date(m.user.last_login_at).toLocaleString('vi-VN')}` : 'Đang hoạt động');
+        const phone = m.user?.phone || t('members.detailModal.phoneUnset');
+        const jobTitle =
+          m.user?.job_title ||
+          (isOwner
+            ? t('members.detailModal.jobOwner')
+            : isDevOps
+            ? t('members.detailModal.jobDevops')
+            : t('members.detailModal.jobViewer'));
+        const joinDate = m.joined_at
+          ? new Date(m.joined_at).toLocaleDateString(intlLocale)
+          : m.created_at
+          ? new Date(m.created_at).toLocaleDateString(intlLocale)
+          : t('members.detailModal.justJoined');
+        const lastActive =
+          m.lastActive ||
+          (m.user?.last_login_at
+            ? t('members.detailModal.lastLogin', { datetime: new Date(m.user.last_login_at).toLocaleString(intlLocale) })
+            : t('members.detailModal.currentlyActive'));
 
         return (
           <div
@@ -1208,7 +1246,7 @@ export const MembersPage = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <User size={18} color="var(--dash-primary, #059669)" />
                   <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                    Chi Tiết Hồ Sơ Cá Nhân
+                    {t('members.detailModal.title')}
                   </h3>
                 </div>
                 <button
@@ -1224,7 +1262,7 @@ export const MembersPage = () => {
                     display: 'flex',
                     alignItems: 'center',
                   }}
-                  title="Đóng cửa sổ"
+                  title={t('members.detailModal.closeTitle')}
                 >
                   <X size={18} />
                 </button>
@@ -1308,7 +1346,7 @@ export const MembersPage = () => {
                     }}
                   >
                     {m.status === 'ACTIVE' ? <CheckCircle2 size={11} /> : <Clock size={11} />}
-                    <span>{m.status === 'ACTIVE' ? 'Đang Hoạt Động' : 'Chờ Chấp Nhận'}</span>
+                    <span>{m.status === 'ACTIVE' ? t('members.detailModal.statusActive') : t('members.detailModal.statusInvited')}</span>
                   </span>
                 </div>
               </div>
@@ -1318,7 +1356,7 @@ export const MembersPage = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)', fontSize: '0.8125rem' }}>
                     <Briefcase size={15} color="#64748B" />
-                    <span>Chức danh:</span>
+                    <span>{t('members.detailModal.jobTitleLabel')}</span>
                   </div>
                   <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{jobTitle}</strong>
                 </div>
@@ -1326,7 +1364,7 @@ export const MembersPage = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)', fontSize: '0.8125rem' }}>
                     <Phone size={15} color="#64748B" />
-                    <span>Số điện thoại:</span>
+                    <span>{t('members.detailModal.phoneLabel')}</span>
                   </div>
                   <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{phone}</strong>
                 </div>
@@ -1334,7 +1372,7 @@ export const MembersPage = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)', fontSize: '0.8125rem' }}>
                     <Calendar size={15} color="#64748B" />
-                    <span>Ngày tham gia:</span>
+                    <span>{t('members.detailModal.joinDateLabel')}</span>
                   </div>
                   <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{joinDate}</strong>
                 </div>
@@ -1342,7 +1380,7 @@ export const MembersPage = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dash-text-secondary)', fontSize: '0.8125rem' }}>
                     <Clock size={15} color="#64748B" />
-                    <span>Hoạt động:</span>
+                    <span>{t('members.detailModal.activityLabel')}</span>
                   </div>
                   <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{lastActive}</strong>
                 </div>
@@ -1351,14 +1389,14 @@ export const MembersPage = () => {
                 <div style={{ marginTop: '2px', padding: '10px 12px', backgroundColor: '#F0FDF4', border: '1px solid #DCFCE7', borderRadius: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', fontWeight: 700, color: '#166534', marginBottom: '4px' }}>
                     <Shield size={13} />
-                    <span>Phạm vi quyền hạn ({roleCode}):</span>
+                    <span>{t('members.detailModal.scopeTitle', { role: roleCode })}</span>
                   </div>
                   <p style={{ margin: 0, fontSize: '0.71875rem', color: '#15803D', lineHeight: 1.4 }}>
                     {isOwner
-                      ? 'Toàn quyền kiểm soát tài nguyên công ty, quản lý thành viên, phê duyệt khẩn cấp HITL và điều phối hạ tầng K8s.'
+                      ? t('members.detailModal.scopeOwner')
                       : isDevOps
-                      ? 'Quản trị cụm máy chủ K8s, cài đặt tác tử eBPF, vận hành hệ thống viễn trắc và kích hoạt kịch bản tự chữa lành L1/L2.'
-                      : 'Quyền xem chỉ đọc: theo dõi bảng điều khiển tổng quan, số liệu viễn trắc, nhật ký kiểm toán và báo cáo SLA.'}
+                      ? t('members.detailModal.scopeDevops')
+                      : t('members.detailModal.scopeViewer')}
                   </p>
                 </div>
               </div>
@@ -1387,7 +1425,7 @@ export const MembersPage = () => {
                     cursor: 'pointer',
                   }}
                 >
-                  Đóng
+                  {t('members.detailModal.close')}
                 </button>
               </div>
             </div>
@@ -1434,7 +1472,9 @@ export const MembersPage = () => {
             >
               <AlertTriangle size={20} color="#DC2626" />
               <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#991B1B' }}>
-                {deletingMember.status === 'INVITED' ? 'Xác Nhận Thu Hồi Lời Mời' : 'Xác Nhận Loại Bỏ Thành Viên'}
+                {deletingMember.status === 'INVITED'
+                  ? t('members.deleteModal.titleRevoke')
+                  : t('members.deleteModal.titleRemove')}
               </h3>
             </div>
 
@@ -1442,14 +1482,14 @@ export const MembersPage = () => {
               <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--dash-text-primary)', lineHeight: 1.5 }}>
                 {deletingMember.status === 'INVITED' ? (
                   <>
-                    Bạn có chắc chắn muốn thu hồi lời mời tham gia tổ chức gửi tới{' '}
+                    {t('members.deleteModal.confirmRevokePrefix')}{' '}
                     <strong>{deletingMember.user?.email || deletingMember.email}</strong>?
                   </>
                 ) : (
                   <>
-                    Bạn có chắc chắn muốn loại bỏ thành viên{' '}
+                    {t('members.deleteModal.confirmRemovePrefix')}{' '}
                     <strong>{deletingMember.user?.full_name || deletingMember.name}</strong> (
-                    {deletingMember.user?.email || deletingMember.email}) khỏi tổ chức?
+                    {deletingMember.user?.email || deletingMember.email}) {t('members.deleteModal.confirmRemoveSuffix')}
                   </>
                 )}
               </p>
@@ -1465,7 +1505,7 @@ export const MembersPage = () => {
                   lineHeight: 1.4,
                 }}
               >
-                Hành động này sẽ ngay lập tức thu hồi toàn bộ quyền truy cập vào hạ tầng, cụm Kubernetes và các bảng điều khiển của tổ chức.
+                {t('members.deleteModal.warning')}
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
@@ -1483,7 +1523,7 @@ export const MembersPage = () => {
                     cursor: 'pointer',
                   }}
                 >
-                  Hủy Bỏ
+                  {t('members.deleteModal.cancel')}
                 </button>
                 <button
                   type="button"
@@ -1501,7 +1541,7 @@ export const MembersPage = () => {
                     opacity: isDeleting ? 0.7 : 1,
                   }}
                 >
-                  {isDeleting ? 'Đang xử lý...' : 'Xác Nhận'}
+                  {isDeleting ? t('members.deleteModal.processing') : t('members.deleteModal.confirm')}
                 </button>
               </div>
             </div>

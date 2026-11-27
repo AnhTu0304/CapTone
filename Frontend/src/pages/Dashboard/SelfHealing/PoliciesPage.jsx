@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { selfHealingService } from '../../../services/selfHealingService';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../../../context/AuthContext';
@@ -35,6 +36,7 @@ import {
 
 
 export const PoliciesPage = () => {
+  const { t } = useTranslation('dashHealing');
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
   const { success: toastSuccess, warning: toastWarning, error: toastError } = useToast();
   const { user } = useAuth();
@@ -142,15 +144,6 @@ export const PoliciesPage = () => {
   // Policies list state
   const [policies, setPolicies] = useState([]);
 
-  const KNOWN_POLICY_TITLES = {
-    'POL-SCALE-OUT-TRAFFIC': 'Tự động mở rộng bản sao Pod khi quá tải lưu lượng đột biến',
-    'POL-ROLLBACK-HTTP5XX': 'Hoàn nguyên phiên bản khi tỷ lệ HTTP 5xx vượt 5%',
-    'POL-CLEANUP-DISK-TEMP': 'Dọn dẹp dung lượng disk tạm thời trong thư mục /tmp',
-    'POL-BLOCK-MALICIOUS-IP': 'Chặn IP tấn công bất thường bằng eBPF/iptables',
-    'POL-DRAIN-UNHEALTHY-NODE': 'Di tản workload và cô lập Node vật lý bị lỗi phần cứng',
-    'POL-RESTART-CRASHED-POD': 'Tự động khởi động lại Pod bị treo hoặc crash liveness probe',
-  };
-
   const isMandatoryHitlPolicy = useCallback((p) => {
     const code = String(p?.code || p?.name || '').toUpperCase();
     const action = String(p?.action || (p?.actions && p.actions[0]?.action_code) || '').toUpperCase();
@@ -163,15 +156,16 @@ export const PoliciesPage = () => {
   }, []);
 
   const mapBackendPolicyToUI = useCallback((p) => {
+    const knownTitles = t('policies.knownTitles', { returnObjects: true }) || {};
     const actionNames = p.actions && p.actions.length > 0
       ? p.actions.map((a) => a.action_name || a.action_code).join(', ')
-      : 'Thực thi hành động theo chuẩn MAPE-K';
+      : t('policies.table.defaultAction');
 
     let displayName = p.description || p.name;
-    if (KNOWN_POLICY_TITLES[p.name] && (!p.description || p.description.includes('???') || p.description.includes('?'))) {
-      displayName = KNOWN_POLICY_TITLES[p.name];
+    if (knownTitles[p.name] && (!p.description || p.description.includes('???') || p.description.includes('?'))) {
+      displayName = knownTitles[p.name];
     } else if (!displayName || displayName.includes('???')) {
-      displayName = KNOWN_POLICY_TITLES[p.name] || p.name;
+      displayName = knownTitles[p.name] || p.name;
     }
 
     const isMandatory = isMandatoryHitlPolicy(p);
@@ -180,10 +174,13 @@ export const PoliciesPage = () => {
       id: p.id,
       code: p.name,
       name: displayName,
-      category: p.risk_type || 'Tự phục hồi AI',
+      category: p.risk_type || t('policies.table.defaultCategory'),
       targetNamespace: 'production',
-      targetCluster: currentEnv?.name || currentEnv?.cluster || 'Tất cả cụm',
-      condition: `Trigger: ${p.trigger_type} (Ngưỡng tin cậy >= ${Math.round(Number(p.confidence_threshold || 0.85) * 100)}%)`,
+      targetCluster: currentEnv?.name || currentEnv?.cluster || t('policies.table.allClusters'),
+      condition: t('policies.table.conditionFormat', {
+        trigger: p.trigger_type,
+        pct: Math.round(Number(p.confidence_threshold || 0.85) * 100),
+      }),
       action: actionNames,
       riskLevel: p.risk_level || 'LOW',
       hitlRequired: isMandatory ? true : (p.requires_approval ?? false),
@@ -191,7 +188,7 @@ export const PoliciesPage = () => {
       cooldown: p.cooldown_seconds || 300,
       maxRetries: p.max_retries || 2,
     };
-  }, [currentEnv?.cluster, isMandatoryHitlPolicy]);
+  }, [currentEnv?.cluster, currentEnv?.name, isMandatoryHitlPolicy, t]);
 
   const fetchPolicies = useCallback(async () => {
     setIsLoading(true);
@@ -300,7 +297,7 @@ export const PoliciesPage = () => {
 
   const handleSelectAutomationMode = (mode) => {
     if (!canManagePolicies) {
-      toastWarning('Chỉ SME Owner và DevOps mới có quyền thay đổi chế độ tự động hóa.', 'Quyền Hạn');
+      toastWarning(t('policies.toast.permMode'), t('policies.toast.permTitle'));
       return;
     }
     setGlobalMode(mode);
@@ -329,7 +326,7 @@ export const PoliciesPage = () => {
 
   const handleDeletePolicy = (policy) => {
     if (!canManagePolicies) {
-      toastWarning("Chỉ SME Owner và DevOps mới có quyền xóa chính sách tự phục hồi.", "Quyền Hạn");
+      toastWarning(t('policies.toast.permDelete'), t('policies.toast.permTitle'));
       return;
     }
     setPolicyToDelete(policy);
@@ -350,11 +347,11 @@ export const PoliciesPage = () => {
           localStorage.setItem(`selfheal_policies_${clusterKey}`, JSON.stringify(map));
         }
       } catch (e) {}
-      toastSuccess(`Đã xóa thành công quy tắc "${policyToDelete.name}"!`, "Đã Xóa Quy Tắc");
+      toastSuccess(t('policies.toast.deletedSuccess', { name: policyToDelete.name }), t('policies.toast.deletedTitle'));
       setSelectedPolicy(null);
       setPolicyToDelete(null);
     } catch (err) {
-      toastError(err?.message || "Lỗi kết nối máy chủ khi xóa chính sách", "Xóa Thất Bại");
+      toastError(err?.message || t('policies.toast.deleteFail'), t('policies.toast.deleteFailTitle'));
     } finally {
       setDeletingPolicyId(null);
     }
@@ -362,7 +359,7 @@ export const PoliciesPage = () => {
 
   const handleTogglePolicy = async (id) => {
     if (!canManagePolicies) {
-      toastWarning('Chỉ SME Owner và DevOps mới có quyền bật/tắt chính sách tự phục hồi.', 'Quyền Hạn');
+      toastWarning(t('policies.toast.permToggle'), t('policies.toast.permTitle'));
       return;
     }
     const target = policies.find((p) => p.id === id);
@@ -381,23 +378,29 @@ export const PoliciesPage = () => {
         await selfHealingService.updatePolicyConfig(id, {
           is_active: newEnabled,
         });
-        toastSuccess(`Đã ${newEnabled ? 'bật' : 'tắt'} quy tắc "${target.name}" thành công!`, 'Cập Nhật Quy Tắc');
+        toastSuccess(
+          t('policies.toast.toggledSuccess', {
+            state: newEnabled ? t('policies.toast.stateOn') : t('policies.toast.stateOff'),
+            name: target.name,
+          }),
+          t('policies.toast.toggleTitle')
+        );
       } catch (err) {
         console.warn('Lỗi cập nhật trạng thái bật/tắt chính sách:', err.message);
-        toastError('Lỗi cập nhật trạng thái quy tắc: ' + (err.message || 'Lỗi server'));
+        toastError(t('policies.toast.toggleError', { msg: err.message || t('policies.toast.serverError') }));
       }
     }
   };
 
   const handleToggleHitl = async (id) => {
     if (!canManagePolicies) {
-      toastWarning('Chỉ SME Owner và DevOps mới có quyền cấu hình cổng HITL.', 'Quyền Hạn');
+      toastWarning(t('policies.toast.permHitl'), t('policies.toast.permTitle'));
       return;
     }
     const target = policies.find((p) => p.id === id);
     if (!target) return;
     if (isMandatoryHitlPolicy(target)) {
-      toastWarning('Chính sách Rollback Deployment và Drain Node can thiệp trực tiếp phiên bản phát hành/hạ tầng cụm. Đây là rào chắn an toàn bất biến, bắt buộc 100% phải qua Cổng Phê Duyệt HITL!', 'Khóa An Toàn Bất Biến');
+      toastWarning(t('policies.toast.mandatoryHitlWarn'), t('policies.toast.mandatoryHitlTitle'));
       return;
     }
     const newHitl = !target.hitlRequired;
@@ -415,17 +418,23 @@ export const PoliciesPage = () => {
           requires_approval: newHitl,
           execution_mode: newHitl ? 'MANUAL' : 'AUTO',
         });
-        toastSuccess(`Quy tắc "${target.name}" đã chuyển sang chế độ ${newHitl ? 'Bắt Buộc Duyệt (HITL)' : 'Tự Động Chạy'}!`, 'Cổng Duyệt HITL');
+        toastSuccess(
+          t('policies.toast.hitlUpdated', {
+            name: target.name,
+            mode: newHitl ? t('policies.toast.hitlModeManual') : t('policies.toast.hitlModeAuto'),
+          }),
+          t('policies.toast.hitlTitle')
+        );
       } catch (err) {
         console.warn('Lỗi cập nhật chế độ HITL chính sách:', err.message);
-        toastError('Lỗi cập nhật chế độ HITL: ' + (err.message || 'Lỗi server'));
+        toastError(t('policies.toast.hitlError', { msg: err.message || t('policies.toast.serverError') }));
       }
     }
   };
 
   const handleSaveSettings = async () => {
     if (!canManagePolicies) {
-      toastWarning('Chỉ SME Owner và DevOps mới có quyền lưu cấu hình ngưỡng an toàn.', 'Quyền Hạn');
+      toastWarning(t('policies.toast.permSave'), t('policies.toast.permTitle'));
       return;
     }
 
@@ -478,10 +487,10 @@ export const PoliciesPage = () => {
             )
           );
         }
-        toastSuccess('Đã lưu cấu hình rào chắn an toàn và chính sách tự phục hồi thành công!', 'Lưu Cấu Hình');
+        toastSuccess(t('policies.toast.saveSuccess'), t('policies.toast.saveTitle'));
       } catch (err) {
         console.warn('Lỗi lưu cấu hình an toàn xuống DB:', err.message);
-        toastError('Lỗi lưu cấu hình an toàn: ' + (err.message || 'Lỗi kết nối'));
+        toastError(t('policies.toast.saveError', { msg: err.message || t('policies.toast.connError') }));
       }
     }
 
@@ -495,7 +504,7 @@ export const PoliciesPage = () => {
   const handleAddRule = async (e) => {
     e.preventDefault();
     if (!canManagePolicies) {
-      toastWarning('Chỉ SME Owner và DevOps mới có quyền thêm quy tắc tự phục hồi.', 'Quyền Hạn');
+      toastWarning(t('policies.toast.permAdd'), t('policies.toast.permTitle'));
       return;
     }
     if (!newRule.name || !newRule.condition || !newRule.action) return;
@@ -578,10 +587,10 @@ export const PoliciesPage = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Chính Sách Tự Phục Hồi
+              {t('policies.header.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Quản lý quy tắc tự động hóa, ngưỡng tin cậy &amp; cơ chế bảo vệ an toàn MAPE-K
+              {t('policies.header.subtitle')}
             </p>
           </div>
         </div>
@@ -590,7 +599,7 @@ export const PoliciesPage = () => {
           <button
             onClick={() => {
               if (!canManagePolicies) {
-                toastWarning('Chỉ SME Owner và DevOps mới có quyền thêm quy tắc tự phục hồi.', 'Quyền Hạn');
+                toastWarning(t('policies.toast.permAdd'), t('policies.toast.permTitle'));
                 return;
               }
               setShowAddModal(true);
@@ -612,10 +621,10 @@ export const PoliciesPage = () => {
               cursor: !canManagePolicies ? 'not-allowed' : 'pointer',
               opacity: !canManagePolicies ? 0.7 : 1,
             }}
-            title={!canManagePolicies ? 'Chỉ SME Owner hoặc DevOps mới có quyền thêm quy tắc' : 'Thêm quy tắc mới'}
+            title={!canManagePolicies ? t('policies.header.addRuleDenied') : t('policies.header.addRule')}
           >
             <Plus size={15} />
-            Thêm Quy Tắc Mới
+            {t('policies.header.addRule')}
           </button>
 
           <button
@@ -638,10 +647,10 @@ export const PoliciesPage = () => {
               opacity: !canManagePolicies ? 0.7 : 1,
               boxShadow: canManagePolicies ? '0 2px 8px rgba(5, 150, 105, 0.2)' : 'none',
             }}
-            title={!canManagePolicies ? 'Chỉ SME Owner hoặc DevOps mới có quyền lưu cấu hình' : 'Lưu cấu hình'}
+            title={!canManagePolicies ? t('policies.header.saveDenied') : t('policies.header.saveChanges')}
           >
             {saveSuccess ? <Check size={15} /> : <Save size={15} />}
-            {saveSuccess ? 'Đã Lưu' : 'Lưu Thay Đổi'}
+            {saveSuccess ? t('policies.header.saved') : t('policies.header.saveChanges')}
           </button>
         </div>
       </div>
@@ -662,7 +671,7 @@ export const PoliciesPage = () => {
           }}
         >
           <AlertTriangle size={17} color="#D97706" />
-          <span>Bạn có thay đổi cấu hình chưa lưu. Hãy nhấn nút <strong>"Lưu Thay Đổi"</strong> ở góc phải để áp dụng vào hệ thống.</span>
+          <span><Trans i18nKey="dashHealing:policies.alerts.unsaved" components={{ strong: <strong /> }} /></span>
         </div>
       )}
 
@@ -682,7 +691,7 @@ export const PoliciesPage = () => {
           }}
         >
           <CheckCircle2 size={17} color="#059669" />
-          <span>Chính sách tự phục hồi đã được áp dụng tức thì vào cụm máy chủ và ghi nhận vào sổ kiểm toán.</span>
+          <span>{t('policies.alerts.savedBanner')}</span>
         </div>
       )}
 
@@ -707,15 +716,15 @@ export const PoliciesPage = () => {
           </div>
           <div>
             <h2 style={{ fontSize: '0.96rem', fontWeight: 800, margin: 0, color: '#0F172A' }}>
-              Chế Độ Vận Hành Tự Động Hóa (Cluster Automation Mode)
+              {t('policies.modes.title')}
             </h2>
             <p style={{ fontSize: '0.76rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Quyết định mức độ tự trị và quyền can thiệp phục hồi của AI trên cụm Kubernetes
+              {t('policies.modes.subtitle')}
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+        <div className="dash-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
           {/* Card 1: Supervised HITL (Khuyến nghị) */}
           <div
             onClick={() => handleSelectAutomationMode('SUPERVISED')}
@@ -762,19 +771,19 @@ export const PoliciesPage = () => {
                     fontSize: '0.6875rem',
                   }}
                 >
-                  Khuyến nghị cho SME
+                  {t('policies.modes.supervisedBadge')}
                 </span>
               </div>
 
               {/* Row 2: Full Title without any truncation */}
               <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
-                Bán Tự Động Có Giám Sát
+                {t('policies.modes.supervisedTitle')}
               </div>
             </div>
 
             {/* Description */}
             <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
-              Tự khắc phục rủi ro thấp (OOM, Deadlock). Mọi hành động rủi ro cao (Drain, Rollback) bắt buộc chuyển qua Cổng duyệt HITL.
+              {t('policies.modes.supervisedDesc')}
             </p>
           </div>
 
@@ -824,19 +833,19 @@ export const PoliciesPage = () => {
                     fontSize: '0.6875rem',
                   }}
                 >
-                  Không cần can thiệp
+                  {t('policies.modes.autonomousBadge')}
                 </span>
               </div>
 
               {/* Row 2: Full Title without any truncation */}
               <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
-                Tự Trị Toàn Phần (Autonomous)
+                {t('policies.modes.autonomousTitle')}
               </div>
             </div>
 
             {/* Description */}
             <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
-              Mọi hành động được MAPE-K lập tức thực thi nếu không vượt quá ngưỡng Blast Radius. Tối ưu MTTR xuống dưới 2 giây.
+              {t('policies.modes.autonomousDesc')}
             </p>
           </div>
 
@@ -886,19 +895,19 @@ export const PoliciesPage = () => {
                     fontSize: '0.6875rem',
                   }}
                 >
-                  An toàn tuyệt đối
+                  {t('policies.modes.auditBadge')}
                 </span>
               </div>
 
               {/* Row 2: Full Title without any truncation */}
               <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
-                Chỉ Cảnh Báo (Audit & Dry-Run)
+                {t('policies.modes.auditTitle')}
               </div>
             </div>
 
             {/* Description */}
             <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
-              AI chỉ phân tích nguyên nhân gốc rễ và đề xuất giải pháp, tuyệt đối không can thiệp hay thay đổi trạng thái Kubernetes cluster.
+              {t('policies.modes.auditDesc')}
             </p>
           </div>
         </div>
@@ -925,15 +934,15 @@ export const PoliciesPage = () => {
           </div>
           <div>
             <h2 style={{ fontSize: '0.96rem', fontWeight: 800, margin: 0, color: '#0F172A' }}>
-              Ngưỡng An Toàn &amp; Kích Hoạt Cổng HITL (Safety Guards)
+              {t('policies.guards.title')}
             </h2>
             <p style={{ fontSize: '0.76rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Hàng rào bảo vệ tự động (Guardrails) ngăn chặn tác động tiêu cực lan truyền trên toàn bộ cụm Kubernetes
+              {t('policies.guards.subtitle')}
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+        <div className="dash-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
           {/* Card 1: Blast Radius */}
           <div
             style={{
@@ -968,7 +977,7 @@ export const PoliciesPage = () => {
                     <ShieldCheck size={14} />
                   </div>
                   <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    Bán Kính Ảnh Hưởng
+                    {t('policies.guards.blastTitle')}
                   </span>
                 </div>
                 <span
@@ -1011,15 +1020,15 @@ export const PoliciesPage = () => {
                   }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.625rem', color: '#94A3B8', marginTop: '4px', fontWeight: 600 }}>
-                  <span>Min: 10%</span>
-                  <span>Ngưỡng kích hoạt HITL</span>
-                  <span>Max: 50%</span>
+                  <span>{t('policies.guards.blastMin')}</span>
+                  <span>{t('policies.guards.blastMid')}</span>
+                  <span>{t('policies.guards.blastMax')}</span>
                 </div>
               </div>
             </div>
 
             <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
-              Tự kích hoạt Cổng duyệt khi vượt quá <strong style={{ color: '#059669' }}>{blastRadiusThreshold}%</strong> số Pods trong cùng Namespace.
+              {t('policies.guards.blastDescPrefix')} <strong style={{ color: '#059669' }}>{blastRadiusThreshold}%</strong> {t('policies.guards.blastDescSuffix')}
             </p>
           </div>
 
@@ -1056,7 +1065,7 @@ export const PoliciesPage = () => {
                     <RotateCcw size={14} />
                   </div>
                   <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    Giới Hạn Khởi Động
+                    {t('policies.guards.restartTitle')}
                   </span>
                 </div>
                 <span
@@ -1072,7 +1081,7 @@ export const PoliciesPage = () => {
                     flexShrink: 0,
                   }}
                 >
-                  {maxRestarts} lần / {restartTimeWindow}m
+                  {t('policies.guards.restartBadge', { count: maxRestarts, window: restartTimeWindow })}
                 </span>
               </div>
 
@@ -1080,7 +1089,7 @@ export const PoliciesPage = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 600, color: '#64748B', marginBottom: '3px' }}>
-                    Số lần tối đa
+                    {t('policies.guards.maxRestartsLabel')}
                   </label>
                   <select
                     value={maxRestarts}
@@ -1103,14 +1112,14 @@ export const PoliciesPage = () => {
                       opacity: canManagePolicies ? 1 : 0.6,
                     }}
                   >
-                    <option value={2}>2 lần</option>
-                    <option value={3}>3 lần</option>
-                    <option value={5}>5 lần</option>
+                    <option value={2}>{t('policies.guards.restartOption', { count: 2 })}</option>
+                    <option value={3}>{t('policies.guards.restartOption', { count: 3 })}</option>
+                    <option value={5}>{t('policies.guards.restartOption', { count: 5 })}</option>
                   </select>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 600, color: '#64748B', marginBottom: '3px' }}>
-                    Khung thời gian
+                    {t('policies.guards.timeWindowLabel')}
                   </label>
                   <select
                     value={restartTimeWindow}
@@ -1133,16 +1142,16 @@ export const PoliciesPage = () => {
                       opacity: canManagePolicies ? 1 : 0.6,
                     }}
                   >
-                    <option value={10}>10 phút</option>
-                    <option value={15}>15 phút</option>
-                    <option value={30}>30 phút</option>
+                    <option value={10}>{t('policies.guards.minuteOption', { count: 10 })}</option>
+                    <option value={15}>{t('policies.guards.minuteOption', { count: 15 })}</option>
+                    <option value={30}>{t('policies.guards.minuteOption', { count: 30 })}</option>
                   </select>
                 </div>
               </div>
             </div>
 
             <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
-              Ngăn hiện tượng CrashLoopBackOff lặp vô tận làm suy kiệt Node và tài nguyên CPU.
+              {t('policies.guards.restartDesc')}
             </p>
           </div>
 
@@ -1179,7 +1188,7 @@ export const PoliciesPage = () => {
                     <Clock size={14} />
                   </div>
                   <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    Chờ Duyệt & Hạ Nhiệt
+                    {t('policies.guards.cooldownTitle')}
                   </span>
                 </div>
                 <span
@@ -1203,7 +1212,7 @@ export const PoliciesPage = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 600, color: '#64748B', marginBottom: '3px' }}>
-                    Hết hạn chờ
+                    {t('policies.guards.approvalExpiryLabel')}
                   </label>
                   <select
                     value={approvalTimeout}
@@ -1226,14 +1235,14 @@ export const PoliciesPage = () => {
                       opacity: canManagePolicies ? 1 : 0.6,
                     }}
                   >
-                    <option value={10}>10 phút</option>
-                    <option value={20}>20 phút</option>
-                    <option value={30}>30 phút</option>
+                    <option value={10}>{t('policies.guards.minuteOption', { count: 10 })}</option>
+                    <option value={20}>{t('policies.guards.minuteOption', { count: 20 })}</option>
+                    <option value={30}>{t('policies.guards.minuteOption', { count: 30 })}</option>
                   </select>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 600, color: '#64748B', marginBottom: '3px' }}>
-                    Hạ nhiệt
+                    {t('policies.guards.cooldownLabel')}
                   </label>
                   <select
                     value={cooldownPeriod}
@@ -1256,18 +1265,18 @@ export const PoliciesPage = () => {
                       opacity: canManagePolicies ? 1 : 0.6,
                     }}
                   >
-                    <option value={1}>1 phút</option>
-                    <option value={2}>2 phút</option>
-                    <option value={3}>3 phút</option>
-                    <option value={5}>5 phút</option>
-                    <option value={10}>10 phút</option>
+                    <option value={1}>{t('policies.guards.minuteOption', { count: 1 })}</option>
+                    <option value={2}>{t('policies.guards.minuteOption', { count: 2 })}</option>
+                    <option value={3}>{t('policies.guards.minuteOption', { count: 3 })}</option>
+                    <option value={5}>{t('policies.guards.minuteOption', { count: 5 })}</option>
+                    <option value={10}>{t('policies.guards.minuteOption', { count: 10 })}</option>
                   </select>
                 </div>
               </div>
             </div>
 
             <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '10px 0 0 0', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
-              Tự hủy lệnh khi quá hạn. Thời gian hạ nhiệt chống giật xung (chatter).
+              {t('policies.guards.cooldownDesc')}
             </p>
           </div>
         </div>
@@ -1278,10 +1287,10 @@ export const PoliciesPage = () => {
         <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--dash-border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--dash-text-primary)' }}>
-              Quy Tắc Tự Động Phục Hồi Đang Áp Dụng ({policies.length})
+              {t('policies.table.title', { count: policies.length })}
             </h2>
             <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-              Mỗi quy tắc xác định điều kiện viễn trắc kích hoạt, hành động K8s can thiệp và yêu cầu qua Cổng HITL.
+              {t('policies.table.subtitle')}
             </p>
           </div>
         </div>
@@ -1290,14 +1299,14 @@ export const PoliciesPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--dash-bg-subtle)', borderBottom: '1px solid var(--dash-border-subtle)' }}>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Mã & Tên Quy Tắc</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Phân Loại</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Điều Kiện Kích Hoạt</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Hành Động Tự Sửa Lỗi</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Rủi Ro</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Cần Duyệt (HITL)</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Bật / Tắt</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>Chi Tiết</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>{t('policies.table.colName')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>{t('policies.table.colCategory')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>{t('policies.table.colCondition')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>{t('policies.table.colAction')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>{t('policies.table.colRisk')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>{t('policies.table.colHitl')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>{t('policies.table.colToggle')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--dash-text-secondary)', textAlign: 'center' }}>{t('policies.table.colDetails')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1306,10 +1315,10 @@ export const PoliciesPage = () => {
                   <td colSpan={8} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
                     <ShieldCheck size={40} color="#10B981" style={{ margin: '0 auto 12px auto' }} />
                     <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
-                      {isLoading ? 'Đang tải chính sách từ Database...' : 'Chưa có chính sách tự phục hồi nào'}
+                      {isLoading ? t('policies.table.loading') : t('policies.table.empty')}
                     </div>
                     <div style={{ fontSize: '0.8125rem', marginTop: '6px', color: '#64748B' }}>
-                      {isLoading ? 'Vui lòng chờ trong giây lát...' : 'Tất cả các hành động hiện đang chạy theo ngưỡng an toàn mặc định.'}
+                      {isLoading ? t('policies.table.loadingSub') : t('policies.table.emptySub')}
                     </div>
                   </td>
                 </tr>
@@ -1327,7 +1336,7 @@ export const PoliciesPage = () => {
                         backgroundColor: p.enabled ? 'transparent' : 'rgba(241, 245, 249, 0.5)',
                       }}
                     >
-                      <td style={{ padding: '14px 16px', verticalAlign: 'top', cursor: 'pointer' }} onClick={() => setSelectedPolicy(p)} title="Nhấp để xem chi tiết quy tắc">
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top', cursor: 'pointer' }} onClick={() => setSelectedPolicy(p)} title={t('policies.table.rowTitle')}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-primary)', fontFamily: 'monospace' }}>
                             {p.code || p.id}
@@ -1364,7 +1373,7 @@ export const PoliciesPage = () => {
                           border: `1px solid ${isHighRisk ? '#fecaca' : isMedRisk ? '#fde68a' : '#a7f3d0'}`,
                         }}
                       >
-                        {isHighRisk ? 'Cao' : isMedRisk ? 'Vừa' : 'Thấp'}
+                        {isHighRisk ? t('policies.table.riskHigh') : isMedRisk ? t('policies.table.riskMed') : t('policies.table.riskLow')}
                       </span>
                     </td>
 
@@ -1392,12 +1401,12 @@ export const PoliciesPage = () => {
                             }}
                             title={
                               isMandatory
-                                ? 'Rào chắn an toàn bất biến: Hành động Rollback/Drain Node bắt buộc 100% phải qua Cổng Phê Duyệt HITL, không thể cấu hình tự động chạy.'
-                                : (!canManagePolicies ? 'Chỉ SME Owner và DevOps mới có quyền cấu hình HITL' : undefined)
+                                ? t('policies.table.hitlMandatoryTip')
+                                : (!canManagePolicies ? t('policies.table.hitlDeniedTip') : undefined)
                             }
                           >
                             {p.hitlRequired ? <Lock size={12} /> : null}
-                            {p.hitlRequired ? (isMandatory ? 'Bắt Buộc Duyệt (Khóa)' : 'Bắt Buộc Duyệt') : 'Tự Động Chạy'}
+                            {p.hitlRequired ? (isMandatory ? t('policies.table.hitlMandatoryLock') : t('policies.table.hitlMandatory')) : t('policies.table.hitlAuto')}
                           </button>
                         );
                       })()}
@@ -1428,10 +1437,10 @@ export const PoliciesPage = () => {
                         }}
                         title={
                           !canManagePolicies
-                            ? 'Chỉ SME Owner và DevOps mới có quyền bật/tắt chính sách'
+                            ? t('policies.table.toggleDeniedTip')
                             : p.enabled
-                            ? 'Nhấn để Tắt chính sách trên cụm này'
-                            : 'Nhấn để Bật chính sách trên cụm này'
+                            ? t('policies.table.toggleOffTip')
+                            : t('policies.table.toggleOnTip')
                         }
                       >
                         {/* Modern Toggle Switch Slider */}
@@ -1469,7 +1478,7 @@ export const PoliciesPage = () => {
                             minWidth: '55px',
                           }}
                         >
-                          {p.enabled ? 'Đang Bật' : 'Đã Tắt'}
+                          {p.enabled ? t('policies.table.statusOn') : t('policies.table.statusOff')}
                         </span>
                       </div>
                     </td>
@@ -1501,10 +1510,10 @@ export const PoliciesPage = () => {
                           e.currentTarget.style.borderColor = '#CBD5E1';
                           e.currentTarget.style.color = 'var(--dash-text-primary)';
                         }}
-                        title="Xem chi tiết quy tắc"
+                        title={t('policies.table.detailTitle')}
                       >
                         <Eye size={13} />
-                        <span>Chi tiết</span>
+                        <span>{t('common.details')}</span>
                       </button>
                     </td>
                   </tr>
@@ -1583,10 +1592,10 @@ export const PoliciesPage = () => {
               </div>
               <div style={{ flex: 1 }}>
                 <h3 style={{ margin: 0, fontSize: "1.0625rem", fontWeight: 800, color: "#0F172A" }}>
-                  Xác nhận xóa quy tắc tự phục hồi
+                  {t('policies.deleteModal.title')}
                 </h3>
                 <p style={{ margin: "6px 0 0 0", fontSize: "0.84375rem", color: "#64748B", lineHeight: 1.5 }}>
-                  Bạn có chắc chắn muốn xóa quy tắc <strong style={{ color: "#0F172A" }}>"{policyToDelete.name}"</strong> (<code style={{ color: "#0284C7", fontWeight: 700 }}>{policyToDelete.code || policyToDelete.id?.slice(0, 8)}</code>) không?
+                  {t('policies.deleteModal.promptPrefix')} <strong style={{ color: "#0F172A" }}>"{policyToDelete.name}"</strong> (<code style={{ color: "#0284C7", fontWeight: 700 }}>{policyToDelete.code || policyToDelete.id?.slice(0, 8)}</code>) {t('policies.deleteModal.promptSuffix')}
                 </p>
               </div>
               <button
@@ -1625,7 +1634,7 @@ export const PoliciesPage = () => {
               >
                 <AlertTriangle size={16} color="#DC2626" style={{ flexShrink: 0, marginTop: "2px" }} />
                 <span>
-                  <strong>Cảnh báo an toàn:</strong> Sau khi xóa, AI sẽ dừng kích hoạt hành động này trên cụm Kubernetes. Hành động này không thể hoàn tác.
+                  <strong>{t('policies.deleteModal.warningLabel')}</strong> {t('policies.deleteModal.warningDesc')}
                 </span>
               </div>
             </div>
@@ -1657,7 +1666,7 @@ export const PoliciesPage = () => {
                   cursor: "pointer",
                 }}
               >
-                Hủy bỏ
+                {t('common.cancelAction')}
               </button>
 
               <button
@@ -1680,7 +1689,7 @@ export const PoliciesPage = () => {
                 }}
               >
                 <Trash2 size={14} />
-                <span>{deletingPolicyId ? "Đang xóa..." : "Xác nhận xóa"}</span>
+                <span>{deletingPolicyId ? t('policies.deleteModal.deleting') : t('policies.deleteModal.confirmBtn')}</span>
               </button>
             </div>
           </div>

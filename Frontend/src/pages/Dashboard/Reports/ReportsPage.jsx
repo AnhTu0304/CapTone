@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import { useToast } from '../../../context/ToastContext';
 import { exportToCsv, exportToJson } from '../../../utils/exportUtils';
@@ -37,11 +39,11 @@ import {
   RotateCcw,
 } from 'lucide-react';
 
-const formatDateTimeVn = (iso) => {
+const formatDateTimeLocale = (iso, intlLocale) => {
   if (!iso) return '—';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '—';
-  return d.toLocaleString('vi-VN', {
+  return d.toLocaleString(intlLocale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -52,14 +54,16 @@ const formatDateTimeVn = (iso) => {
 };
 
 const TIME_RANGE_OPTIONS = [
-  { id: '7D', label: '7 Ngày' },
-  { id: '1M', label: '30 Ngày' },
-  { id: '3M', label: '3 Tháng' },
-  { id: '6M', label: '6 Tháng' },
-  { id: '1Y', label: '1 Năm' },
+  { id: '7D', labelKey: 'reports.timeRanges.7D' },
+  { id: '1M', labelKey: 'reports.timeRanges.1M' },
+  { id: '3M', labelKey: 'reports.timeRanges.3M' },
+  { id: '6M', labelKey: 'reports.timeRanges.6M' },
+  { id: '1Y', labelKey: 'reports.timeRanges.1Y' },
 ];
 
 export const ReportsPage = () => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh, currentUserRole, onNavigate } =
     useDashboard();
   const { success: toastSuccess, error: toastError } = useToast();
@@ -102,7 +106,7 @@ export const ReportsPage = () => {
     currentEnv?.environment_id || (!currentEnv?.cluster ? currentEnv?.id : null) || null;
   const hasHeaderCluster = Boolean(headerClusterId || headerEnvId);
   const headerClusterName = hasHeaderCluster
-    ? currentEnv?.cluster || currentEnv?.name || 'Cụm hiện tại'
+    ? currentEnv?.cluster || currentEnv?.name || t('reports.currentClusterFallback')
     : null;
 
   const scopeIds = useMemo(() => {
@@ -152,11 +156,9 @@ export const ReportsPage = () => {
       if (slaSeq !== slaRequestSeqRef.current) return;
       console.warn('[ReportsPage] Lỗi khi tải dữ liệu báo cáo:', err);
       if (err?.status === 403 || err?.message?.includes('403') || err?.message?.includes('Từ chối')) {
-        setReportError(
-          'Từ chối truy cập (403 Forbidden): Bạn không thuộc tổ chức này hoặc chưa được cấp quyền truy cập theo chính sách RBAC.'
-        );
+        setReportError(t('reports.errors.forbidden'));
       } else {
-        setReportError(err?.message || 'Không thể kết nối máy chủ để tải dữ liệu báo cáo.');
+        setReportError(err?.message || t('reports.errors.connectFailed'));
       }
       setReportData(null);
     } finally {
@@ -164,7 +166,7 @@ export const ReportsPage = () => {
         setIsLoadingReport(false);
       }
     }
-  }, [currentOrg?.id, scopeIds.activeEnvId, scopeIds.activeClusterId, effectiveService, timeRange]);
+  }, [currentOrg?.id, scopeIds.activeEnvId, scopeIds.activeClusterId, effectiveService, timeRange, t]);
 
   useEffect(() => {
     loadReport();
@@ -279,25 +281,27 @@ export const ReportsPage = () => {
   const timeRangeLabel = useMemo(() => {
     switch (timeRange) {
       case '7D':
-        return '7 Ngày gần nhất';
+        return t('reports.timeRangeLabels.7D');
       case '1M':
-        return '30 Ngày gần nhất';
+        return t('reports.timeRangeLabels.1M');
       case '3M':
-        return '90 Ngày gần nhất (3 Tháng)';
+        return t('reports.timeRangeLabels.3M');
       case '1Y':
-        return 'Cả năm (12 Tháng)';
+        return t('reports.timeRangeLabels.1Y');
       default:
-        return '6 Tháng qua';
+        return t('reports.timeRangeLabels.6M');
     }
-  }, [timeRange]);
+  }, [timeRange, t]);
 
   const activeScopeLabel = useMemo(() => {
     const baseLabel =
       reportScope === 'ALL' || !hasHeaderCluster
-        ? 'Phạm vi: Toàn công ty'
-        : `Cụm K8s: ${headerClusterName}`;
-    return effectiveService !== 'ALL' ? `${baseLabel} · Dịch vụ: ${effectiveService}` : baseLabel;
-  }, [reportScope, hasHeaderCluster, headerClusterName, effectiveService]);
+        ? t('reports.scopeAllCompany')
+        : t('reports.scopeCluster', { name: headerClusterName });
+    return effectiveService !== 'ALL'
+      ? t('reports.scopeWithService', { base: baseLabel, service: effectiveService })
+      : baseLabel;
+  }, [reportScope, hasHeaderCluster, headerClusterName, effectiveService, t]);
 
   const hasAnyGlobalFilter =
     (reportScope === 'ALL' && hasHeaderCluster) || effectiveService !== 'ALL' || timeRange !== '1M';
@@ -313,10 +317,7 @@ export const ReportsPage = () => {
   const guardExport = () => {
     if (canExport) return true;
     if (toastError) {
-      toastError(
-        'Quyền hạn bị giới hạn (RBAC): Chỉ Quản trị viên hoặc Kỹ sư DevOps mới có quyền xuất báo cáo kỹ thuật.',
-        'Từ Chối Xuất File'
-      );
+      toastError(t('reports.errors.rbacDeniedMsg'), t('reports.errors.rbacDeniedTitle'));
     }
     return false;
   };
@@ -324,22 +325,22 @@ export const ReportsPage = () => {
   const handleExportCsv = () => {
     if (!guardExport()) return;
     const headers = [
-      'Mã Action',
-      'Thời Điểm Tạo',
-      'Dịch Vụ / Target',
-      'Loại Sự Cố',
-      'Mức Độ',
-      'Hành Động',
-      'Chế Độ',
-      'AI / Người Thực Hiện',
-      'Người Duyệt HITL',
-      'Kết Quả',
-      'Thời Lượng (giây)',
-      'Nguyên Nhân Lỗi / Hủy',
+      t('reports.exportToasts.csvHeaders.actionId'),
+      t('reports.exportToasts.csvHeaders.createdAt'),
+      t('reports.exportToasts.csvHeaders.target'),
+      t('reports.exportToasts.csvHeaders.incidentType'),
+      t('reports.exportToasts.csvHeaders.severity'),
+      t('reports.exportToasts.csvHeaders.action'),
+      t('reports.exportToasts.csvHeaders.mode'),
+      t('reports.exportToasts.csvHeaders.actor'),
+      t('reports.exportToasts.csvHeaders.approver'),
+      t('reports.exportToasts.csvHeaders.result'),
+      t('reports.exportToasts.csvHeaders.duration'),
+      t('reports.exportToasts.csvHeaders.failureReason'),
     ];
     const rows = actionRows.map((row) => [
       row.shortId,
-      formatDateTimeVn(row.createdAt),
+      formatDateTimeLocale(row.createdAt, intlLocale),
       row.targetName,
       row.incidentType,
       row.severity,
@@ -349,19 +350,19 @@ export const ReportsPage = () => {
       row.approverName || '—',
       row.executionStatus,
       row.durationSeconds ?? '—',
-      row.failureReason || 'Thành công',
+      row.failureReason || t('reports.exportToasts.csvResultSuccess'),
     ]);
     exportToCsv(`bao-cao-sla-action-${timeRange.toLowerCase()}.csv`, headers, rows);
     setExportNotice('CSV');
-    toastSuccess('Báo cáo truy vết Action & SLA đã được tải xuống dưới định dạng CSV!', 'Xuất Báo Cáo CSV');
+    toastSuccess(t('reports.exportToasts.csvSuccess'), t('reports.exportToasts.csvTitle'));
     setTimeout(() => setExportNotice(null), 3500);
   };
 
   const handleExportJson = () => {
     if (!guardExport()) return;
     exportToJson(`bao-cao-sla-action-${timeRange.toLowerCase()}.json`, {
-      title: 'Báo Cáo SLA & Vận Hành',
-      organization: currentOrg?.name || 'Tổ chức mặc định',
+      title: t('reports.exportToasts.jsonPayloadTitle'),
+      organization: currentOrg?.name || t('reports.defaultOrgFallback'),
       organizationId: currentOrg?.id,
       clusterId: scopeIds.activeClusterId,
       environmentId: scopeIds.activeEnvId,
@@ -377,14 +378,14 @@ export const ReportsPage = () => {
       actionAnalytics: actionAnalytics || {},
     });
     setExportNotice('JSON');
-    toastSuccess('Báo cáo SLA & Action Analytics đã được tải xuống dưới định dạng JSON!', 'Xuất Báo Cáo JSON');
+    toastSuccess(t('reports.exportToasts.jsonSuccess'), t('reports.exportToasts.jsonTitle'));
     setTimeout(() => setExportNotice(null), 3500);
   };
 
   const handlePrintPdf = () => {
     if (!guardExport()) return;
     setExportNotice('PDF');
-    toastSuccess('Đang mở hộp thoại In / Lưu PDF của trình duyệt...', 'In / Lưu PDF');
+    toastSuccess(t('reports.exportToasts.pdfSuccess'), t('reports.exportToasts.pdfTitle'));
     setTimeout(() => window.print(), 250);
     setTimeout(() => setExportNotice(null), 4000);
   };
@@ -445,13 +446,16 @@ export const ReportsPage = () => {
       setIsExcelModalOpen(false);
       setExportNotice('EXCEL');
       toastSuccess(
-        `Đã tải xuống file Excel (${result.sheetNames.length} sheet biểu đồ/dữ liệu): ${result.fileName}`,
-        'Xuất Excel Thành Công'
+        t('reports.exportToasts.excelSuccess', {
+          sheets: result.sheetNames.length,
+          fileName: result.fileName,
+        }),
+        t('reports.exportToasts.excelTitle')
       );
       setTimeout(() => setExportNotice(null), 4500);
     } catch (err) {
       console.warn('[ReportsPage] Lỗi xuất báo cáo Excel:', err);
-      toastError(err?.message || 'Không thể tạo file Excel (.xlsx).', 'Lỗi Xuất Excel');
+      toastError(err?.message || t('reports.errors.excelFailed'), t('reports.errors.excelErrorTitle'));
     } finally {
       setIsExportingExcel(false);
     }
@@ -459,32 +463,46 @@ export const ReportsPage = () => {
 
   const kpiCards = [
     {
-      label: 'ĐỘ SẴN SÀNG (SLA UPTIME)',
+      label: t('reports.kpis.uptimeLabel'),
       value: actualUptimeStr,
       color: '#0284C7',
-      sub: isSlaCompliant ? `Đạt cam kết SLA (${targetSlaStr})` : `Dưới mục tiêu SLA (${targetSlaStr})`,
+      sub: isSlaCompliant
+        ? t('reports.kpis.uptimeCompliant', { target: targetSlaStr })
+        : t('reports.kpis.uptimeNonCompliant', { target: targetSlaStr }),
       subColor: isSlaCompliant ? '#059669' : '#DC2626',
       Icon: isSlaCompliant ? TrendingUp : AlertTriangle,
     },
     {
-      label: 'THỜI GIAN PHỤC HỒI (MTTR)',
-      value: `${reportData?.summary?.mttrAvgSeconds ?? 0} giây`,
+      label: t('reports.kpis.mttrLabel'),
+      value: t('reports.kpis.mttrValue', { seconds: reportData?.summary?.mttrAvgSeconds ?? 0 }),
       color: '#059669',
-      sub: `Thực thi TB: ${actionSummary.avgExecutionSeconds}s · Trung vị ${actionSummary.medianExecutionSeconds}s`,
+      sub: t('reports.kpis.mttrSub', {
+        avg: actionSummary.avgExecutionSeconds,
+        median: actionSummary.medianExecutionSeconds,
+      }),
       subColor: '#059669',
     },
     {
-      label: 'TỔNG TÁC VỤ TỰ PHỤC HỒI',
-      value: `${actionSummary.totalActions.toLocaleString('vi-VN')} action`,
+      label: t('reports.kpis.actionsLabel'),
+      value: t('reports.kpis.actionsValue', { count: actionSummary.totalActions.toLocaleString(intlLocale) }),
       color: '#2563EB',
-      sub: `${actionSummary.succeededActions.toLocaleString('vi-VN')} OK · ${actionSummary.failedActions.toLocaleString('vi-VN')} Lỗi · ${actionSummary.cancelledActions.toLocaleString('vi-VN')} Hủy`,
+      sub: t('reports.kpis.actionsSub', {
+        ok: actionSummary.succeededActions.toLocaleString(intlLocale),
+        failed: actionSummary.failedActions.toLocaleString(intlLocale),
+        cancelled: actionSummary.cancelledActions.toLocaleString(intlLocale),
+      }),
       subColor: '#475569',
     },
     {
-      label: 'TỶ LỆ ĐẠT & TỰ TRỊ',
-      value: `${actionSummary.successRate}% đạt`,
+      label: t('reports.kpis.successRateLabel'),
+      value: t('reports.kpis.successRateValue', { rate: actionSummary.successRate }),
       color: '#8B5CF6',
-      sub: `AI Auto: ${actionSummary.autoSucceeded}/${actionSummary.autoActionsTotal} · HITL: ${actionSummary.manualSucceeded}/${actionSummary.manualActionsTotal}`,
+      sub: t('reports.kpis.successRateSub', {
+        autoOk: actionSummary.autoSucceeded,
+        autoTotal: actionSummary.autoActionsTotal,
+        manualOk: actionSummary.manualSucceeded,
+        manualTotal: actionSummary.manualActionsTotal,
+      }),
       subColor: '#475569',
     },
   ];
@@ -499,11 +517,11 @@ export const ReportsPage = () => {
               {currentOrg?.name || 'SME Retail Enterprise'}
             </div>
             <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px', fontWeight: 600 }}>
-              BÁO CÁO SLA &amp; VẬN HÀNH ({timeRangeLabel})
+              {t('reports.printTitle', { range: timeRangeLabel })}
             </div>
           </div>
           <div style={{ textAlign: 'right', fontSize: '0.72rem', color: '#64748B' }}>
-            Mã số: <strong style={{ fontFamily: 'var(--font-mono)' }}>{documentId}</strong>
+            {t('reports.documentIdLabel')} <strong style={{ fontFamily: 'var(--font-mono)' }}>{documentId}</strong>
           </div>
         </div>
       </div>
@@ -538,7 +556,7 @@ export const ReportsPage = () => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-                Báo Cáo SLA &amp; Vận Hành
+                {t('reports.title')}
               </h1>
               {currentOrg?.name && (
                 <span
@@ -575,7 +593,11 @@ export const ReportsPage = () => {
                   }}
                 >
                   <Server size={12} />
-                  <span>{reportScope === 'CLUSTER' ? `Cụm K8s: ${headerClusterName}` : 'Phạm vi: Toàn công ty'}</span>
+                  <span>
+                    {reportScope === 'CLUSTER'
+                      ? t('reports.scopeCluster', { name: headerClusterName })
+                      : t('reports.scopeAllCompany')}
+                  </span>
                 </span>
               )}
               {effectiveService !== 'ALL' && (
@@ -594,12 +616,12 @@ export const ReportsPage = () => {
                   }}
                 >
                   <Layers size={12} />
-                  <span>{`Dịch vụ: ${effectiveService}`}</span>
+                  <span>{t('reports.serviceBadge', { name: effectiveService })}</span>
                 </span>
               )}
             </div>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Tổng quan cam kết SLA, mức độ sự cố, nguyên nhân lỗi &amp; hiệu suất từng microservice
+              {t('reports.subtitle')}
             </p>
           </div>
         </div>
@@ -628,7 +650,7 @@ export const ReportsPage = () => {
             }}
           >
             <RefreshCw size={14} className={isLoadingReport || isRefreshing ? 'animate-spin' : ''} />
-            <span>{isLoadingReport ? 'Đang tải...' : 'Làm mới'}</span>
+            <span>{isLoadingReport ? t('reports.loading') : t('reports.refresh')}</span>
           </button>
 
           <button
@@ -651,7 +673,7 @@ export const ReportsPage = () => {
             }}
           >
             <FileSpreadsheet size={14} />
-            <span>Xuất Excel</span>
+            <span>{t('reports.exportExcelBtn')}</span>
           </button>
 
           <div ref={exportMenuRef} style={{ position: 'relative' }}>
@@ -676,7 +698,7 @@ export const ReportsPage = () => {
               }}
             >
               {canExport ? <Download size={14} /> : <Lock size={14} />}
-              <span>Xuất Báo Cáo</span>
+              <span>{t('reports.exportMenuBtn')}</span>
               <ChevronDown size={14} />
             </button>
 
@@ -700,7 +722,7 @@ export const ReportsPage = () => {
                   type="button"
                   role="menuitem"
                   onClick={handleOpenExcelModal}
-                  aria-label="Xuất Excel (.xlsx) theo biểu đồ"
+                  aria-label={t('reports.menu.excelAria')}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -715,7 +737,7 @@ export const ReportsPage = () => {
                   }}
                 >
                   <FileSpreadsheet size={16} color="#047857" />
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>Xuất Excel (.xlsx)</span>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>{t('reports.menu.excel')}</span>
                 </button>
                 <button
                   type="button"
@@ -724,7 +746,7 @@ export const ReportsPage = () => {
                     handleExportCsv();
                     setIsExportMenuOpen(false);
                   }}
-                  aria-label="Xuất CSV"
+                  aria-label={t('reports.menu.csvAria')}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -739,7 +761,7 @@ export const ReportsPage = () => {
                   }}
                 >
                   <FileSpreadsheet size={16} color="#059669" />
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>Xuất CSV</span>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{t('reports.menu.csv')}</span>
                 </button>
                 <button
                   type="button"
@@ -748,7 +770,7 @@ export const ReportsPage = () => {
                     handleExportJson();
                     setIsExportMenuOpen(false);
                   }}
-                  aria-label="Xuất JSON"
+                  aria-label={t('reports.menu.jsonAria')}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -763,7 +785,7 @@ export const ReportsPage = () => {
                   }}
                 >
                   <FileJson size={16} color="#0284C7" />
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>Xuất JSON</span>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{t('reports.menu.json')}</span>
                 </button>
                 <button
                   type="button"
@@ -772,7 +794,7 @@ export const ReportsPage = () => {
                     handlePrintPdf();
                     setIsExportMenuOpen(false);
                   }}
-                  aria-label="In / Lưu PDF"
+                  aria-label={t('reports.menu.pdfAria')}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -787,7 +809,7 @@ export const ReportsPage = () => {
                   }}
                 >
                   <Printer size={16} color="#475569" />
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>In / Lưu PDF</span>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{t('reports.menu.pdf')}</span>
                 </button>
               </div>
             )}
@@ -813,10 +835,10 @@ export const ReportsPage = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {hasHeaderCluster && headerClusterName && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>Cụm K8s:</span>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>{t('reports.filters.clusterLabel')}</span>
               <div
                 role="group"
-                aria-label="Phạm vi cụm Kubernetes"
+                aria-label={t('reports.filters.clusterScopeAria')}
                 style={{
                   display: 'inline-flex',
                   backgroundColor: '#F1F5F9',
@@ -868,18 +890,18 @@ export const ReportsPage = () => {
                     cursor: 'pointer',
                   }}
                 >
-                  Toàn công ty
+                  {t('reports.filters.allCompany')}
                 </button>
               </div>
             </div>
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>Dịch Vụ:</span>
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>{t('reports.filters.serviceLabel')}</span>
             <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
               <Layers size={13} color="#64748B" style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }} />
               <select
-                aria-label="Lọc theo dịch vụ K8s"
+                aria-label={t('reports.filters.serviceAria')}
                 value={effectiveService}
                 onChange={(e) => setSelectedService(e.target.value)}
                 style={{
@@ -896,10 +918,10 @@ export const ReportsPage = () => {
                   maxWidth: '240px',
                 }}
               >
-                <option value="ALL">Tất cả dịch vụ ({uniqueServices.length})</option>
+                <option value="ALL">{t('reports.filters.allServices', { count: uniqueServices.length })}</option>
                 {uniqueServices.map((svc) => (
                   <option key={svc} value={svc}>
-                    Dịch vụ: {svc}
+                    {t('reports.filters.serviceOption', { name: svc })}
                   </option>
                 ))}
               </select>
@@ -926,13 +948,13 @@ export const ReportsPage = () => {
               }}
             >
               <RotateCcw size={12} />
-              <span>Đặt lại lọc</span>
+              <span>{t('reports.filters.reset')}</span>
             </button>
           )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>Kỳ Báo Cáo:</span>
+          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>{t('reports.filters.periodLabel')}</span>
           <div
             style={{
               display: 'inline-flex',
@@ -960,7 +982,7 @@ export const ReportsPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                {opt.label}
+                {t(opt.labelKey)}
               </button>
             ))}
           </div>
@@ -980,7 +1002,7 @@ export const ReportsPage = () => {
             fontWeight: 600,
           }}
         >
-          Đã xử lý xuất báo cáo định dạng {exportNotice}.
+          {t('reports.exportNotice', { format: exportNotice })}
         </div>
       )}
 
@@ -1017,7 +1039,7 @@ export const ReportsPage = () => {
               cursor: 'pointer',
             }}
           >
-            Thử lại
+            {t('reports.errors.retry')}
           </button>
         </div>
       )}
@@ -1068,7 +1090,7 @@ export const ReportsPage = () => {
       </div>
 
       {/* 2. BÁO CÁO 2: CƠ CẤU SỰ CỐ & NGUYÊN NHÂN THẤT BẠI (2 CỘT GỌN) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '16px', alignItems: 'stretch' }}>
+      <div className="dash-grid-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '16px', alignItems: 'stretch' }}>
         <IncidentSeverityBreakdown breakdown={reportData?.incidentBreakdown} />
         <ActionFailureReasonsChart
           reasons={actionAnalytics?.failureReasons}
@@ -1100,14 +1122,14 @@ export const ReportsPage = () => {
         >
           <div>
             <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
-              Bảng Phân Tích SLA Theo Từng Dịch Vụ Microservice
+              {t('reports.serviceTable.title')}
             </h3>
             <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Số liệu đối chiếu trực tiếp theo từng dịch vụ của {currentOrg?.name || 'tổ chức'}
+              {t('reports.serviceTable.subtitle', { org: currentOrg?.name || t('reports.orgFallbackShort') })}
             </p>
           </div>
           <span style={{ fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
-            Chu kỳ: {timeRangeLabel}
+            {t('reports.serviceTable.period', { label: timeRangeLabel })}
           </span>
         </div>
 
@@ -1125,7 +1147,7 @@ export const ReportsPage = () => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', width: '240px' }}>
+            <div className="dash-search-box" style={{ position: 'relative', width: '240px', maxWidth: '100%' }}>
               <Search
                 size={14}
                 style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }}
@@ -1134,8 +1156,8 @@ export const ReportsPage = () => {
                 type="text"
                 value={searchService}
                 onChange={(e) => setSearchService(e.target.value)}
-                placeholder="Tìm theo tên dịch vụ..."
-                aria-label="Tìm theo tên dịch vụ"
+                placeholder={t('reports.serviceTable.searchPlaceholder')}
+                aria-label={t('reports.serviceTable.searchAria')}
                 style={{
                   width: '100%',
                   padding: '6px 28px 6px 30px',
@@ -1151,7 +1173,7 @@ export const ReportsPage = () => {
                 <button
                   type="button"
                   onClick={() => setSearchService('')}
-                  aria-label="Xóa từ khóa tìm kiếm"
+                  aria-label={t('reports.serviceTable.clearSearchAria')}
                   style={{
                     position: 'absolute',
                     right: '8px',
@@ -1174,7 +1196,7 @@ export const ReportsPage = () => {
               <select
                 value={selectedTier}
                 onChange={(e) => setSelectedTier(e.target.value)}
-                aria-label="Lọc theo phân cấp Tier"
+                aria-label={t('reports.serviceTable.tierAria')}
                 style={{
                   padding: '6px 10px',
                   borderRadius: '8px',
@@ -1184,16 +1206,16 @@ export const ReportsPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                <option value="ALL">Tất Cả Phân Cấp</option>
-                <option value="Tier 1">Tier 1 (Tối quan trọng)</option>
-                <option value="Tier 2">Tier 2 (Nghiệp vụ cốt lõi)</option>
-                <option value="Tier 3">Tier 3 (Dịch vụ phụ trợ)</option>
+                <option value="ALL">{t('reports.serviceTable.tierAll')}</option>
+                <option value="Tier 1">{t('reports.serviceTable.tier1')}</option>
+                <option value="Tier 2">{t('reports.serviceTable.tier2')}</option>
+                <option value="Tier 3">{t('reports.serviceTable.tier3')}</option>
               </select>
             </div>
           </div>
 
           <span style={{ fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
-            Hiển thị {filteredServices.length} / {activeServices.length} dịch vụ
+            {t('reports.serviceTable.showing', { shown: filteredServices.length, total: activeServices.length })}
           </span>
         </div>
 
@@ -1201,12 +1223,12 @@ export const ReportsPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Dịch Vụ &amp; Phân Hạng</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Cam Kết SLA</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Uptime Thực Tế</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Thực Thi TB</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Action (OK / Lỗi / Hủy)</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>Trạng Thái Tuân Thủ</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>{t('reports.serviceTable.colService')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>{t('reports.serviceTable.colTargetSla')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>{t('reports.serviceTable.colActualUptime')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>{t('reports.serviceTable.colAvgExec')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>{t('reports.serviceTable.colActions')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569' }}>{t('reports.serviceTable.colCompliance')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1214,8 +1236,8 @@ export const ReportsPage = () => {
                 <tr>
                   <td colSpan={6} style={{ padding: '32px 16px', textAlign: 'center', color: '#64748B', fontSize: '0.875rem' }}>
                     {activeServices.length === 0
-                      ? `${currentOrg?.name || 'Tổ chức'} chưa ghi nhận dịch vụ hoặc hành động phục hồi nào.`
-                      : 'Không tìm thấy dịch vụ vi mô nào phù hợp với điều kiện lọc.'}
+                      ? t('reports.serviceTable.emptyNoData', { org: currentOrg?.name || t('reports.orgFallbackTitle') })
+                      : t('reports.serviceTable.emptyNoMatch')}
                   </td>
                 </tr>
               ) : (
@@ -1226,7 +1248,7 @@ export const ReportsPage = () => {
                       <td style={{ padding: '12px 16px' }}>
                         <div
                           onClick={() => onNavigate && onNavigate('/dashboard/workloads')}
-                          title={`Xem chi tiết ${svc.name}`}
+                          title={t('reports.serviceTable.viewServiceTitle', { name: svc.name })}
                           style={{
                             fontWeight: 700,
                             color: '#0F172A',
@@ -1254,11 +1276,17 @@ export const ReportsPage = () => {
                         {svc.mttrAvg || '0s'}
                       </td>
                       <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>
-                        <span style={{ color: '#059669', fontWeight: 700 }}>{svc.incidentsResolved ?? 0} OK</span>
+                        <span style={{ color: '#059669', fontWeight: 700 }}>
+                          {svc.incidentsResolved ?? 0} {t('reports.serviceTable.okUnit')}
+                        </span>
                         {' / '}
-                        <span style={{ color: '#DC2626' }}>{svc.actionsFailed ?? 0} Lỗi</span>
+                        <span style={{ color: '#DC2626' }}>
+                          {svc.actionsFailed ?? 0} {t('reports.serviceTable.failedUnit')}
+                        </span>
                         {' / '}
-                        <span style={{ color: '#D97706' }}>{svc.actionsCancelled ?? 0} Hủy</span>
+                        <span style={{ color: '#D97706' }}>
+                          {svc.actionsCancelled ?? 0} {t('reports.serviceTable.cancelledUnit')}
+                        </span>
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         <span
@@ -1276,7 +1304,9 @@ export const ReportsPage = () => {
                           }}
                         >
                           {!hasErr && <CheckCircle2 size={12} />}
-                          <span>{svc.status || (hasErr ? 'Cảnh báo lỗi' : 'Đạt SLA')}</span>
+                          <span>
+                            {svc.status || (hasErr ? t('reports.serviceTable.statusWarning') : t('reports.serviceTable.statusPass'))}
+                          </span>
                         </span>
                       </td>
                     </tr>

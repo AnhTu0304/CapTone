@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../i18n';
 import {
   X,
   FileSpreadsheet,
@@ -35,12 +37,12 @@ const SECTION_ICONS = {
 const PRESETS = [
   {
     id: 'ALL',
-    label: 'Chọn tất cả (10)',
+    labelKey: 'excelModal.presets.ALL',
     ids: REPORT_EXCEL_SECTIONS.map((s) => s.id),
   },
   {
     id: 'CHARTS_ONLY',
-    label: 'Chỉ Các Biểu Đồ (7)',
+    labelKey: 'excelModal.presets.CHARTS_ONLY',
     ids: [
       'sla_trend',
       'action_trend',
@@ -53,7 +55,7 @@ const PRESETS = [
   },
   {
     id: 'ACTION_DEEPDIVE',
-    label: 'Chuyên Sâu Lỗi & Action (6)',
+    labelKey: 'excelModal.presets.ACTION_DEEPDIVE',
     ids: [
       'kpi_summary',
       'action_trend',
@@ -65,12 +67,12 @@ const PRESETS = [
   },
   {
     id: 'SLA_EXEC',
-    label: 'Tổng Quan SLA Lãnh Đạo (5)',
+    labelKey: 'excelModal.presets.SLA_EXEC',
     ids: ['kpi_summary', 'sla_trend', 'incident_type', 'incident_severity', 'service_sla'],
   },
   {
     id: 'NONE',
-    label: 'Bỏ chọn hết',
+    labelKey: 'excelModal.presets.NONE',
     ids: [],
   },
 ];
@@ -83,6 +85,9 @@ export const ExcelExportModal = ({
   counts = {},
   isExporting = false,
 }) => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
+
   const defaultSelected = useMemo(
     () => REPORT_EXCEL_SECTIONS.map((s) => s.id),
     []
@@ -126,25 +131,27 @@ export const ExcelExportModal = ({
   const getCountLabel = (id) => {
     switch (id) {
       case 'kpi_summary':
-        return '4 thẻ chỉ số';
+        return t('excelModal.counts.kpi_summary');
       case 'sla_trend':
-        return `${counts.slaTrendPoints ?? 0} mốc`;
+        return t('excelModal.counts.sla_trend', { count: counts.slaTrendPoints ?? 0 });
       case 'action_trend':
-        return `${counts.actionTrendPoints ?? 0} mốc`;
+        return t('excelModal.counts.action_trend', { count: counts.actionTrendPoints ?? 0 });
       case 'incident_type':
-        return `${counts.incidentTypesCount ?? 0} loại sự cố`;
+        return t('excelModal.counts.incident_type', { count: counts.incidentTypesCount ?? 0 });
       case 'incident_severity':
-        return '4 cấp P1–P4';
+        return t('excelModal.counts.incident_severity');
       case 'actor_breakdown':
-        return `${counts.actorsCount ?? 0} đối tượng`;
+        return t('excelModal.counts.actor_breakdown', { count: counts.actorsCount ?? 0 });
       case 'error_action_matrix':
-        return `${counts.matrixCellsCount ?? 0} cặp lỗi×action`;
+        return t('excelModal.counts.error_action_matrix', { count: counts.matrixCellsCount ?? 0 });
       case 'failure_reasons':
-        return `${counts.failureReasonsCount ?? 0} nhóm nguyên nhân`;
+        return t('excelModal.counts.failure_reasons', { count: counts.failureReasonsCount ?? 0 });
       case 'action_history':
-        return `${(counts.totalMatchedActions ?? counts.currentActionRows ?? 0).toLocaleString('vi-VN')} action`;
+        return t('excelModal.counts.action_history', {
+          count: (counts.totalMatchedActions ?? counts.currentActionRows ?? 0).toLocaleString(intlLocale),
+        });
       case 'service_sla':
-        return `${counts.servicesCount ?? 0} dịch vụ`;
+        return t('excelModal.counts.service_sla', { count: counts.servicesCount ?? 0 });
       default:
         return '';
     }
@@ -167,6 +174,9 @@ export const ExcelExportModal = ({
   const renderCard = (sec) => {
     const isChecked = selectedIds.includes(sec.id);
     const Icon = SECTION_ICONS[sec.id] || BarChart2;
+    const secBadge = t(`excelModal.sections.${sec.id}.badge`, { defaultValue: sec.badge });
+    const secTitle = t(`excelModal.sections.${sec.id}.title`, { defaultValue: sec.title });
+    const secDesc = t(`excelModal.sections.${sec.id}.description`, { defaultValue: sec.description });
 
     return (
       <button
@@ -222,7 +232,7 @@ export const ExcelExportModal = ({
                   fontFamily: 'var(--font-mono)',
                 }}
               >
-                {sec.badge}
+                {secBadge}
               </span>
             </div>
 
@@ -242,7 +252,7 @@ export const ExcelExportModal = ({
                   }}
                 >
                   <ImageIcon size={10} />
-                  <span>Ảnh + Bảng</span>
+                  <span>{t('excelModal.imageAndTable')}</span>
                 </span>
               )}
               <span
@@ -262,13 +272,13 @@ export const ExcelExportModal = ({
           </div>
 
           <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', marginTop: '5px', lineHeight: 1.3 }}>
-            {sec.title}
+            {secTitle}
           </div>
           <div style={{ fontSize: '0.7rem', color: '#64748B', marginTop: '3px', lineHeight: 1.35 }}>
-            {sec.description}
+            {secDesc}
           </div>
           <div style={{ fontSize: '0.64rem', color: '#94A3B8', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
-            Sheet: {sec.sheetName}
+            {t('excelModal.sheetPrefix')} {sec.sheetName}
           </div>
         </div>
       </button>
@@ -343,11 +353,12 @@ export const ExcelExportModal = ({
                 id="excel-export-modal-title"
                 style={{ fontSize: '1.08rem', fontWeight: 800, color: '#0F172A', margin: 0 }}
               >
-                Xuất Báo Cáo Excel (.xlsx) — Chọn Loại Biểu Đồ & Bảng
+                {t('excelModal.title')}
               </h2>
               <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '3px 0 0 0' }}>
-                {meta.orgName || 'Tổ chức'} · Phạm vi: <strong>{meta.scopeLabel || 'Toàn doanh nghiệp'}</strong> · Kỳ:{' '}
-                <strong>{meta.timeRangeLabel || '30 Ngày gần nhất'}</strong>
+                {meta.orgName || t('excelModal.orgFallback')} · {t('excelModal.subtitlePrefix')}{' '}
+                <strong>{meta.scopeLabel || t('excelModal.scopeFallback')}</strong> · {t('excelModal.subtitlePeriod')}{' '}
+                <strong>{meta.timeRangeLabel || t('excelModal.periodFallback')}</strong>
               </p>
             </div>
           </div>
@@ -355,7 +366,7 @@ export const ExcelExportModal = ({
           <button
             type="button"
             onClick={() => !isExporting && onClose()}
-            aria-label="Đóng hộp thoại xuất Excel"
+            aria-label={t('excelModal.closeAria')}
             style={{
               border: '1px solid #E2E8F0',
               backgroundColor: '#FFFFFF',
@@ -389,7 +400,7 @@ export const ExcelExportModal = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '4px', marginRight: '4px' }}>
               <Sparkles size={13} color="#059669" />
-              Chọn nhanh:
+              {t('excelModal.quickSelect')}
             </span>
             {PRESETS.map((preset) => {
               const isExactMatch =
@@ -412,7 +423,7 @@ export const ExcelExportModal = ({
                     cursor: 'pointer',
                   }}
                 >
-                  {preset.label}
+                  {t(preset.labelKey)}
                 </button>
               );
             })}
@@ -426,7 +437,7 @@ export const ExcelExportModal = ({
               fontFamily: 'var(--font-mono)',
             }}
           >
-            Đã chọn: {selectedIds.length} / {REPORT_EXCEL_SECTIONS.length} thẻ
+            {t('excelModal.selectedCount', { selected: selectedIds.length, total: REPORT_EXCEL_SECTIONS.length })}
           </span>
         </div>
 
@@ -434,7 +445,7 @@ export const ExcelExportModal = ({
         <div style={{ padding: '16px 22px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div>
             <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '10px' }}>
-              1. Thẻ Chọn Biểu Đồ Phân Tích & Chỉ Số KPI (Mỗi thẻ tương ứng 1 Worksheet Excel)
+              {t('excelModal.groupCharts')}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px' }}>
               {chartSections.map(renderCard)}
@@ -443,7 +454,7 @@ export const ExcelExportModal = ({
 
           <div>
             <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '10px' }}>
-              2. Thẻ Chọn Bảng Dữ Liệu Truy Vết & SLA Dịch Vụ
+              {t('excelModal.groupTables')}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px' }}>
               {tableSections.map(renderCard)}
@@ -469,12 +480,12 @@ export const ExcelExportModal = ({
                 onChange={(e) => setIncludeChartImages(e.target.checked)}
                 style={{ width: '16px', height: '16px', accentColor: '#059669' }}
               />
-              <span>Nhúng hình ảnh trực quan của từng biểu đồ đã chọn vào đầu mỗi Worksheet Excel (.png)</span>
+              <span>{t('excelModal.includeImagesLabel')}</span>
             </label>
 
             {isActionTableSelected && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', paddingLeft: '25px', fontSize: '0.76rem', color: '#334155' }}>
-                <span style={{ fontWeight: 700 }}>Dữ liệu Bảng Truy Vết Action:</span>
+                <span style={{ fontWeight: 700 }}>{t('excelModal.actionScopeLabel')}</span>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
                   <input
                     type="radio"
@@ -484,7 +495,7 @@ export const ExcelExportModal = ({
                     onChange={() => setActionScopeMode('CURRENT_PAGE')}
                     style={{ accentColor: '#059669' }}
                   />
-                  <span>Trang hiện tại ({counts.currentActionRows ?? 0} dòng)</span>
+                  <span>{t('excelModal.currentPageScope', { count: counts.currentActionRows ?? 0 })}</span>
                 </label>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
                   <input
@@ -496,7 +507,9 @@ export const ExcelExportModal = ({
                     style={{ accentColor: '#059669' }}
                   />
                   <span>
-                    Tải đầy đủ theo bộ lọc hiện tại (tối đa 500 / {(counts.totalMatchedActions ?? 0).toLocaleString('vi-VN')} dòng khớp)
+                    {t('excelModal.upTo500Scope', {
+                      count: (counts.totalMatchedActions ?? 0).toLocaleString(intlLocale),
+                    })}
                   </span>
                 </label>
               </div>
@@ -504,7 +517,7 @@ export const ExcelExportModal = ({
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <label htmlFor="excel-filename-input" style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>
-                Tên file Excel tải về:
+                {t('excelModal.fileNameLabel')}
               </label>
               <input
                 id="excel-filename-input"
@@ -541,8 +554,8 @@ export const ExcelExportModal = ({
         >
           <span style={{ fontSize: '0.75rem', color: selectedIds.length === 0 ? '#DC2626' : '#475569', fontWeight: 600 }}>
             {selectedIds.length === 0
-              ? 'Vui lòng chọn ít nhất 1 thẻ biểu đồ hoặc bảng dữ liệu để tải về.'
-              : `Sẽ xuất ${selectedIds.length} sheet Excel (.xlsx) từ dữ liệu đang lọc.`}
+              ? t('excelModal.footerEmptyError')
+              : t('excelModal.footerSummary', { count: selectedIds.length })}
           </span>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -561,7 +574,7 @@ export const ExcelExportModal = ({
                 cursor: isExporting ? 'not-allowed' : 'pointer',
               }}
             >
-              Hủy
+              {t('excelModal.cancel')}
             </button>
             <button
               type="button"
@@ -582,7 +595,7 @@ export const ExcelExportModal = ({
               }}
             >
               <Download size={15} />
-              <span>{isExporting ? 'Đang dựng file Excel...' : 'Tải File Excel (.xlsx)'}</span>
+              <span>{isExporting ? t('excelModal.exporting') : t('excelModal.download')}</span>
             </button>
           </div>
         </div>

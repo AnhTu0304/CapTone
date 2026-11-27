@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Globe,
   Bell,
@@ -6,11 +7,17 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { personalPortalService } from '../../services/personalPortalService';
+import { normalizeLanguage } from '../../i18n';
 
 export const PersonalPreferencesPage = () => {
+  const { t, i18n } = useTranslation('portal');
   const [prefs, setPrefs] = useState(() => personalPortalService.getPreferences());
   const [isSaved, setIsSaved] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
+
+  useEffect(() => {
+    const normalized = normalizeLanguage(i18n.language);
+    setPrefs((prev) => (prev.language === normalized ? prev : { ...prev, language: normalized }));
+  }, [i18n.language]);
 
   const handleChange = (field, value) => {
     setPrefs((prev) => ({ ...prev, [field]: value }));
@@ -30,7 +37,6 @@ export const PersonalPreferencesPage = () => {
     e.preventDefault();
     personalPortalService.savePreferences(prefs);
     setIsSaved(true);
-    setSaveMessage('Đã lưu tùy chỉnh cá nhân thành công! Cài đặt đã được áp dụng.');
     setTimeout(() => setIsSaved(false), 3000);
   };
 
@@ -39,10 +45,10 @@ export const PersonalPreferencesPage = () => {
       {/* Title */}
       <div>
         <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-          Tùy Chỉnh Cá Nhân
+          {t('preferences.title')}
         </h2>
         <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
-          Thiết lập ngôn ngữ hiển thị và kênh nhận thông báo cá nhân.
+          {t('preferences.subtitle')}
         </p>
       </div>
 
@@ -62,7 +68,7 @@ export const PersonalPreferencesPage = () => {
           }}
         >
           <CheckCircle2 size={18} color="#059669" />
-          <span>{saveMessage}</span>
+          <span>{t('preferences.savedMessage')}</span>
         </div>
       )}
 
@@ -97,10 +103,10 @@ export const PersonalPreferencesPage = () => {
             </div>
             <div>
               <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                1. Ngôn Ngữ Giao Diện
+                {t('preferences.languageSection.title')}
               </h3>
               <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                Chọn ngôn ngữ sử dụng xuyên suốt toàn bộ các menu, nút bấm, thông báo và tài liệu
+                {t('preferences.languageSection.subtitle')}
               </p>
             </div>
           </div>
@@ -109,14 +115,14 @@ export const PersonalPreferencesPage = () => {
             {[
               {
                 id: 'vi',
-                label: 'Tiếng Việt',
-                sub: 'Ngôn ngữ mặc định cho nền tảng và người dùng Việt Nam',
+                label: t('preferences.languageSection.viLabel'),
+                sub: t('preferences.languageSection.viSub'),
                 flag: '🇻🇳',
               },
               {
                 id: 'en',
-                label: 'English (US)',
-                sub: 'Global cloud operations standard terminology',
+                label: t('preferences.languageSection.enLabel'),
+                sub: t('preferences.languageSection.enSub'),
                 flag: '🇺🇸',
               },
             ].map((lang) => {
@@ -200,10 +206,10 @@ export const PersonalPreferencesPage = () => {
             </div>
             <div>
               <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                2. Tùy Chọn Thông Báo Cá Nhân
+                {t('preferences.notificationsSection.title')}
               </h3>
               <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                Bật/tắt từng loại tin và kênh nhận (In-App và Email). Các luật cảnh báo CPU, RAM, Pod lỗi vẫn áp dụng theo Company Workspace.
+                {t('preferences.notificationsSection.subtitle')}
               </p>
             </div>
           </div>
@@ -212,33 +218,33 @@ export const PersonalPreferencesPage = () => {
             {[
               {
                 key: 'inApp',
-                title: 'Thông báo trong ứng dụng (In-App)',
-                desc: 'Hiển thị badge đỏ và danh sách tại biểu tượng quả chuông trên thanh Header',
+                title: t('preferences.notificationsSection.items.inApp.title'),
+                desc: t('preferences.notificationsSection.items.inApp.desc'),
               },
               {
                 key: 'email',
-                title: 'Gửi thông báo qua Email',
-                desc: 'Chuyển tiếp bản tin khẩn cấp tới địa chỉ email đăng ký tài khoản',
+                title: t('preferences.notificationsSection.items.email.title'),
+                desc: t('preferences.notificationsSection.items.email.desc'),
               },
               {
                 key: 'companyInvites',
-                title: 'Lời mời tham gia Company',
-                desc: 'Nhận thông báo khi được quản trị viên mời vào tổ chức doanh nghiệp mới',
+                title: t('preferences.notificationsSection.items.companyInvites.title'),
+                desc: t('preferences.notificationsSection.items.companyInvites.desc'),
               },
               {
                 key: 'roleChanges',
-                title: 'Thay đổi quyền hoặc vai trò',
-                desc: 'Nhận cảnh báo khi vai trò của bạn được nâng cấp (SME Owner, DevOps Lead, Viewer)',
+                title: t('preferences.notificationsSection.items.roleChanges.title'),
+                desc: t('preferences.notificationsSection.items.roleChanges.desc'),
               },
               {
                 key: 'securityAlerts',
-                title: 'Đăng nhập bất thường & Cảnh báo bảo mật',
-                desc: 'Cảnh báo tức thì khi phát hiện đăng nhập từ IP lạ hoặc thay đổi mật khẩu/2FA',
+                title: t('preferences.notificationsSection.items.securityAlerts.title'),
+                desc: t('preferences.notificationsSection.items.securityAlerts.desc'),
               },
               {
                 key: 'systemMaintenance',
-                title: 'Thông báo hệ thống hoặc bảo trì',
-                desc: 'Nhận lịch bảo trì máy chủ và phát hành phiên bản động cơ SelfAI mới',
+                title: t('preferences.notificationsSection.items.systemMaintenance.title'),
+                desc: t('preferences.notificationsSection.items.systemMaintenance.desc'),
               },
             ].map((item) => {
               const isChecked = Boolean(prefs.notifications[item.key]);
@@ -303,7 +309,7 @@ export const PersonalPreferencesPage = () => {
             }}
           >
             <Save size={16} />
-            <span>Lưu Tùy Chỉnh Cá Nhân</span>
+            <span>{t('preferences.saveButton')}</span>
           </button>
         </div>
       </form>

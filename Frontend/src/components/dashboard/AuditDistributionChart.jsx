@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollText, Eye, EyeOff } from 'lucide-react';
 
 /**
@@ -100,8 +101,8 @@ const classifyLog = (item) => {
 };
 
 export const AuditDistributionChart = ({
-  title = 'Phân Bổ Sự Kiện Kiểm Toán',
-  subtitle = 'Phân loại các thao tác do AI tự động thực thi, con người phê duyệt và các thay đổi cấu hình bảo mật',
+  title: titleProp,
+  subtitle: subtitleProp,
   className = '',
   height = 230,
   logs = [],
@@ -112,16 +113,20 @@ export const AuditDistributionChart = ({
   selectedYear = null,
   filterControl = null,
 }) => {
+  const { t } = useTranslation('dashAdmin');
+  const title = titleProp ?? t('charts.auditDistribution.title');
+  const subtitle = subtitleProp ?? t('charts.auditDistribution.subtitle');
+
   const [hoverIndex, setHoverIndex] = useState(null);
   const [showDataLabels, setShowDataLabels] = useState(true);
   const svgRef = useRef(null);
 
   const categories = useMemo(() => [
-    { key: 'autonomous', label: 'AI Tự Trị (MAPE-K)', color: '#059669' },
-    { key: 'hitl', label: 'Con Người Phê Duyệt (HITL)', color: '#2563EB' },
-    { key: 'policy', label: 'Thay Đổi Chính Sách', color: '#D97706' },
-    { key: 'auth', label: 'Xác Thực & Truy Cập', color: '#64748B' },
-  ], []);
+    { key: 'autonomous', label: t('charts.auditDistribution.catAutonomous'), color: '#059669' },
+    { key: 'hitl', label: t('charts.auditDistribution.catHitl'), color: '#2563EB' },
+    { key: 'policy', label: t('charts.auditDistribution.catPolicy'), color: '#D97706' },
+    { key: 'auth', label: t('charts.auditDistribution.catAuth'), color: '#64748B' },
+  ], [t]);
 
   // Tính toán dữ liệu theo mốc thời gian động đồng bộ như SelfHealingTrendChart
   const activeDays = useMemo(() => {
@@ -136,8 +141,8 @@ export const AuditDistributionChart = ({
       const months = [];
       for (let m = 1; m <= 12; m++) {
         const mPadded = String(m).padStart(2, '0');
-        const monthLabel = `T${m}`;
-        const windowName = `Tháng ${mPadded}/${yearNum}`;
+        const monthLabel = t('charts.auditDistribution.monthShort', { m });
+        const windowName = t('charts.auditDistribution.windowMonthYear', { month: mPadded, year: yearNum });
 
         const monthLogs = (logs || []).filter((l) => {
           const dt = parseLogDate(l);
@@ -173,7 +178,7 @@ export const AuditDistributionChart = ({
       for (let d = 1; d <= daysInMonth; d++) {
         const dStr = String(d).padStart(2, '0');
         const dayLabel = dStr;
-        const windowName = `Ngày ${dStr}/${mStr}/${yNum}`;
+        const windowName = t('charts.auditDistribution.windowDayDate', { date: `${dStr}/${mStr}/${yNum}` });
 
         const dayLogs = (logs || []).filter((l) => {
           const dt = parseLogDate(l);
@@ -218,8 +223,8 @@ export const AuditDistributionChart = ({
         const windowLogs = (logs || []).filter((l) => {
           const dt = parseLogDate(l);
           if (!dt) return false;
-          const t = dt.getTime();
-          return t >= startMs && t < endMs;
+          const tMs = dt.getTime();
+          return tMs >= startMs && tMs < endMs;
         });
 
         const counts = { autonomous: 0, hitl: 0, policy: 0, auth: 0 };
@@ -275,12 +280,12 @@ export const AuditDistributionChart = ({
 
       return {
         day: label,
-        window: `Ngày ${dy}/${mo}/${yr}`,
+        window: t('charts.auditDistribution.windowDayDate', { date: `${dy}/${mo}/${yr}` }),
         ...counts,
         total,
       };
     });
-  }, [logs, fallbackData, timeFilterMode, selectedDate, selectedMonth, selectedYear]);
+  }, [logs, fallbackData, timeFilterMode, selectedDate, selectedMonth, selectedYear, t]);
 
   const padding = { top: 25, right: 25, bottom: 35, left: 45 };
   const width = 760;
@@ -377,10 +382,18 @@ export const AuditDistributionChart = ({
               userSelect: 'none',
               boxShadow: showDataLabels ? '0 1px 2px rgba(16, 185, 129, 0.12)' : 'none',
             }}
-            title={showDataLabels ? 'Đang bật hiển thị số liệu cột (Bấm để ẩn)' : 'Đang ẩn số liệu cột (Bấm để hiện)'}
+            title={
+              showDataLabels
+                ? t('charts.auditDistribution.showLabelsTitle')
+                : t('charts.auditDistribution.hideLabelsTitle')
+            }
           >
             {showDataLabels ? <Eye size={12} color="#059669" /> : <EyeOff size={12} color="#94A3B8" />}
-            <span>{showDataLabels ? 'Hiện số liệu cột' : 'Ẩn số liệu cột'}</span>
+            <span>
+              {showDataLabels
+                ? t('charts.auditDistribution.showLabels')
+                : t('charts.auditDistribution.hideLabels')}
+            </span>
           </button>
 
           {/* Bộ lọc Date Picker đặt trực tiếp trên Biểu đồ */}
@@ -588,23 +601,24 @@ export const AuditDistributionChart = ({
             }}
           >
             <div style={{ fontWeight: 800, color: '#34D399', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px' }}>
-              {hoveredData.window || `Mốc ${hoveredData.day}`} &bull; Tổng: {hoveredData.total || 0} bản ghi
+              {hoveredData.window || t('charts.auditDistribution.tooltipMilestone', { day: hoveredData.day })} &bull;{' '}
+              {t('charts.auditDistribution.tooltipTotal', { total: hoveredData.total || 0 })}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', lineHeight: 1.3 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#A7F3D0' }}>AI Tự Trị (MAPE-K):</span>
+                <span style={{ color: '#A7F3D0' }}>{t('charts.auditDistribution.catAutonomous')}:</span>
                 <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.autonomous || 0}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#93C5FD' }}>Con Người Phê Duyệt:</span>
+                <span style={{ color: '#93C5FD' }}>{t('charts.auditDistribution.catHitl')}:</span>
                 <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.hitl || 0}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#FDE68A' }}>Thay Đổi Chính Sách:</span>
+                <span style={{ color: '#FDE68A' }}>{t('charts.auditDistribution.catPolicy')}:</span>
                 <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.policy || 0}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#CBD5E1' }}>Xác Thực & Truy Cập:</span>
+                <span style={{ color: '#CBD5E1' }}>{t('charts.auditDistribution.catAuth')}:</span>
                 <strong style={{ fontFamily: 'var(--font-mono)' }}>{hoveredData.auth || 0}</strong>
               </div>
             </div>

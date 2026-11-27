@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../context/DashboardContext';
 import { telemetryService } from '../../../services/telemetryService';
 import { clusterService } from '../../../services/clusterService';
@@ -7,6 +8,7 @@ import { podService } from '../../../services/podService';
 import { aiService } from '../../../services/aiService';
 import { extractActiveK8sServices, isExcludedSystemService } from '../../../utils/k8sServiceFilter';
 import { LogDetailModal, getLogLevelBadgeStyle, formatLogTimestamp, maskSensitiveData } from '../../../components/dashboard/LogDetailModal';
+import { getIntlLocale } from '../../../i18n';
 import {
   Terminal,
   Search,
@@ -29,6 +31,8 @@ import {
 } from 'lucide-react';
 
 export const LogsPage = () => {
+  const { t, i18n } = useTranslation('dashMonitoring');
+  const intlLocale = getIntlLocale(i18n.language);
   const { currentOrg, currentEnv } = useDashboard();
 
   // Filter States
@@ -242,7 +246,7 @@ export const LogsPage = () => {
         if (currentSeq !== requestSeqRef.current) {
           return;
         }
-        setErrorMessage(err.message || 'Không thể tải nhật ký từ máy chủ');
+        setErrorMessage(err.message || t('logs.fetchError'));
         if (!silent) {
           setLogs([]);
         }
@@ -264,6 +268,7 @@ export const LogsPage = () => {
       limit,
       currentEnv?.clusterId,
       currentEnv?.id,
+      t,
     ]
   );
 
@@ -309,7 +314,7 @@ export const LogsPage = () => {
                 return nextLogs.length > 500 ? nextLogs.slice(0, 500) : nextLogs;
               });
             } else if (eventType === 'overflow' && data) {
-              setStreamNotice(`Đã giảm tải: bỏ qua ${data.dropped} log do backpressure`);
+              setStreamNotice(t('logs.stream.overflowNotice', { dropped: data.dropped }));
             }
           },
           (err) => {
@@ -343,6 +348,7 @@ export const LogsPage = () => {
     currentEnv?.clusterId,
     currentEnv?.id,
     fetchLogs,
+    t,
   ]);
 
   // Auto-scroll to newest (top of list in DESC mode) if enabled
@@ -390,7 +396,7 @@ export const LogsPage = () => {
       });
     } catch (err) {
       console.warn('[LogsPage] Could not load more logs:', err.message);
-      setErrorMessage(err.message || 'Không thể tải thêm nhật ký cũ');
+      setErrorMessage(err.message || t('logs.loadMoreError'));
     } finally {
       setIsLoadingMore(false);
     }
@@ -495,7 +501,7 @@ export const LogsPage = () => {
     return { errorCount, warnCount };
   }, [logs]);
 
-  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || 'Toàn hệ thống';
+  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || t('common.systemWide');
 
   const kpiCardStyle = (accent) => ({
     backgroundColor: '#FFFFFF',
@@ -562,10 +568,10 @@ export const LogsPage = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Nhật Ký Container Tập Trung
+              {t('logs.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Thu thập &amp; tra cứu nhật ký container thời gian thực từ cụm{' '}
+              {t('logs.subtitlePrefix')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
             </p>
           </div>
@@ -580,7 +586,7 @@ export const LogsPage = () => {
             style={actionBtnStyle(isLive, false)}
           >
             {isLive ? <Pause size={14} /> : <Play size={14} />}
-            <span>{isLive ? 'Đang Live Stream' : 'Bật Live Stream'}</span>
+            <span>{isLive ? t('logs.actions.liveOn') : t('logs.actions.liveOff')}</span>
           </button>
 
           <button
@@ -591,7 +597,7 @@ export const LogsPage = () => {
             style={actionBtnStyle(false, isLoading)}
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
+            <span>{t('common.refresh')}</span>
           </button>
 
           <button
@@ -602,7 +608,7 @@ export const LogsPage = () => {
             style={actionBtnStyle(copied, logs.length === 0)}
           >
             {copied ? <Check size={14} color="#059669" /> : <Copy size={14} />}
-            <span>{copied ? 'Đã sao chép' : 'Sao chép'}</span>
+            <span>{copied ? t('common.copied') : t('common.copy')}</span>
           </button>
 
           <button
@@ -613,24 +619,24 @@ export const LogsPage = () => {
             style={actionBtnStyle(false, logs.length === 0)}
           >
             <Download size={14} />
-            <span>Tải .log</span>
+            <span>{t('logs.actions.download')}</span>
           </button>
         </div>
       </div>
 
       {/* Hàng KPI Tóm Tắt (đồng bộ 4 thẻ kính/viền màu giống Dashboard & Node Metrics) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div style={kpiCardStyle('#059669')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG NHẬT KÝ</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('logs.kpi.totalLogs')}</span>
             <FileText size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
-              {(pagination.total || 0).toLocaleString('vi-VN')}
+              {(pagination.total || 0).toLocaleString(intlLocale)}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
-              Hiển thị {logs.length} dòng
+              {t('logs.kpi.showingRows', { count: logs.length })}
             </span>
           </div>
         </div>
@@ -640,18 +646,18 @@ export const LogsPage = () => {
             setSelectedLevel((prev) => (prev === 'ERROR' ? 'all' : 'ERROR'));
             setPage(1);
           }}
-          title="Nhấp để lọc nhanh log lỗi ERROR"
+          title={t('logs.kpi.errorTooltip')}
           style={{ ...kpiCardStyle('#EF4444'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>LỖI (ERROR / FATAL)</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('logs.kpi.errorTitle')}</span>
             <ShieldAlert size={14} color="#EF4444" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: logStats.errorCount > 0 ? '#DC2626' : '#0F172A' }}>
               {logStats.errorCount}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>trong trang hiện tại</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('logs.kpi.inCurrentPage')}</span>
           </div>
         </div>
 
@@ -660,24 +666,24 @@ export const LogsPage = () => {
             setSelectedLevel((prev) => (prev === 'WARN' ? 'all' : 'WARN'));
             setPage(1);
           }}
-          title="Nhấp để lọc nhanh log cảnh báo WARN"
+          title={t('logs.kpi.warnTooltip')}
           style={{ ...kpiCardStyle('#F59E0B'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>CẢNH BÁO (WARN)</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('logs.kpi.warnTitle')}</span>
             <AlertTriangle size={14} color="#F59E0B" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: logStats.warnCount > 0 ? '#D97706' : '#0F172A' }}>
               {logStats.warnCount}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>trong trang hiện tại</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('logs.kpi.inCurrentPage')}</span>
           </div>
         </div>
 
         <div style={kpiCardStyle(isLive ? '#10B981' : '#3B82F6')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>LUỒNG STREAM</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('logs.kpi.streamTitle')}</span>
             <Radio size={14} color={isLive ? '#10B981' : '#3B82F6'} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
@@ -696,10 +702,10 @@ export const LogsPage = () => {
               }}
             >
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isLive ? '#10B981' : '#94A3B8' }} />
-              {isLive ? 'Trực tiếp (SSE)' : 'Chế độ tĩnh'}
+              {isLive ? t('logs.kpi.streamSse') : t('logs.kpi.streamStatic')}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
-              {filteredPodsList.length} Pods
+              {t('logs.kpi.podsCount', { count: filteredPodsList.length })}
             </span>
           </div>
         </div>
@@ -722,11 +728,11 @@ export const LogsPage = () => {
       >
         {/* Hàng 1: Tìm kiếm + Chọn nhanh cấp độ + Chọn nhanh thời gian */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-          <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: '380px' }}>
+          <div className="dash-search-box" style={{ position: 'relative', flex: '1 1 260px', maxWidth: '380px' }}>
             <input
               type="text"
               data-testid="logs-search-input"
-              placeholder="Tìm kiếm nội dung log, pod, từ khóa lỗi..."
+              placeholder={t('logs.filters.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -748,7 +754,7 @@ export const LogsPage = () => {
                 type="button"
                 data-testid="logs-search-clear-btn"
                 onClick={() => setSearchQuery('')}
-                aria-label="Xóa từ khóa tìm kiếm"
+                aria-label={t('logs.filters.clearSearchAria')}
                 style={{
                   position: 'absolute',
                   right: '8px',
@@ -768,7 +774,7 @@ export const LogsPage = () => {
           {/* Chọn nhanh Cấp độ (giữ nguyên select ẩn hoặc pills trực quan + data-testid) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#F8FAFC', padding: '3px', borderRadius: '9px', border: '1px solid #E2E8F0' }}>
             {[
-              { id: 'all', label: 'Tất cả', color: '#059669', bg: '#ECFDF5' },
+              { id: 'all', label: t('common.all'), color: '#059669', bg: '#ECFDF5' },
               { id: 'INFO', label: 'INFO', color: '#2563EB', bg: '#EFF6FF' },
               { id: 'WARN', label: 'WARN', color: '#D97706', bg: '#FFFBEB' },
               { id: 'ERROR', label: 'ERROR', color: '#DC2626', bg: '#FEF2F2' },
@@ -809,7 +815,7 @@ export const LogsPage = () => {
               { id: '1h', label: '1h' },
               { id: '24h', label: '24h' },
               { id: '7d', label: '7d' },
-              { id: 'all', label: 'Tất cả' },
+              { id: 'all', label: t('common.all') },
             ].map((r) => {
               const active = selectedRange === r.id;
               return (
@@ -857,7 +863,7 @@ export const LogsPage = () => {
               onChange={handleNamespaceChange}
               style={selectControlStyle}
             >
-              <option value="ALL">Namespace: Tất cả</option>
+              <option value="ALL">{t('logs.filters.namespaceAll')}</option>
               {namespacesList.map((ns) => {
                 const name = typeof ns === 'string' ? ns : ns.name || ns.id;
                 return (
@@ -874,7 +880,7 @@ export const LogsPage = () => {
               onChange={handleDeploymentChange}
               style={{ ...selectControlStyle, maxWidth: '190px' }}
             >
-              <option value="ALL">Deployment: Tất cả</option>
+              <option value="ALL">{t('logs.filters.deploymentAll')}</option>
               {deploymentsList.map((dep) => {
                 const name = dep.name || dep.id;
                 return (
@@ -891,7 +897,7 @@ export const LogsPage = () => {
               onChange={handlePodChange}
               style={{ ...selectControlStyle, maxWidth: '210px' }}
             >
-              <option value="ALL">Pod: Tất cả ({filteredPodsList.length})</option>
+              <option value="ALL">{t('logs.filters.podAll', { count: filteredPodsList.length })}</option>
               {filteredPodsList.map((pod) => {
                 const name = pod.name || pod.id;
                 return (
@@ -908,7 +914,7 @@ export const LogsPage = () => {
               onChange={handleServiceChange}
               style={{ ...selectControlStyle, maxWidth: '190px' }}
             >
-              <option value="all">Dịch vụ: Tất cả</option>
+              <option value="all">{t('logs.filters.serviceAll')}</option>
               {servicesList.map((svc) => (
                 <option key={svc.service_id || svc.service_name} value={svc.service_name || svc.service_id}>
                   {svc.service_name || svc.service_id}
@@ -937,7 +943,7 @@ export const LogsPage = () => {
                 }}
               >
                 <RotateCcw size={12} />
-                <span>Đặt lại</span>
+                <span>{t('common.reset')}</span>
               </button>
             )}
           </div>
@@ -964,7 +970,7 @@ export const LogsPage = () => {
               onChange={(e) => setAutoScroll(e.target.checked)}
               style={{ accentColor: '#059669' }}
             />
-            <span>Tự cuộn mới nhất</span>
+            <span>{t('logs.filters.autoScroll')}</span>
           </label>
         </div>
       </div>
@@ -1004,7 +1010,7 @@ export const LogsPage = () => {
               cursor: 'pointer',
             }}
           >
-            Thử lại
+            {t('common.retry')}
           </button>
         </div>
       )}
@@ -1037,8 +1043,8 @@ export const LogsPage = () => {
             <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F59E0B' }} />
             <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981' }} />
             <span style={{ marginLeft: '10px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#94A3B8' }}>
-              k8s-pod-stream &bull; Đang hiển thị <strong style={{ color: '#E2E8F0' }}>{logs.length}</strong> /{' '}
-              {(pagination.total || 0).toLocaleString('vi-VN')} dòng nhật ký
+              k8s-pod-stream &bull; {t('logs.terminal.showing')} <strong style={{ color: '#E2E8F0' }}>{logs.length}</strong> /{' '}
+              {(pagination.total || 0).toLocaleString(intlLocale)} {t('logs.terminal.linesUnit')}
             </span>
           </div>
 
@@ -1061,7 +1067,7 @@ export const LogsPage = () => {
                 border: isLive ? '1px solid rgba(52, 211, 153, 0.35)' : '1px solid rgba(148, 163, 184, 0.2)',
               }}
             >
-              {isLive ? '● TRỰC TIẾP' : '○ TẠM DỪNG'}
+              {isLive ? t('logs.stream.statusLive') : t('logs.stream.statusPaused')}
             </div>
           </div>
         </div>
@@ -1098,7 +1104,7 @@ export const LogsPage = () => {
               }}
             >
               <RefreshCw size={24} className="animate-spin" color="#38BDF8" />
-              <span>Đang kết nối và tải chuỗi nhật ký container từ PostgreSQL...</span>
+              <span>{t('logs.terminal.loading')}</span>
             </div>
           ) : logs.length === 0 ? (
             <div
@@ -1115,10 +1121,10 @@ export const LogsPage = () => {
             >
               <Filter size={24} color="#64748B" />
               <span style={{ fontSize: '0.875rem', color: '#E2E8F0', fontWeight: 600 }}>
-                Không tìm thấy nhật ký phù hợp với bộ lọc hiện tại.
+                {t('logs.terminal.emptyTitle')}
               </span>
               <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                Hãy thử nới lỏng bộ lọc cấp độ, mở rộng thời gian hoặc tìm kiếm từ khóa khác.
+                {t('logs.terminal.emptyDesc')}
               </span>
               {hasActiveFilters && (
                 <button
@@ -1136,7 +1142,7 @@ export const LogsPage = () => {
                     cursor: 'pointer',
                   }}
                 >
-                  Xóa bộ lọc
+                  {t('logs.terminal.clearFilters')}
                 </button>
               )}
             </div>
@@ -1155,7 +1161,7 @@ export const LogsPage = () => {
                   key={item.id || idx}
                   data-testid={`log-row-${item.id || idx}`}
                   onClick={() => setSelectedLog(item)}
-                  title="Nhấp để xem chi tiết bản ghi nhật ký này"
+                  title={t('logs.terminal.rowTitle')}
                   style={{
                     display: 'flex',
                     alignItems: 'flex-start',
@@ -1270,8 +1276,8 @@ export const LogsPage = () => {
                   <RefreshCw size={13} className={isLoadingMore ? 'animate-spin' : ''} />
                   <span>
                     {isLoadingMore
-                      ? 'Đang tải thêm nhật ký cũ...'
-                      : `Tải thêm nhật ký cũ hơn (Trang ${pagination.page + 1} / ${pagination.totalPages})`}
+                      ? t('logs.terminal.loadingMore')
+                      : t('logs.terminal.loadMore', { page: pagination.page + 1, totalPages: pagination.totalPages })}
                   </span>
                 </button>
               ) : (
@@ -1287,7 +1293,7 @@ export const LogsPage = () => {
                     gap: '6px',
                   }}
                 >
-                  <span>✓ Đã tải toàn bộ lịch sử ({pagination.total} bản ghi)</span>
+                  <span>{t('logs.terminal.endOfHistory', { total: pagination.total })}</span>
                 </div>
               )}
             </div>
@@ -1320,7 +1326,7 @@ export const LogsPage = () => {
             }}
           >
             <ArrowUp size={13} />
-            <span>Cuộn về log mới nhất</span>
+            <span>{t('logs.terminal.jumpToLatest')}</span>
           </button>
         )}
 
@@ -1341,7 +1347,7 @@ export const LogsPage = () => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>Số bản ghi / trang:</span>
+            <span>{t('logs.terminal.rowsPerPage')}</span>
             <select
               data-testid="logs-page-size-select"
               value={limit}
@@ -1364,7 +1370,7 @@ export const LogsPage = () => {
               <option value="100">100</option>
             </select>
             <span>
-              &bull; Trang <strong style={{ color: '#E2E8F0' }}>{pagination.page}</strong> / {pagination.totalPages} (Tổng số {pagination.total} logs)
+              &bull; {t('logs.terminal.pageLabel')} <strong style={{ color: '#E2E8F0' }}>{pagination.page}</strong> / {pagination.totalPages} {t('logs.terminal.totalLogsSuffix', { total: pagination.total })}
             </span>
           </div>
 
@@ -1388,7 +1394,7 @@ export const LogsPage = () => {
               }}
             >
               <ChevronLeft size={14} />
-              <span>Trước</span>
+              <span>{t('common.prev')}</span>
             </button>
 
             <button
@@ -1409,7 +1415,7 @@ export const LogsPage = () => {
                 cursor: pagination.page >= pagination.totalPages || isLoading ? 'not-allowed' : 'pointer',
               }}
             >
-              <span>Sau</span>
+              <span>{t('common.next')}</span>
               <ChevronRight size={14} />
             </button>
           </div>

@@ -1,4 +1,6 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../i18n';
 import { ShieldAlert, CheckCircle2 } from 'lucide-react';
 
 /**
@@ -7,6 +9,9 @@ import { ShieldAlert, CheckCircle2 } from 'lucide-react';
  * với bố cục nhỏ gọn, đồng bộ chiều cao với biểu đồ Cơ cấu các loại sự cố hạ tầng.
  */
 export const IncidentSeverityBreakdown = ({ breakdown = null, className = '' }) => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
+
   const severity = breakdown?.bySeverity || { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
 
   const critical = severity.CRITICAL || 0;
@@ -21,10 +26,10 @@ export const IncidentSeverityBreakdown = ({ breakdown = null, className = '' }) 
   const circumference = 2 * Math.PI * radius; // ~339.29
 
   const categories = [
-    { key: 'CRITICAL', label: 'Nghiêm Trọng (P1)', count: critical, color: '#EF4444' },
-    { key: 'HIGH', label: 'Mức Độ Cao (P2)', count: high, color: '#F97316' },
-    { key: 'MEDIUM', label: 'Trung Bình (P3)', count: medium, color: '#F59E0B' },
-    { key: 'LOW', label: 'Thấp / Cảnh Báo (P4)', count: low, color: '#3B82F6' },
+    { key: 'CRITICAL', label: t('charts.severityBreakdown.catCritical'), count: critical, color: '#EF4444' },
+    { key: 'HIGH', label: t('charts.severityBreakdown.catHigh'), count: high, color: '#F97316' },
+    { key: 'MEDIUM', label: t('charts.severityBreakdown.catMedium'), count: medium, color: '#F59E0B' },
+    { key: 'LOW', label: t('charts.severityBreakdown.catLow'), count: low, color: '#3B82F6' },
   ];
 
   // Calculate cumulative offsets for SVG circles
@@ -74,11 +79,11 @@ export const IncidentSeverityBreakdown = ({ breakdown = null, className = '' }) 
           <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
             <ShieldAlert size={17} color="var(--dash-primary)" />
             <h3 style={{ fontSize: '0.98rem', fontWeight: 800, margin: 0, color: '#0F172A' }}>
-              Phân Bổ Sự Cố Theo Mức Độ Nghiêm Trọng (P1–P4)
+              {t('charts.severityBreakdown.title')}
             </h3>
           </div>
           <p style={{ fontSize: '0.72rem', color: '#64748B', margin: '3px 0 0 0' }}>
-            Phân cấp mức độ ảnh hưởng SLA và độ ưu tiên kích hoạt MAPE-K
+            {t('charts.severityBreakdown.subtitle')}
           </p>
         </div>
 
@@ -98,7 +103,7 @@ export const IncidentSeverityBreakdown = ({ breakdown = null, className = '' }) 
           }}
         >
           <CheckCircle2 size={12} />
-          <span>{total.toLocaleString('vi-VN')} sự cố</span>
+          <span>{t('charts.severityBreakdown.totalBadge', { count: total.toLocaleString(intlLocale) })}</span>
         </div>
       </div>
 
@@ -142,7 +147,13 @@ export const IncidentSeverityBreakdown = ({ breakdown = null, className = '' }) 
                         strokeLinecap="round"
                         style={{ transition: 'stroke-dasharray 0.5s ease' }}
                       >
-                        <title>{`${seg.label}: ${seg.count.toLocaleString('vi-VN')} vụ (${seg.percent}%)`}</title>
+                        <title>
+                          {t('charts.severityBreakdown.svgTitle', {
+                            label: seg.label,
+                            count: seg.count.toLocaleString(intlLocale),
+                            pct: seg.percent,
+                          })}
+                        </title>
                       </circle>
                     )
                 )}
@@ -169,7 +180,7 @@ export const IncidentSeverityBreakdown = ({ breakdown = null, className = '' }) 
                   lineHeight: 1.1,
                 }}
               >
-                {total.toLocaleString('vi-VN')}
+                {total.toLocaleString(intlLocale)}
               </span>
               <span
                 style={{
@@ -181,7 +192,9 @@ export const IncidentSeverityBreakdown = ({ breakdown = null, className = '' }) 
                   marginTop: '2px',
                 }}
               >
-                {total === 0 ? 'ỔN ĐỊNH' : 'SỰ CỐ'}
+                {total === 0
+                  ? t('charts.severityBreakdown.centerStable')
+                  : t('charts.severityBreakdown.centerIncidents')}
               </span>
             </div>
           </div>
@@ -219,7 +232,7 @@ export const IncidentSeverityBreakdown = ({ breakdown = null, className = '' }) 
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)' }}>
                     <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '0.75rem' }}>
-                      {cat.count.toLocaleString('vi-VN')} vụ
+                      {t('charts.severityBreakdown.rowCount', { count: cat.count.toLocaleString(intlLocale) })}
                     </span>
                     <span
                       style={{
@@ -269,10 +282,10 @@ export const IncidentSeverityBreakdown = ({ breakdown = null, className = '' }) 
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <CheckCircle2 size={12} color="#059669" />
-          <span>Tự động kích hoạt chu trình MAPE-K theo mức độ rủi ro</span>
+          <span>{t('charts.severityBreakdown.footerText')}</span>
         </div>
         <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#334155' }}>
-          P1+P2: {(critical + high).toLocaleString('vi-VN')} · P3+P4: {(medium + low).toLocaleString('vi-VN')}
+          P1+P2: {(critical + high).toLocaleString(intlLocale)} · P3+P4: {(medium + low).toLocaleString(intlLocale)}
         </div>
       </div>
     </div>

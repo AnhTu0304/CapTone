@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
+import { getIntlLocale } from '../../../i18n';
 
 import { useDashboard } from '../context/DashboardContext';
 import { PermissionGate } from '../../../components/common/PermissionGate';
@@ -35,6 +37,7 @@ import {
 } from 'lucide-react';
 
 export const ApprovalsPage = () => {
+  const { t, i18n: i18nInstance } = useTranslation('dashHealing');
   const { currentOrg, currentEnv, setCurrentEnv, envList, isRefreshing, triggerRefresh, refreshPendingApprovals } = useDashboard();
   const { success: toastSuccess, warning: toastWarning } = useToast();
   const getQueryTarget = () => {
@@ -77,11 +80,11 @@ export const ApprovalsPage = () => {
       localStorage.setItem('captone_hitl_auto_dismiss', String(next));
     } catch {}
     if (next) {
-      toastSuccess('Đã BẬT cơ chế tự động hủy khi dịch vụ tự lành (100% Tự động).');
+      toastSuccess(t('approvals.autoDismiss.toastOn'));
     } else {
-      toastWarning('Đã TẮT cơ chế tự động hủy (Chuyển sang chế độ duyệt thủ công).');
+      toastWarning(t('approvals.autoDismiss.toastOff'));
     }
-  }, [isAutoDismissEnabled, toastSuccess, toastWarning]);
+  }, [isAutoDismissEnabled, toastSuccess, toastWarning, t]);
   const [autoDismissedList, setAutoDismissedList] = useState([]);
   const [workloadHealthMap, setWorkloadHealthMap] = useState({});
 
@@ -104,69 +107,71 @@ export const ApprovalsPage = () => {
     const rawActionCode = item.action_code || item.action_type_code || item.action_name || item.action_type_name || '';
     const searchCode = (String(rawActionCode) + ' ' + String(item.policy_name || '') + ' ' + String(item.ai_reasoning || '')).toUpperCase();
     
-    let actionFriendlyName = 'Tự phục hồi dịch vụ';
+    let actionFriendlyName = t('approvals.actions.default');
     let actionCategory = 'POD';
 
     if (searchCode.includes('DRAIN')) {
-      actionFriendlyName = 'Di tản & Cô lập Node (Drain Node)';
+      actionFriendlyName = t('approvals.actions.drain');
       actionCategory = 'NODE';
     } else if (searchCode.includes('CORDON')) {
-      actionFriendlyName = 'Khóa lập lịch Node (Cordon Node)';
+      actionFriendlyName = t('approvals.actions.cordon');
       actionCategory = 'NODE';
     } else if (searchCode.includes('ROLLBACK')) {
-      actionFriendlyName = 'Hoàn nguyên (Rollback Deployment)';
+      actionFriendlyName = t('approvals.actions.rollback');
       actionCategory = 'DEPLOYMENT';
     } else if (searchCode.includes('SCALE')) {
-      actionFriendlyName = 'Mở rộng bản sao (Scale Replicas)';
+      actionFriendlyName = t('approvals.actions.scale');
       actionCategory = 'WORKLOAD';
     } else if (searchCode.includes('RESTART_DEPLOYMENT') || (searchCode.includes('RESTART') && searchCode.includes('DEPLOYMENT'))) {
-      actionFriendlyName = 'Khởi động lại Deployment';
+      actionFriendlyName = t('approvals.actions.restartDeployment');
       actionCategory = 'DEPLOYMENT';
     } else if (searchCode.includes('RESTART')) {
-      actionFriendlyName = 'Khởi động lại Pod (Restart Pod)';
+      actionFriendlyName = t('approvals.actions.restartPod');
       actionCategory = 'POD';
     } else if (searchCode.includes('REPLACE')) {
-      actionFriendlyName = 'Thay thế Pod (Replace Pod)';
+      actionFriendlyName = t('approvals.actions.replacePod');
       actionCategory = 'POD';
     } else if (searchCode.includes('ADJUST') || searchCode.includes('LIMIT')) {
-      actionFriendlyName = 'Điều chỉnh tài nguyên (Adjust Limits)';
+      actionFriendlyName = t('approvals.actions.adjustLimits');
       actionCategory = 'WORKLOAD';
     } else if (searchCode.includes('CLEANUP') || searchCode.includes('TEMP')) {
-      actionFriendlyName = 'Dọn dẹp lưu trữ (Cleanup Storage)';
+      actionFriendlyName = t('approvals.actions.cleanup');
       actionCategory = 'STORAGE';
     } else if (searchCode.includes('BLOCK')) {
-      actionFriendlyName = 'Chặn IP bất thường (Block IP)';
+      actionFriendlyName = t('approvals.actions.blockIp');
       actionCategory = 'SECURITY';
     } else if (searchCode.includes('NO_ACTION')) {
-      actionFriendlyName = 'Không can thiệp (No Action)';
+      actionFriendlyName = t('approvals.actions.noAction');
       actionCategory = 'POD';
     } else if (item.action_name) {
       actionFriendlyName = item.action_name;
     }
 
-    const rootCause = item.root_cause_type || (item.incident_title ? item.incident_title.replace(/^\[.*?\]\s*/, '') : 'Chưa xác định nguyên nhân gốc rễ');
+    const rootCause = item.root_cause_type || (item.incident_title ? item.incident_title.replace(/^\[.*?\]\s*/, '') : t('approvals.mapped.unknownRootCause'));
     const confidence = item.confidence_score !== null && item.confidence_score !== undefined
       ? Math.round(Number(item.confidence_score) <= 1 ? Number(item.confidence_score) * 100 : Number(item.confidence_score))
       : null;
 
     const rawRisk = (item.risk_level || item.recommendation_risk_level || '').toUpperCase();
-    let riskLevelVi = 'Chưa phân loại';
-    if (rawRisk === 'LOW') riskLevelVi = 'Thấp';
-    else if (rawRisk === 'MEDIUM') riskLevelVi = 'Trung bình';
-    else if (rawRisk === 'HIGH') riskLevelVi = 'Cao';
-    else if (rawRisk === 'CRITICAL') riskLevelVi = 'Khẩn cấp';
+    let riskLevelVi = t('common.unclassified');
+    if (rawRisk === 'LOW') riskLevelVi = t('approvals.risks.LOW');
+    else if (rawRisk === 'MEDIUM') riskLevelVi = t('approvals.risks.MEDIUM');
+    else if (rawRisk === 'HIGH') riskLevelVi = t('approvals.risks.HIGH');
+    else if (rawRisk === 'CRITICAL') riskLevelVi = t('approvals.risks.CRITICAL');
 
     const policyName = item.policy_name || 'POL-SAFETY-DEFAULT';
 
-    const rawTitle = item.incident_title || `${actionFriendlyName} trên ${targetName}`;
+    const rawTitle = item.incident_title || t('approvals.mapped.titleFallback', { action: actionFriendlyName, target: targetName });
     let cleanTitle = translateIncidentTitle(rawTitle);
-    if (!cleanTitle.toLowerCase().startsWith('sự cố') && !cleanTitle.toLowerCase().startsWith('lỗi')) {
-      cleanTitle = `Sự cố: ${cleanTitle}`;
+    if (!cleanTitle.toLowerCase().startsWith('sự cố') && !cleanTitle.toLowerCase().startsWith('lỗi') && !cleanTitle.toLowerCase().startsWith('incident')) {
+      cleanTitle = t('approvals.mapped.incidentPrefix', { title: cleanTitle });
     }
 
     const actionShortId = item.healing_action_id && item.healing_action_id.length > 8
       ? `ACT-${item.healing_action_id.slice(0, 8).toUpperCase()}`
       : null;
+
+    const intlLocale = getIntlLocale(i18nInstance.language);
 
     return {
       id: shortId,
@@ -192,23 +197,24 @@ export const ApprovalsPage = () => {
       rootCauseType: rootCause,
       rootCauseDesc: item.root_cause_description || null,
       confidenceScore: confidence,
-      aiReasoning: item.ai_reasoning || item.reason || `Đề xuất thực thi ${actionFriendlyName} trên dịch vụ ${targetName}.`,
+      aiReasoning: item.ai_reasoning || item.reason || t('approvals.mapped.aiReasoningDefault', { action: actionFriendlyName, target: targetName }),
       policyName,
-      requestedBy: 'Hệ thống AI Tự thích ứng (MAPE-K)',
+      requestedBy: t('approvals.mapped.requestedBy'),
       riskLevelVi,
-      urgency: rawRisk || 'Chưa phân loại',
-      reason: item.reason || `Chính sách ${policyName} yêu cầu phê duyệt con người trước khi thực thi.`,
-      blastRadius: `Môi trường Production (Bảo vệ qua PDB)`,
+      urgency: rawRisk || 'UNCLASSIFIED',
+      reason: item.reason || t('approvals.mapped.reasonDefault', { policy: policyName }),
+      blastRadius: t('approvals.mapped.blastRadius'),
       rawRequestedAt: item.requested_at,
-      timestamp: item.requested_at ? new Date(item.requested_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ' + new Date(item.requested_at).toLocaleDateString('vi-VN') : 'Vừa xong',
+      timestamp: item.requested_at ? new Date(item.requested_at).toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ' + new Date(item.requested_at).toLocaleDateString(intlLocale) : t('common.justNow'),
       actionResult: item.action_result,
       diff: {
         file: `${targetName}-deployment.yaml`,
-        before: `# Cấu hình hiện tại (${targetName})\nspec:\n  dịch_vụ: ${targetName}\n  trạng_thái: Bị suy giảm hiệu năng (Degraded)\n  mức_độ_rủi_ro: ${riskLevelVi}`,
-        after: `# Cấu hình tự phục hồi sau khi phê duyệt\nspec:\n  dịch_vụ: ${targetName}\n  hành_động: ${actionFriendlyName}\n  kết_quả_dự_kiến: Tự phục hồi an toàn (AutoHealed)`,
+        before: t('approvals.diffModal.beforeYaml', { target: targetName, risk: riskLevelVi }),
+        after: t('approvals.diffModal.afterYaml', { target: targetName, action: actionFriendlyName }),
       },
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, i18nInstance.language]);
 
 
   const fetchApprovals = useCallback(async (page = 1) => {
@@ -297,10 +303,10 @@ export const ApprovalsPage = () => {
         if (shouldDismiss) {
           const actionId = item.healing_action_id || item.id;
           const dismissReason = isWorkloadSelfHealed
-            ? 'Hệ thống tự động hủy: Dịch vụ đã tự phục hồi ổn định (Auto-recovered)'
+            ? t('approvals.autoDismiss.reasonSelfHealed')
             : isStale
-            ? 'Hệ thống tự động hủy: Yêu cầu đã quá hạn (Stale HITL timeout > 15m), dịch vụ đã ổn định'
-            : 'Hệ thống tự động hủy: Sự cố liên quan đã được xử lý (Incident Resolved)';
+            ? t('approvals.autoDismiss.reasonStale')
+            : t('approvals.autoDismiss.reasonResolved');
 
           if (actionId) {
             selfHealingService.rejectAction(actionId, dismissReason).catch(() => {});
@@ -312,7 +318,7 @@ export const ApprovalsPage = () => {
           newlyDismissed.push({
             id: item.id,
             targetName: cleanTarget || item.target_name,
-            actionName: item.action_name || 'Tự phục hồi dịch vụ',
+            actionName: item.action_name || t('approvals.actions.default'),
             reason: dismissReason,
             dismissedAt: new Date(),
           });
@@ -345,7 +351,7 @@ export const ApprovalsPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, clusterFilter, searchTerm, mapBackendApprovalToUI, isAutoDismissEnabled, refreshPendingApprovals]);
+  }, [currentOrg?.id, currentEnv?.id, currentEnv?.clusterId, currentEnv?.cluster, clusterFilter, searchTerm, mapBackendApprovalToUI, isAutoDismissEnabled, refreshPendingApprovals, t]);
 
   useEffect(() => {
     fetchApprovals(currentPage);
@@ -389,9 +395,9 @@ export const ApprovalsPage = () => {
 
     try {
       if (actionId) {
-        await selfHealingService.approveAction(actionId, 'Được phê duyệt bởi SME Owner/DevOps qua giao diện HITL');
+        await selfHealingService.approveAction(actionId, t('approvals.toast.approveNote'));
       }
-      toastSuccess('Đã phê duyệt và chuyển lệnh tự phục hồi tới Kubelet cụm máy chủ!', 'HITL Phê Duyệt');
+      toastSuccess(t('approvals.toast.approveSuccess'), t('approvals.toast.approveTitle'));
 
       try {
         const approvedRecs = JSON.parse(sessionStorage.getItem('applied_recommendations') || '[]');
@@ -406,7 +412,7 @@ export const ApprovalsPage = () => {
       }, 500);
     } catch (err) {
       console.warn('Lỗi gửi phê duyệt tới DB:', err.message);
-      toastSuccess('Đã xác nhận phê duyệt hành động tự phục hồi!', 'HITL Phê Duyệt');
+      toastSuccess(t('approvals.toast.approveFallback'), t('approvals.toast.approveTitle'));
     }
   };
 
@@ -418,9 +424,9 @@ export const ApprovalsPage = () => {
     setSendingEmailId(req.id);
     try {
       const res = await selfHealingService.resendNotification(actionId);
-      toastSuccess(res?.message || 'Đã gửi email thông báo phê duyệt tới các kỹ sư có quyền (SME/DevOps)!', 'Email Thông Báo');
+      toastSuccess(res?.message || t('approvals.toast.emailSuccess'), t('approvals.toast.emailTitle'));
     } catch (err) {
-      toastWarning(err?.message || 'Không thể gửi email thông báo lúc này', 'Gửi Email Thất Bại');
+      toastWarning(err?.message || t('approvals.toast.emailError'), t('approvals.toast.emailFailTitle'));
     } finally {
       setSendingEmailId(null);
     }
@@ -434,15 +440,15 @@ export const ApprovalsPage = () => {
 
     try {
       if (actionId) {
-        await selfHealingService.rejectAction(actionId, 'Từ chối bởi SME Owner/DevOps do rủi ro gián đoạn');
+        await selfHealingService.rejectAction(actionId, t('approvals.toast.rejectNote'));
       }
-      toastWarning('Đã từ chối hành động tự phục hồi. Yêu cầu đã được ghi vào sổ kiểm toán.', 'HITL Từ Chối');
+      toastWarning(t('approvals.toast.rejectSuccess'), t('approvals.toast.rejectTitle'));
       setTimeout(() => {
         fetchApprovals(currentPage);
       }, 500);
     } catch (err) {
       console.warn('Lỗi gửi từ chối tới DB:', err.message);
-      toastWarning('Đã từ chối hành động tự phục hồi.', 'HITL Từ Chối');
+      toastWarning(t('approvals.toast.rejectFallback'), t('approvals.toast.rejectTitle'));
     }
   };
 
@@ -528,8 +534,8 @@ export const ApprovalsPage = () => {
         }}
       >
         <div style={{ fontSize: '0.78125rem', color: '#64748B', fontWeight: 500 }}>
-          Hiển thị <strong style={{ color: '#0F172A' }}>{startIdx}–{endIdx}</strong> trong tổng số{' '}
-          <strong style={{ color: '#0F172A' }}>{totalItems}</strong> yêu cầu chờ duyệt ({ITEMS_PER_PAGE} yêu cầu / trang)
+          {t('approvals.pagination.showingPrefix')} <strong style={{ color: '#0F172A' }}>{startIdx}–{endIdx}</strong> {t('approvals.pagination.showingMiddle')}{' '}
+          <strong style={{ color: '#0F172A' }}>{totalItems}</strong> {t('approvals.pagination.showingSuffix', { perPage: ITEMS_PER_PAGE })}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -548,7 +554,7 @@ export const ApprovalsPage = () => {
               cursor: currPage <= 1 ? 'not-allowed' : 'pointer',
             }}
           >
-            &laquo; Trước
+            &laquo; {t('common.prevShort')}
           </button>
 
           {pages.map((p, idx) =>
@@ -596,18 +602,18 @@ export const ApprovalsPage = () => {
               cursor: currPage >= totalPg ? 'not-allowed' : 'pointer',
             }}
           >
-            Sau &raquo;
+            {t('common.nextShort')} &raquo;
           </button>
         </div>
       </div>
     );
   };
 
-  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || 'Toàn hệ thống';
+  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || t('common.systemWide');
 
   const approvalStats = useMemo(() => {
     const highRiskCount = displayedRequests.filter(
-      (r) => r.riskLevelVi === 'Cao' || r.riskLevelVi === 'Khẩn cấp'
+      (r) => r.urgency === 'HIGH' || r.urgency === 'CRITICAL'
     ).length;
     return { highRiskCount };
   }, [displayedRequests]);
@@ -663,10 +669,10 @@ export const ApprovalsPage = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Cổng Phê Duyệt HITL
+              {t('approvals.header.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Kiểm duyệt các hành động tự phục hồi có mức ảnh hưởng cao trước khi áp dụng trên cụm{' '}
+              {t('approvals.header.subtitlePrefix')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
             </p>
           </div>
@@ -680,7 +686,7 @@ export const ApprovalsPage = () => {
             style={actionBtnStyle(isRefreshing || isLoading)}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>{isRefreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
+            <span>{isRefreshing ? t('common.refreshing') : t('common.refresh')}</span>
           </button>
         </div>
       </div>
@@ -725,7 +731,7 @@ export const ApprovalsPage = () => {
                 letterSpacing: '-0.01em',
               }}
             >
-              Cơ chế Tự Động Hủy Khi Dịch Vụ Tự Lành (Auto-Dismiss when Self-Healed):
+              {t('approvals.autoDismiss.label')}
             </span>
           </div>
 
@@ -738,8 +744,8 @@ export const ApprovalsPage = () => {
               onClick={toggleAutoDismiss}
               title={
                 isAutoDismissEnabled
-                  ? 'Bấm để TẮT cơ chế tự động hủy (Chuyển sang chế độ duyệt thủ công)'
-                  : 'Bấm để BẬT cơ chế tự động hủy khi dịch vụ tự lành'
+                  ? t('approvals.autoDismiss.turnOffTitle')
+                  : t('approvals.autoDismiss.turnOnTitle')
               }
               style={{
                 position: 'relative',
@@ -777,7 +783,7 @@ export const ApprovalsPage = () => {
             <button
               type="button"
               onClick={toggleAutoDismiss}
-              title="Nhấn để chuyển đổi giữa Tự động và Thủ công"
+              title={t('approvals.autoDismiss.toggleBadgeTitle')}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -794,7 +800,7 @@ export const ApprovalsPage = () => {
                 transition: 'all 0.15s ease',
               }}
             >
-              <span>{isAutoDismissEnabled ? 'ĐANG BẬT (100% Tự Động)' : 'ĐANG TẮT (Chế độ Thủ công)'}</span>
+              <span>{isAutoDismissEnabled ? t('approvals.autoDismiss.statusOn') : t('approvals.autoDismiss.statusOff')}</span>
             </button>
           </div>
         </div>
@@ -811,8 +817,8 @@ export const ApprovalsPage = () => {
           <Info size={14} color={isAutoDismissEnabled ? '#059669' : '#64748B'} />
           <span>
             {isAutoDismissEnabled
-              ? 'Nếu dịch vụ tự ổn định lại (Pods Ready 100%) hoặc sự cố tự hết, hệ thống sẽ tự động hủy lệnh chờ — không cần từ chối thủ công.'
-              : 'Chế độ thủ công đang bật: Các yêu cầu chờ phê duyệt sẽ được giữ nguyên cho đến khi kỹ sư trực tiếp Duyệt hoặc Từ chối.'}
+              ? t('approvals.autoDismiss.descOn')
+              : t('approvals.autoDismiss.descOff')}
           </span>
         </div>
       </div>
@@ -837,46 +843,50 @@ export const ApprovalsPage = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
             <CheckCheck size={16} color="#16A34A" />
             <span>
-              Hệ thống AI vừa <strong>tự động thu hồi {autoDismissedList.length} yêu cầu</strong> cho dịch vụ (<strong>{autoDismissedList.map((a) => a.targetName).join(', ')}</strong>) vì dịch vụ đã tự ổn định lại (Pods Healthy 100%).
+              <Trans
+                i18nKey="dashHealing:approvals.autoDismiss.bannerText"
+                values={{ count: autoDismissedList.length, services: autoDismissedList.map((a) => a.targetName).join(', ') }}
+                components={{ strong: <strong /> }}
+              />
             </span>
           </div>
           <span style={{ fontSize: '0.72rem', color: '#166534', opacity: 0.85, fontWeight: 600 }}>
-            Đã đồng bộ kiểm toán (Audit Logs)
+            {t('approvals.autoDismiss.auditSynced')}
           </span>
         </div>
       )}
 
       {/* Hàng 4 Thẻ KPI Tóm Tắt */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div style={kpiCardStyle('#F59E0B')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>CHỜ KÝ DUYỆT</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('approvals.kpi.pendingTitle')}</span>
             <Clock size={14} color="#F59E0B" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: totalCount > 0 ? '#D97706' : '#0F172A' }}>
               {totalCount}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>yêu cầu đang mở</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('approvals.kpi.pendingSub')}</span>
           </div>
         </div>
 
         <div style={kpiCardStyle('#EF4444')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>RỦI RO CAO / KHẨN</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('approvals.kpi.highRiskTitle')}</span>
             <AlertTriangle size={14} color="#EF4444" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: approvalStats.highRiskCount > 0 ? '#DC2626' : '#0F172A' }}>
               {approvalStats.highRiskCount}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>trong trang hiện tại</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('approvals.kpi.highRiskSub')}</span>
           </div>
         </div>
 
         <div style={kpiCardStyle('#10B981')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐÃ XỬ LÝ PHIÊN NÀY</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('approvals.kpi.processedTitle')}</span>
             <ShieldCheck size={14} color="#10B981" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -884,14 +894,14 @@ export const ApprovalsPage = () => {
               {approvedIds.length + rejectedIds.length}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#64748B' }}>
-              {approvedIds.length} duyệt &bull; {rejectedIds.length} từ chối
+              {t('approvals.kpi.processedSub', { approved: approvedIds.length, rejected: rejectedIds.length })}
             </span>
           </div>
         </div>
 
         <div style={kpiCardStyle(isWsConnected ? '#059669' : '#3B82F6')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐỒNG BỘ TRỰC TUYẾN</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('approvals.kpi.syncTitle')}</span>
             <Zap size={14} color={isWsConnected ? '#059669' : '#3B82F6'} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
@@ -910,7 +920,7 @@ export const ApprovalsPage = () => {
               }}
             >
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isWsConnected ? '#10B981' : '#3B82F6' }} />
-              {isWsConnected ? 'WebSocket Live' : 'Polling định kỳ'}
+              {isWsConnected ? t('approvals.kpi.wsLive') : t('approvals.kpi.wsPolling')}
             </span>
           </div>
         </div>
@@ -941,7 +951,7 @@ export const ApprovalsPage = () => {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Yêu Cầu Chờ Ký Duyệt
+              {t('approvals.filters.sectionTitle')}
             </h3>
             <span
               style={{
@@ -979,26 +989,27 @@ export const ApprovalsPage = () => {
                 outline: 'none',
                 cursor: 'pointer',
               }}
-              title="Lọc yêu cầu phê duyệt theo Cụm Kubernetes"
+              title={t('approvals.filters.clusterSelectTitle')}
             >
-              <option value="all">Tất cả các cụm</option>
-              <option value="current">Cụm đang xem: {currentEnv?.cluster || 'Mặc định'}</option>
+              <option value="all">{t('approvals.filters.allClusters')}</option>
+              <option value="current">{t('approvals.filters.currentCluster', { name: currentEnv?.cluster || t('common.default') })}</option>
               {envList && envList.filter(c => (c.cluster || c.name) !== currentEnv?.cluster).map((c) => (
                 <option key={c.id} value={c.id}>
-                  Cụm: {c.cluster || c.name}
+                  {t('approvals.filters.clusterOption', { name: c.cluster || c.name })}
                 </option>
               ))}
             </select>
 
-            <div style={{ position: 'relative' }}>
+            <div className="dash-search-box" style={{ position: 'relative', maxWidth: '100%' }}>
               <input
                 type="text"
-                placeholder="Lọc theo dịch vụ, Pod, mã HITL..."
+                placeholder={t('approvals.filters.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 style={{
                   height: '34px',
                   width: '260px',
+                  maxWidth: '100%',
                   padding: '0 28px 0 32px',
                   fontSize: '0.78rem',
                   border: '1px solid #CBD5E1',
@@ -1019,7 +1030,7 @@ export const ApprovalsPage = () => {
                       window.history.replaceState({}, '', window.location.pathname);
                     } catch {}
                   }}
-                  aria-label="Xóa bộ lọc tìm kiếm"
+                  aria-label={t('approvals.filters.clearSearchAria')}
                   style={{
                     position: 'absolute',
                     right: '8px',
@@ -1045,15 +1056,15 @@ export const ApprovalsPage = () => {
               <ShieldCheck size={38} color="#059669" style={{ margin: '0 auto 10px', display: 'block' }} />
               <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '4px', fontSize: '0.95rem' }}>
                 {searchTerm
-                  ? `Không tìm thấy yêu cầu nào khớp với "${searchTerm}"`
+                  ? t('approvals.empty.searchTitle', { term: searchTerm })
                   : clusterFilter === 'current'
-                    ? `Không có yêu cầu phê duyệt nào trên cụm "${currentEnv?.cluster || 'hiện tại'}"`
-                    : 'Không có yêu cầu phê duyệt nào cần xử lý'}
+                    ? t('approvals.empty.clusterTitle', { cluster: currentEnv?.cluster || t('common.current') })
+                    : t('approvals.empty.defaultTitle')}
               </div>
               <div style={{ fontSize: '0.8125rem', maxWidth: '560px', margin: '0 auto 14px auto', lineHeight: 1.5 }}>
                 {searchTerm
-                  ? 'Thử xóa bộ lọc để hiển thị toàn bộ danh sách.'
-                  : 'Toàn bộ dịch vụ đang hoạt động ổn định. Cơ chế Tự Động Hủy (Auto-Dismiss) đã thu hồi các yêu cầu cũ khi dịch vụ tự phục hồi (tự lành) thành công để bảo vệ an toàn cụm máy chủ.'}
+                  ? t('approvals.empty.searchSub')
+                  : t('approvals.empty.defaultSub')}
               </div>
               {!searchTerm && clusterFilter === 'current' && (
                 <button
@@ -1077,7 +1088,7 @@ export const ApprovalsPage = () => {
                   }}
                 >
                   <Layers size={14} />
-                  <span>Xem yêu cầu phê duyệt trên tất cả các cụm &raquo;</span>
+                  <span>{t('approvals.empty.viewAllBtn')}</span>
                 </button>
               )}
             </div>
@@ -1138,7 +1149,7 @@ export const ApprovalsPage = () => {
                         }}
                       >
                         <Server size={13} color="#64748B" />
-                        <span>Dịch vụ: <strong style={{ color: '#0F172A' }}>{req.targetName}</strong></span>
+                        <span>{t('approvals.card.serviceLabel')} <strong style={{ color: '#0F172A' }}>{req.targetName}</strong></span>
                       </span>
 
                       {(() => {
@@ -1162,7 +1173,7 @@ export const ApprovalsPage = () => {
                               }}
                             >
                               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isHealthy ? '#10B981' : '#EF4444' }} />
-                              <span>{isHealthy ? `Trạng thái: ${matched.healthy}/${matched.total} Pods Ready` : `Cảnh báo: ${matched.healthy}/${matched.total} Pods Ready`}</span>
+                              <span>{isHealthy ? t('approvals.card.podsHealthy', { healthy: matched.healthy, total: matched.total }) : t('approvals.card.podsWarning', { healthy: matched.healthy, total: matched.total })}</span>
                             </span>
                           );
                         }
@@ -1184,7 +1195,7 @@ export const ApprovalsPage = () => {
                         }}
                       >
                         <Layers size={13} color="#64748B" />
-                        <span>Cụm: <strong>{req.clusterName || 'Chưa xác định'}</strong></span>
+                        <span>{t('approvals.card.clusterLabel')} <strong>{req.clusterName || t('common.unknown')}</strong></span>
                       </span>
 
                       <span
@@ -1194,14 +1205,14 @@ export const ApprovalsPage = () => {
                           gap: '4px',
                           padding: '4px 9px',
                           borderRadius: '6px',
-                          backgroundColor: req.riskLevelVi === 'Cao' || req.riskLevelVi === 'Khẩn cấp' ? '#FEF2F2' : '#FFFBEB',
-                          color: req.riskLevelVi === 'Cao' || req.riskLevelVi === 'Khẩn cấp' ? '#DC2626' : '#B45309',
-                          border: `1px solid ${req.riskLevelVi === 'Cao' || req.riskLevelVi === 'Khẩn cấp' ? '#FECACA' : '#FDE68A'}`,
+                          backgroundColor: req.urgency === 'HIGH' || req.urgency === 'CRITICAL' ? '#FEF2F2' : '#FFFBEB',
+                          color: req.urgency === 'HIGH' || req.urgency === 'CRITICAL' ? '#DC2626' : '#B45309',
+                          border: `1px solid ${req.urgency === 'HIGH' || req.urgency === 'CRITICAL' ? '#FECACA' : '#FDE68A'}`,
                           fontSize: '0.75rem',
                           fontWeight: 700,
                         }}
                       >
-                        <span>Rủi ro: {req.riskLevelVi}</span>
+                        <span>{t('approvals.card.riskLabel', { level: req.riskLevelVi })}</span>
                       </span>
                     </div>
 
@@ -1251,7 +1262,7 @@ export const ApprovalsPage = () => {
                         <Zap size={14} color="#0284C7" />
                       </div>
                       <div>
-                        <strong style={{ color: '#0369A1', fontWeight: 700 }}>Hành động tự lành: </strong>
+                        <strong style={{ color: '#0369A1', fontWeight: 700 }}>{t('approvals.card.healingActionLabel')} </strong>
                         <span>{req.aiReasoning}</span>
                       </div>
                     </div>
@@ -1270,15 +1281,15 @@ export const ApprovalsPage = () => {
                     >
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                         <ShieldCheck size={14} color="#059669" />
-                        <span>Chính sách:</span>
+                        <span>{t('approvals.card.policyLabel')}</span>
                         <strong style={{ color: '#0F172A' }}>{req.policyName}</strong>
                       </span>
                       <span style={{ color: '#CBD5E1' }}>•</span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                         <Sparkles size={13} color="#D97706" />
-                        <span>Độ tin cậy AI:</span>
+                        <span>{t('approvals.card.confidenceLabel')}</span>
                         <strong style={{ color: '#059669', fontWeight: 700 }}>
-                          {req.confidenceScore !== null && req.confidenceScore !== undefined ? `${req.confidenceScore}%` : 'Chưa đánh giá'}
+                          {req.confidenceScore !== null && req.confidenceScore !== undefined ? `${req.confidenceScore}%` : t('common.notEvaluated')}
                         </strong>
                       </span>
                     </div>
@@ -1319,7 +1330,7 @@ export const ApprovalsPage = () => {
                         }}
                       >
                         <Eye size={14} color="#475569" />
-                        <span>Chi tiết</span>
+                        <span>{t('common.details')}</span>
                       </button>
 
                       {/* Nút Xem Trước Diff (YAML) */}
@@ -1343,7 +1354,7 @@ export const ApprovalsPage = () => {
                         }}
                       >
                         <FileCode size={14} color="#0F766E" />
-                        <span>Xem trước Diff (YAML)</span>
+                        <span>{t('approvals.card.previewDiff')}</span>
                       </button>
                     </div>
 
@@ -1351,22 +1362,22 @@ export const ApprovalsPage = () => {
                       {isApproved ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#16A34A', fontWeight: 700, fontSize: '0.78125rem' }}>
                           <Check size={15} />
-                          <span>ĐÃ PHÊ DUYỆT & ĐANG THỰC THI</span>
+                          <span>{t('approvals.card.approvedStatus')}</span>
                         </div>
                       ) : isRejected ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontWeight: 700, fontSize: '0.78125rem' }}>
                           <X size={15} />
-                          <span>ĐÃ TỪ CHỐI YÊU CẦU</span>
+                          <span>{t('approvals.card.rejectedStatus')}</span>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                           <div style={{ fontSize: '0.71rem', color: isAutoDismissEnabled ? '#D97706' : '#64748B', fontStyle: 'italic' }}>
                             {isAutoDismissEnabled
-                              ? '⚡ Chế độ tự hủy đang bật: Sẽ tự thu hồi nếu sự cố tự phục hồi'
-                              : '🛡️ Đang giữ lệnh chờ ký duyệt (Chế độ thủ công)'}
+                              ? t('approvals.card.autoDismissHint')
+                              : t('approvals.card.manualHint')}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip="Chỉ SME Owner hoặc Quản trị viên mới có quyền phê duyệt HITL">
+                            <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip={t('approvals.card.approveDisabledTip')}>
                               <button
                                 type="button"
                                 onClick={() => handleApprove(req.id)}
@@ -1387,11 +1398,11 @@ export const ApprovalsPage = () => {
                                 }}
                               >
                                 <Check size={14} />
-                                <span>Phê Duyệt Ngay</span>
+                                <span>{t('approvals.card.approveBtn')}</span>
                               </button>
                             </PermissionGate>
 
-                            <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip="Chỉ SME Owner hoặc Quản trị viên mới có quyền từ chối HITL">
+                            <PermissionGate permission={PERMISSIONS.HITL_APPROVE} renderDisabled={true} disabledTooltip={t('approvals.card.rejectDisabledTip')}>
                               <button
                                 type="button"
                                 onClick={() => handleReject(req.id)}
@@ -1410,7 +1421,7 @@ export const ApprovalsPage = () => {
                                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FEF2F2')}
                                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                               >
-                                Từ chối yêu cầu này
+                                {t('approvals.card.rejectBtn')}
                               </button>
                             </PermissionGate>
                           </div>
@@ -1505,12 +1516,12 @@ export const ApprovalsPage = () => {
                 </div>
                 <div>
                   <h3 style={{ fontSize: '0.9125rem', fontWeight: 700, margin: 0, color: '#FFFFFF', letterSpacing: '-0.01em' }}>
-                    So Sánh Cấu Hình Can Thiệp (YAML Diff)
+                    {t('approvals.diffModal.title')}
                   </h3>
                   <div style={{ fontSize: '0.71875rem', color: 'rgba(255, 255, 255, 0.85)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontFamily: 'var(--font-mono)' }}>{activeDiffModal.diff.file}</span>
                     <span>•</span>
-                    <span>Hành động: <strong style={{ color: '#FFFFFF' }}>{activeDiffModal.actionName} ({activeDiffModal.actionCode})</strong></span>
+                    <span>{t('approvals.diffModal.actionLabel')} <strong style={{ color: '#FFFFFF' }}>{activeDiffModal.actionName} ({activeDiffModal.actionCode})</strong></span>
                   </div>
                 </div>
               </div>
@@ -1541,7 +1552,7 @@ export const ApprovalsPage = () => {
                 <div>
                   <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#DC2626', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#DC2626' }} />
-                    <span>CẤU HÌNH HIỆN TẠI (TRƯỚC KHI VÁ)</span>
+                    <span>{t('approvals.diffModal.beforeTitle')}</span>
                   </div>
                   <pre
                     style={{
@@ -1564,7 +1575,7 @@ export const ApprovalsPage = () => {
                 <div>
                   <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#16A34A', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16A34A' }} />
-                    <span>CẤU HÌNH ĐỀ XUẤT ÁP DỤNG (SAU PHÊ DUYỆT)</span>
+                    <span>{t('approvals.diffModal.afterTitle')}</span>
                   </div>
                   <pre
                     style={{
@@ -1610,7 +1621,7 @@ export const ApprovalsPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                Hủy bỏ
+                {t('common.cancelAction')}
               </button>
 
               <button
@@ -1632,7 +1643,7 @@ export const ApprovalsPage = () => {
                 }}
               >
                 <CheckCircle2 size={16} />
-                <span>Phê Duyệt & Tự Động Vá Cấu Hình</span>
+                <span>{t('approvals.diffModal.approveApplyBtn')}</span>
               </button>
             </div>
           </div>

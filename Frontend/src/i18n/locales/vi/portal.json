@@ -1,0 +1,613 @@
+{
+  "header": {
+    "centerTitle": "Trung Tâm Điều Khiển",
+    "navAria": "Mở menu điều hướng di động",
+    "collapseSidebar": "Thu gọn sidebar",
+    "expandSidebar": "Mở rộng sidebar",
+    "notificationsTitle": "Thông Báo Cá Nhân",
+    "titles": {
+      "dashboard": "Bảng Điều Khiển",
+      "companies": "Công Ty Của Tôi",
+      "profile": "Hồ Sơ Cá Nhân",
+      "security": "Bảo Mật Tài Khoản",
+      "preferences": "Tùy Chỉnh Cá Nhân",
+      "notifications": "Trung Tâm Thông Báo",
+      "activity": "Lịch Sử Hoạt Động",
+      "help": "Trợ Giúp & Hỗ Trợ"
+    }
+  },
+  "sidebar": {
+    "brandSubtitle": "Không gian cá nhân",
+    "centerSubtitle": "Trung Tâm Điều Khiển",
+    "backToPublic": "Quay về Trang chủ",
+    "ariaLabel": "Thanh điều hướng Tầng Cá Nhân",
+    "sectionTitle": "Chức Năng Cá Nhân",
+    "collapseLabel": "THU GỌN SIDEBAR",
+    "nav": {
+      "dashboard": "Bảng Điều Khiển",
+      "companies": "Công Ty Của Tôi",
+      "profile": "Hồ Sơ Cá Nhân",
+      "security": "Bảo Mật Tài Khoản",
+      "preferences": "Tùy Chỉnh Cá Nhân",
+      "notifications": "Thông Báo",
+      "activity": "Lịch Sử Hoạt Động",
+      "help": "Trợ Giúp & Hỗ Trợ"
+    }
+  },
+  "layout": {
+    "mobileMenuLabel": "Menu điều hướng di động",
+    "closeMobileMenu": "Đóng menu",
+    "closeNavMenu": "Đóng menu điều hướng"
+  },
+  "profileDropdown": {
+    "profile": "Hồ sơ cá nhân",
+    "portal": "Không gian cá nhân (Portal)",
+    "dashboard": "Bảng điều khiển vận hành",
+    "admin": "Quản trị hệ thống",
+    "security": "Bảo mật & 2FA",
+    "preferences": "Tùy chỉnh & Ngôn ngữ",
+    "logout": "Đăng xuất",
+    "defaultAdminName": "Quản Trị Viên",
+    "noSystemRole": "Chưa được gán System Role",
+    "switchToPortal": "Trung Tâm Điều Khiển",
+    "switchToDashboard": "Bảng Điều Khiển Doanh Nghiệp",
+    "switchToAdmin": "Bảng Quản Trị Hệ Thống",
+    "adminProfile": "Hồ Sơ Quản Trị Viên",
+    "viewProfile": "Xem Hồ Sơ Cá Nhân",
+    "securityAndPassword": "Bảo Mật & Đổi Mật Khẩu",
+    "auditLogs": "Nhật Ký Kiểm Toán SHA-256",
+    "systemSettings": "Thiết Lập Hệ Thống",
+    "accountSettings": "Cài Đặt Tài Khoản",
+    "logoutAdmin": "Đăng Xuất Khỏi Admin",
+    "logoutAccount": "Đăng Xuất Tài Khoản",
+    "ariaAdminMenu": "Menu hồ sơ quản trị viên",
+    "ariaUserMenu": "Menu hồ sơ người dùng",
+    "ariaAccountOptions": "Tùy chọn tài khoản"
+  },
+  "dashboard": {
+    "errors": {
+      "loadFailedFallback": "Không thể kết nối đến máy chủ hoặc cơ sở dữ liệu",
+      "acceptInviteFailed": "Không thể chấp nhận lời mời",
+      "rejectInviteFailed": "Không thể từ chối lời mời"
+    },
+    "errorBanner": {
+      "title": "Không thể tải dữ liệu từ máy chủ hoặc cơ sở dữ liệu",
+      "retry": "Thử lại"
+    },
+    "invitations": {
+      "bannerTitle": "Bạn có {{count}} lời mời tham gia Company đang chờ phản hồi",
+      "viewDetails": "Xem chi tiết →",
+      "fromPrefix": "Từ",
+      "roleLabel": "Vai trò:",
+      "accept": "Đồng ý",
+      "reject": "Từ chối"
+    },
+    "kpi": {
+      "totalCompanies": "Tổng Company Tham Gia",
+      "checking": "Đang kiểm tra...",
+      "activeCompaniesSub": "{{count}} công ty đang kích hoạt",
+      "activeCompanies": "Company Đang Hoạt Động",
+      "syncing": "Đang đồng bộ...",
+      "activeRatio": "{{active}}/{{total}} công ty đang hoạt động",
+      "noActiveCompanies": "Chưa có công ty nào kích hoạt",
+      "unreadNotifs": "Thông Báo Chưa Đọc",
+      "unreadCountSub": "{{count}} thông báo mới cần xem",
+      "allReadSub": "Đã xem hết toàn bộ thông báo",
+      "accountSecurity": "Bảo Mật Tài Khoản",
+      "twoFaEnabled": "Đã bật 2FA",
+      "twoFaDisabled": "Chưa bật 2FA",
+      "twoFaProtectedSub": "Tài khoản được bảo vệ lớp kép",
+      "twoFaRecommendSub": "Khuyến nghị kích hoạt TOTP"
+    },
+    "companies": {
+      "title": "Công Ty Của Tôi",
+      "subtitle": "Danh sách các tổ chức bạn đang nắm giữ vai trò",
+      "viewAll": "Xem tất cả ({{count}})",
+      "loading": "Đang tải danh sách Company...",
+      "errorTitle": "Không thể hiển thị Company",
+      "errorDesc": "Đã xảy ra lỗi khi truy vấn backend. Vui lòng bấm \"Thử lại\" bên trên.",
+      "emptyTitle": "Chưa tham gia Company nào",
+      "emptyDesc": "Hiện tại bạn chưa thuộc Company nào hoặc chưa được cấp quyền truy cập. Hãy tạo Company nếu bạn có quyền hoặc liên hệ quản trị viên để được mời tham gia.",
+      "createNew": "Tạo Company Mới",
+      "infraSummary": "{{clusters}} Cụm K8s • {{workloads}} Workloads",
+      "enterWorkspace": "Vào Workspace"
+    },
+    "rightPanel": {
+      "tabNotifications": "Thông Báo",
+      "tabActivity": "Hoạt Động",
+      "viewAllNotifications": "Xem tất cả thông báo →",
+      "viewActivityLog": "Xem nhật ký →",
+      "emptyNotifications": "Chưa có thông báo mới nào",
+      "emptyActivities": "Chưa có hoạt động gần đây"
+    }
+  },
+  "companies": {
+    "title": "Công Ty Của Tôi",
+    "subtitle": "Quản trị các tổ chức bạn đang trực thuộc, chuyển đổi không gian làm việc hoặc tạo mới công ty.",
+    "createButton": "Tạo Công Ty Mới",
+    "tabs": {
+      "joined": "Công Ty Đang Tham Gia ({{count}})",
+      "invitations": "Lời Mời Đang Chờ ({{count}})"
+    },
+    "filters": {
+      "searchPlaceholder": "Tìm kiếm theo tên công ty hoặc slug...",
+      "allRoles": "Tất cả vai trò",
+      "roleOwner": "SME Owner (Chủ sở hữu)",
+      "roleDevops": "DevOps Lead",
+      "roleViewer": "Viewer (Người xem)"
+    },
+    "card": {
+      "statusActive": "Đang hoạt động",
+      "statusSuspended": "Tạm khóa",
+      "yourRole": "Vai trò của bạn:",
+      "k8sInfra": "Hạ tầng K8s:",
+      "infraValue": "{{clusters}} Cụm • {{workloads}} Workloads",
+      "members": "Thành viên:",
+      "membersCount": "{{count}} người",
+      "enterWorkspace": "Vào Workspace",
+      "leaveTooltip": "Rời khỏi Company này"
+    },
+    "empty": {
+      "noMatchTitle": "Không tìm thấy Company nào phù hợp",
+      "noJoinedTitle": "Chưa tham gia Company nào",
+      "noMatchDesc": "Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc vai trò.",
+      "noJoinedDesc": "Hiện tại bạn chưa thuộc Company nào hoặc chưa được cấp quyền truy cập. Hãy tạo Company nếu bạn có quyền hoặc liên hệ quản trị viên để được mời tham gia.",
+      "noInvitationsTitle": "Không có lời mời nào đang chờ",
+      "noInvitationsDesc": "Khi một doanh nghiệp mời email của bạn tham gia dự án, lời mời sẽ hiển thị tại đây để bạn xác nhận."
+    },
+    "invitation": {
+      "fromPrefix": "Lời mời từ:",
+      "assignedRole": "Vai trò được chỉ định:",
+      "expiresAt": "Hạn chót phản hồi:",
+      "accept": "Chấp Nhận Tham Gia",
+      "reject": "Từ Chối"
+    },
+    "createModal": {
+      "title": "Tạo Mới Công Ty",
+      "nameRequired": "Vui lòng nhập tên công ty",
+      "createFailed": "Lỗi khi tạo công ty",
+      "nameLabel": "Tên Doanh Nghiệp / Công Ty *",
+      "namePlaceholder": "Ví dụ: TechHub Vietnam Co., Ltd",
+      "slugLabel": "Định danh Slug URL (Hệ thống tự sinh) *",
+      "domainLabel": "Tên Miền Doanh Nghiệp (Domain)",
+      "domainPlaceholder": "Ví dụ: techhub.vn",
+      "descLabel": "Mô Tả Ngắn",
+      "descPlaceholder": "Lĩnh vực kinh doanh hoặc mục đích cụm máy chủ...",
+      "cancel": "Hủy Bỏ",
+      "confirm": "Xác Nhận Tạo"
+    },
+    "leaveModal": {
+      "title": "Xác Nhận Rời Company",
+      "confirmPrefix": "Bạn có chắc chắn muốn rời khỏi tổ chức",
+      "confirmSuffix": "? Bạn sẽ mất toàn bộ quyền truy cập vào các cụm K8s và tài nguyên của công ty này.",
+      "cancel": "Hủy",
+      "confirm": "Xác Nhận Rời",
+      "leaveFailed": "Không thể rời công ty"
+    },
+    "errors": {
+      "acceptInviteFailed": "Không thể chấp nhận lời mời"
+    }
+  },
+  "profile": {
+    "title": "Hồ Sơ Cá Nhân",
+    "subtitle": "Xem và điều chỉnh thông tin định danh người dùng, hình ảnh đại diện và vai trò thành viên.",
+    "defaultAdminInitials": "Quản Trị Viên",
+    "noSystemRole": "Chưa được gán System Role",
+    "defaultUserName": "Người Dùng",
+    "defaultJobTitle": "Trưởng nhóm SRE & DevOps Lead",
+    "changeAvatarTitle": "Thay đổi ảnh đại diện",
+    "statusLabel": "Trạng thái tài khoản:",
+    "statusActive": "KÍCH HOẠT (ACTIVE)",
+    "highestRoleLabel": "Vai trò cao nhất:",
+    "joinedDateLabel": "Ngày tham gia:",
+    "lastLoginLabel": "Đăng nhập gần nhất:",
+    "formTitle": "Thông Tin Định Danh & Liên Hệ",
+    "formSubtitle": "Cập nhật thông tin để các thành viên trong Company nhận diện và phối hợp công việc",
+    "fields": {
+      "fullName": "Họ và Tên *",
+      "email": "Địa Chỉ Email (Tên đăng nhập)",
+      "phone": "Số Điện Thoại",
+      "phonePlaceholder": "Ví dụ: 0912345678",
+      "jobTitle": "Chức Danh Chuyên Môn (Job Title)",
+      "jobTitlePlaceholder": "Ví dụ: Senior DevOps Engineer",
+      "department": "Phòng Ban / Đơn Vị Phụ Trách",
+      "bio": "Giới Thiệu Ngắn (Bio)"
+    },
+    "submit": "Lưu Thay Đổi Hồ Sơ",
+    "submitting": "Đang Lưu Hồ Sơ...",
+    "messages": {
+      "invalidImage": "Vui lòng chọn file hình ảnh hợp lệ (PNG, JPG, WEBP).",
+      "imageTooLarge": "Dung lượng ảnh đại diện không được vượt quá 3MB.",
+      "fullNameRequired": "Họ và tên không được để trống.",
+      "savedSuccess": "Đã cập nhật thông tin hồ sơ cá nhân thành công!",
+      "savedToast": "Hồ sơ đã được lưu thành công vào cơ sở dữ liệu!",
+      "saveFailed": "Không thể lưu thông tin hồ sơ"
+    }
+  },
+  "security": {
+    "title": "Bảo Mật Tài Khoản",
+    "subtitle": "Thiết lập mật khẩu mạnh, kích hoạt xác thực hai yếu tố và quản lý các phiên đăng nhập đang hoạt động.",
+    "password": {
+      "title": "Đổi Mật Khẩu Đăng Nhập",
+      "subHasPassword": "Khuyến nghị đổi mật khẩu tối thiểu 90 ngày một lần",
+      "subGoogleOAuth": "Phương thức xác thực qua Google OAuth",
+      "googleTitle": "Tài khoản được đăng nhập bằng Google",
+      "googleDesc": "Tài khoản của bạn đang được xác thực trực tiếp qua Google OAuth nên chưa thiết lập mật khẩu đăng nhập cục bộ. Vui lòng quản lý mật khẩu và bảo mật đăng nhập tại Cài đặt Tài khoản Google của bạn.",
+      "oldLabel": "Mật Khẩu Hiện Tại *",
+      "oldPlaceholder": "Nhập mật khẩu cũ của bạn",
+      "newLabel": "Mật Khẩu Mới (Tối thiểu 8 ký tự) *",
+      "newPlaceholder": "Nhập mật khẩu mới an toàn",
+      "confirmLabel": "Xác Nhận Mật Khẩu Mới *",
+      "confirmPlaceholder": "Nhập lại mật khẩu mới",
+      "strengthLabel": "Độ mạnh mật khẩu:",
+      "strengthEmpty": "Trống",
+      "strengthWeak": "Yếu",
+      "strengthFair": "Trung bình",
+      "strengthGood": "Khá",
+      "strengthStrong": "Mạnh (Tốt nhất)",
+      "updating": "Đang cập nhật...",
+      "submit": "Cập Nhật Mật Khẩu",
+      "mismatch": "Mật khẩu xác nhận không trùng khớp!",
+      "tooShort": "Mật khẩu mới phải có ít nhất 8 ký tự!",
+      "success": "Đổi mật khẩu thành công! Hãy lưu lại mật khẩu mới.",
+      "failed": "Lỗi khi đổi mật khẩu"
+    },
+    "twoFactor": {
+      "title": "Xác Thực Hai Yếu Tố (2FA)",
+      "subtitle": "Bảo vệ tài khoản qua ứng dụng Google Authenticator hoặc OTP",
+      "enabledTitle": "2FA Đang Được Bật",
+      "disabledTitle": "2FA Đang Bị Tắt",
+      "enabledDesc": "Mỗi lần đăng nhập đều yêu cầu mã xác thực OTP 6 số",
+      "disabledDesc": "Tài khoản chưa có lớp bảo vệ thứ 2, có nguy cơ bị xâm nhập",
+      "badgeProtected": "BẢO VỆ TỐI ĐA",
+      "badgeRisk": "NGUY HIỂM",
+      "info": "Khi kích hoạt 2FA, bên cạnh mật khẩu bạn sẽ cần nhập thêm mã số từ ứng dụng xác thực trên điện thoại (Google Authenticator, Microsoft Authenticator hoặc Authy).",
+      "disableBtn": "Vô Hiệu Hóa 2FA",
+      "enableBtn": "Kích Hoạt 2FA Ngay",
+      "errors": {
+        "setupInit": "Không thể khởi tạo mã QR xác thực",
+        "otpLength": "Vui lòng nhập đầy đủ 6 chữ số OTP từ ứng dụng",
+        "otpInvalid": "Mã xác thực 2FA không chính xác hoặc đã hết hạn",
+        "disableFailed": "Không thể vô hiệu hóa 2FA"
+      }
+    },
+    "sessions": {
+      "title": "Các Phiên Đăng Nhập Đang Hoạt Động",
+      "connectedBadge": "{{count}} phiên đang kết nối",
+      "singleSessionDesc": "Bảo vệ an toàn: Tài khoản hiện chỉ duy trì 1 phiên đăng nhập duy nhất từ thiết bị bạn đang sử dụng.",
+      "multiSessionDesc": "Danh sách các thiết bị và trình duyệt đang lưu phiên đăng nhập của tài khoản bạn.",
+      "revokeOthersBtn": "Đăng Xuất Khỏi Thiết Bị Khác ({{count}})",
+      "currentDeviceBadge": "Thiết bị này",
+      "noOtherSessions": "Tài khoản của bạn chỉ đang đăng nhập duy nhất trên thiết bị này, không có phiên đăng nhập lạ nào khác.",
+      "revokedSuccess": "Đã đăng xuất thành công khỏi tất cả các thiết bị khác!"
+    },
+    "loginHistory": {
+      "title": "Lịch Sử Đăng Nhập Gần Đây",
+      "subtitle": "Ghi nhận chi tiết thời gian, địa chỉ IP và trạng thái đăng nhập từ cơ sở dữ liệu kiểm toán hệ thống",
+      "syncing": "Đang đồng bộ...",
+      "refreshTitle": "Làm mới lịch sử từ cơ sở dữ liệu",
+      "refresh": "Làm Mới",
+      "colTime": "Thời Gian",
+      "colMethod": "Phương Thức",
+      "colIp": "Địa Chỉ IP",
+      "colLocation": "Vị Trí Ước Tính",
+      "colDevice": "Thiết Bị",
+      "colStatus": "Trạng Thái",
+      "loadingRow": "Đang đồng bộ lịch sử đăng nhập từ cơ sở dữ liệu...",
+      "emptyRow": "Chưa có bản ghi lịch sử đăng nhập nào được ghi nhận.",
+      "statusSuccess": "Thành công",
+      "statusFailed": "Thất bại",
+      "perPageLabel": "Hiển thị mỗi trang:",
+      "perPageAria": "Hiển thị mỗi trang",
+      "pageInfo": "Trang {{current}} trên tổng {{total}}",
+      "prev": "‹ Trước",
+      "next": "Sau ›"
+    },
+    "setupModal": {
+      "title": "Kích Hoạt Xác Thực 2FA",
+      "descPrefix": "Mở ứng dụng",
+      "descOr": "hoặc",
+      "descSuffix": "trên điện thoại, quét mã QR dưới đây để thêm tài khoản:",
+      "manualKeyLabel": "Khóa thiết lập thủ công",
+      "copied": "Đã chép",
+      "copy": "Sao chép",
+      "otpLabel": "Nhập mã 6 số từ ứng dụng xác thực",
+      "cancel": "Hủy bỏ",
+      "confirm": "Xác Nhận & Kích Hoạt"
+    },
+    "backupModal": {
+      "title": "Kích Hoạt 2FA Thành Công!",
+      "desc": "Hãy lưu lại 8 mã dự phòng dưới đây. Mỗi mã có thể dùng 1 lần để đăng nhập khi bạn không mang theo điện thoại.",
+      "copiedAll": "Đã sao chép tất cả",
+      "copyAll": "Sao chép 8 mã",
+      "done": "Đã Lưu & Hoàn Tất"
+    },
+    "disableModal": {
+      "title": "Vô Hiệu Hóa 2FA",
+      "descPassword": "Bạn có chắc chắn muốn tắt Xác thực 2 Yếu tố? Tài khoản của bạn sẽ chỉ được bảo vệ bởi mật khẩu thông thường.",
+      "descGoogle": "Bạn có chắc chắn muốn tắt Xác thực 2 Yếu tố? Tài khoản của bạn sẽ chỉ được bảo vệ bởi xác thực Google.",
+      "labelPasswordOrOtp": "Mật khẩu tài khoản hoặc Mã OTP 2FA (6 số)",
+      "labelOtpOnly": "Mã OTP 2FA (6 số)",
+      "placeholderPasswordOrOtp": "Nhập mật khẩu hoặc mã OTP 6 số...",
+      "placeholderOtpOnly": "Nhập mã OTP 6 số từ ứng dụng xác thực...",
+      "cancel": "Hủy bỏ",
+      "confirm": "Xác Nhận Tắt 2FA"
+    }
+  },
+  "preferences": {
+    "title": "Tùy Chỉnh Cá Nhân",
+    "subtitle": "Thiết lập ngôn ngữ hiển thị và kênh nhận thông báo cá nhân.",
+    "savedMessage": "Đã lưu tùy chỉnh cá nhân thành công! Cài đặt đã được áp dụng.",
+    "languageSection": {
+      "title": "1. Ngôn Ngữ Giao Diện",
+      "subtitle": "Chọn ngôn ngữ sử dụng xuyên suốt toàn bộ các menu, nút bấm, thông báo và tài liệu",
+      "viLabel": "Tiếng Việt",
+      "viSub": "Ngôn ngữ mặc định cho nền tảng và người dùng Việt Nam",
+      "enLabel": "English (US)",
+      "enSub": "Global cloud operations standard terminology"
+    },
+    "notificationsSection": {
+      "title": "2. Tùy Chọn Thông Báo Cá Nhân",
+      "subtitle": "Bật/tắt từng loại tin và kênh nhận (In-App và Email). Các luật cảnh báo CPU, RAM, Pod lỗi vẫn áp dụng theo Company Workspace.",
+      "items": {
+        "inApp": {
+          "title": "Thông báo trong ứng dụng (In-App)",
+          "desc": "Hiển thị badge đỏ và danh sách tại biểu tượng quả chuông trên thanh Header"
+        },
+        "email": {
+          "title": "Gửi thông báo qua Email",
+          "desc": "Chuyển tiếp bản tin khẩn cấp tới địa chỉ email đăng ký tài khoản"
+        },
+        "companyInvites": {
+          "title": "Lời mời tham gia Company",
+          "desc": "Nhận thông báo khi được quản trị viên mời vào tổ chức doanh nghiệp mới"
+        },
+        "roleChanges": {
+          "title": "Thay đổi quyền hoặc vai trò",
+          "desc": "Nhận cảnh báo khi vai trò của bạn được nâng cấp (SME Owner, DevOps Lead, Viewer)"
+        },
+        "securityAlerts": {
+          "title": "Đăng nhập bất thường & Cảnh báo bảo mật",
+          "desc": "Cảnh báo tức thì khi phát hiện đăng nhập từ IP lạ hoặc thay đổi mật khẩu/2FA"
+        },
+        "systemMaintenance": {
+          "title": "Thông báo hệ thống hoặc bảo trì",
+          "desc": "Nhận lịch bảo trì máy chủ và phát hành phiên bản động cơ SelfAI mới"
+        }
+      }
+    },
+    "saveButton": "Lưu Tùy Chỉnh Cá Nhân"
+  },
+  "notifications": {
+    "title": "Trung Tâm Thông Báo Cá Nhân",
+    "subtitle": "Xem thông báo lời mời Company, cảnh báo đăng nhập và cập nhật hệ thống. Bạn có {{count}} tin chưa đọc.",
+    "markAllRead": "Đánh Dấu Tất Cả Đã Đọc",
+    "settingsBtn": "Cài Đặt Nhận Tin",
+    "types": {
+      "INFRASTRUCTURE": "Sự Cố K8s",
+      "SECURITY": "Bảo Mật",
+      "BROADCAST": "Phát Thanh Admin",
+      "INVITATION": "Lời Mời Company",
+      "ROLE": "Thay Đổi Vai Trò",
+      "SYSTEM": "Hệ Thống Nền Tảng"
+    },
+    "filters": {
+      "label": "Bộ lọc:",
+      "all": "Tất cả ({{count}})",
+      "unread": "Chưa đọc ({{count}})",
+      "read": "Đã đọc ({{count}})",
+      "typeAll": "Tất cả loại thông báo",
+      "typeInfrastructure": "Sự cố Hạ tầng K8s (Khẩn cấp)",
+      "typeBroadcast": "Phát thanh Quản trị viên",
+      "typeSystem": "Hệ thống AI / Nền tảng",
+      "typeSecurity": "Cảnh báo bảo mật",
+      "typeInvitation": "Lời mời Company",
+      "typeRole": "Thay đổi vai trò"
+    },
+    "item": {
+      "newBadge": "MỚI",
+      "companyLabel": "Công ty:",
+      "clusterLabel": "Cụm K8s:",
+      "serviceLabel": "Dịch vụ:",
+      "viewIncident": "Xem Sự Cố",
+      "viewInvitation": "Xem Lời Mời Tại Company",
+      "markReadTitle": "Đánh dấu đã đọc"
+    },
+    "empty": {
+      "title": "Không có thông báo nào",
+      "desc": "Bạn đã xem hết toàn bộ thông báo hoặc không có tin phù hợp với bộ lọc hiện tại."
+    },
+    "settingsModal": {
+      "title": "Cài Đặt Nhận Thông Báo",
+      "savedSuccess": "Đã lưu cài đặt thông báo thành công!",
+      "webNotify": "Thông báo trên giao diện Website (In-App)",
+      "emailNotify": "Gửi thông báo qua Email đăng ký",
+      "companyInvitations": "Thông báo lời mời tham gia Company mới",
+      "securityAlerts": "Cảnh báo đăng nhập lạ và thay đổi bảo mật",
+      "criticalAlerts": "Cảnh báo sự cố hạ tầng K8s khẩn cấp",
+      "weeklyDigest": "Bản tin tổng kết hoạt động hàng tuần",
+      "close": "Đóng",
+      "save": "Lưu Cài Đặt"
+    }
+  },
+  "activity": {
+    "title": "Lịch Sử Hoạt Động Cá Nhân",
+    "subtitle": "Nhật ký kiểm toán toàn diện ghi nhận các thao tác đăng nhập, đổi bảo mật, xoay vòng Token và cụm K8s của bạn.",
+    "refreshTitle": "Làm mới dữ liệu",
+    "refresh": "Làm mới",
+    "exportCsv": "Xuất Báo Cáo CSV",
+    "csvHeader": "ID,Hành động,Mô tả,Công ty,Cụm K8s,Thời gian,IP,Danh mục,Trạng thái\n",
+    "searchPlaceholder": "Tìm theo hành động, IP, chi tiết sự kiện...",
+    "categories": {
+      "all": "Tất cả hành động ({{count}})",
+      "auth": "Đăng nhập / Đăng xuất",
+      "profile": "Cập nhật hồ sơ",
+      "company": "Tổ chức & Cụm K8s",
+      "companyBadge": "Tổ chức & Hạ tầng",
+      "security": "Bảo mật & Token Agent",
+      "securityBadge": "Bảo mật & Token",
+      "generalBadge": "Chung"
+    },
+    "table": {
+      "colAction": "Hành Động & Chi Tiết",
+      "colCategory": "Phân Loại",
+      "colIp": "Địa Chỉ IP",
+      "colTime": "Thời Gian Thực Thi",
+      "colStatus": "Trạng Thái",
+      "clusterPrefix": "Cụm: {{name}}",
+      "statusFailed": "Thất bại",
+      "statusCompleted": "Hoàn thành",
+      "itemLabel": "hoạt động"
+    },
+    "empty": {
+      "title": "Không có hoạt động nào",
+      "desc": "Không có sự kiện phù hợp với từ khóa hoặc bộ lọc đã chọn."
+    }
+  },
+  "help": {
+    "title": "Trung Tâm Trợ Giúp & Hướng Dẫn Kỹ Thuật",
+    "subtitle": "Tra cứu tài liệu quy trình vận hành và giải đáp các câu hỏi thường gặp về hệ thống giám sát eBPF & Tự phục hồi AI.",
+    "tabs": {
+      "docs": "1. Tài Liệu Hướng Dẫn Kỹ Thuật",
+      "faq": "2. Câu Hỏi Thường Gặp (FAQ)"
+    },
+    "docs": {
+      "tocTitle": "Quy Trình Chuẩn SelfAI",
+      "stepsTitle": "Các bước thực hiện cụ thể:",
+      "commandTitle": "Lệnh thực thi mẫu (Command-line):",
+      "tipsTitle": "Kinh nghiệm xử lý & Lỗi thường gặp:"
+    },
+    "faq": {
+      "searchPlaceholder": "Tìm kiếm câu hỏi (Agent, Metrics, RCA, Self-Healing, Mời thành viên)...",
+      "categories": {
+        "all": "Tất cả danh mục câu hỏi",
+        "agent": "Agent & Kết Nối",
+        "infra": "Hạ Tầng & Metrics",
+        "ai": "AI & Tự Phục Hồi",
+        "org": "Tổ Chức & Thành Viên",
+        "rbac": "Phân Quyền & Bảo Mật"
+      }
+    },
+    "docsData": {
+      "doc-org-invite": {
+        "title": "1. Tạo Company và Mời Thành Viên",
+        "category": "Doanh Nghiệp & Tổ Chức",
+        "summary": "Hướng dẫn khởi tạo Company, phân quyền vai trò (Owner, DevOps, Viewer) và gửi email lời mời.",
+        "steps": [
+          "Bước 1: Truy cập mục \"Công Ty Của Tôi\" trong Cổng Cá Nhân hoặc vào Bàn điều khiển Doanh Nghiệp.",
+          "Bước 2: Bấm nút \"+ Tạo Company Mới\", điền tên công ty và định danh slug URL.",
+          "Bước 3: Tại tab \"Thành Viên & Phân Quyền\", chọn \"+ Mời Thành Viên\", nhập email công vụ và chỉ định vai trò (SME_OWNER, DEVOPS hoặc VIEWER).",
+          "Bước 4: Thành viên nhận email thông báo và có thể bấm \"Chấp Nhận\" trực tiếp tại Trung tâm thông báo."
+        ],
+        "tips": "Lưu ý: Chỉ tài khoản nắm giữ vai trò SME_OWNER hoặc Quản trị viên mới có quyền mời hoặc thu hồi quyền của thành viên."
+      },
+      "doc-agent-k8s": {
+        "title": "2. Đăng Ký Agent và Kết Nối Kubernetes Cluster",
+        "category": "Hạ Tầng & Kubernetes",
+        "summary": "Cách cài đặt Helm chart selfheal-agent trên cụm K8s (AWS EKS, GKE hoặc On-Premise bare-metal).",
+        "steps": [
+          "Bước 1: Truy cập trang \"Cụm K8s\" (/dashboard/clusters) -> bấm \"Đăng Ký Cụm Mới\".",
+          "Bước 2: Đặt tên cụm (ví dụ: `k8s-prod-hn-01`) và chọn nhà cung cấp hạ tầng.",
+          "Bước 3: Sao chép lệnh cài đặt Helm tự động do hệ thống sinh ra kèm Agent Token bí mật.",
+          "Bước 4: Chạy lệnh `helm install selfheal-agent ./charts/selfheal-agent --set clusterId=...` trên máy tính quản trị viên."
+        ],
+        "tips": "Yêu cầu nhân Linux kernel >= 5.8 với tính năng BPF CO-RE (Compile Once - Run Everywhere) được kích hoạt."
+      },
+      "doc-agent-health": {
+        "title": "3. Kiểm Tra Agent Đã Kết Nối Thành Công Chưa",
+        "category": "Hạ Tầng & Kubernetes",
+        "summary": "Xác thực trạng thái eBPF Telemetry Probe, heartbeat WebSocket và luồng dữ liệu thời gian thực.",
+        "steps": [
+          "Bước 1: Mở danh sách Cụm K8s hoặc trang Quản Lý Tác Tử (/dashboard/agents).",
+          "Bước 2: Tìm tên Agent tương ứng, kiểm tra badge trạng thái màu xanh lá \"100% ONLINE\".",
+          "Bước 3: Xem chỉ số Heartbeat gần nhất (phải có độ trễ dưới 5 giây).",
+          "Bước 4: Nếu trạng thái hiển thị \"DEGRADED\" hoặc \"DISCONNECTED\", kiểm tra firewall egress port 443 và 5000."
+        ],
+        "tips": "Có thể chạy lệnh `kubectl logs -n selfheal-system daemonset/selfheal-agent` để xem log khởi động trực tiếp."
+      },
+      "doc-metrics-ai": {
+        "title": "4. Xem Metrics, Logs, Events và Dự Đoán AI",
+        "category": "AI & Giám Sát",
+        "summary": "Khai thác động cơ AI chuỗi thời gian để phát hiện sớm quá tải CPU, rò rỉ RAM và xung đột Pod.",
+        "steps": [
+          "Bước 1: Vào trang \"Chỉ Số Tài Nguyên\" (/dashboard/monitoring/metrics) để xem biểu đồ CPU, RAM, Network I/O.",
+          "Bước 2: Mở trang \"Dự Báo Rủi Ro AI\" (/dashboard/ai/predictions) để xem các cảnh báo rủi ro bão hòa sớm.",
+          "Bước 3: Xem độ dốc tăng trưởng (Slope rate) và thời gian còn lại trước khi xảy ra OOM (Out Of Memory)."
+        ],
+        "tips": "Mô hình AI dự báo trước nguy cơ sự cố từ 15 đến 45 phút, giúp kỹ sư có đủ thời gian chuẩn bị phương án dự phòng."
+      },
+      "doc-rca": {
+        "title": "5. Xem Phân Tích Nguyên Nhân Gốc Rễ (RCA)",
+        "category": "AI & Sự Cố",
+        "summary": "Sử dụng mô hình AI đồ thị nhân quả để xác định chính xác Pod hoặc service gây lỗi dây chuyền.",
+        "steps": [
+          "Bước 1: Khi một sự cố được kích hoạt, truy cập trang \"Quản Lý Sự Cố\" -> chọn tab \"Phân Tích Nguyên Nhân (RCA)\".",
+          "Bước 2: Xem sơ đồ cây phân tích liên kết (Dependency Call Graph) và điểm số độ tin cậy Confidence Score (ví dụ: 94.2%).",
+          "Bước 3: Xem tóm tắt đề xuất hành động: ví dụ \"Tăng memory limit từ 512Mi lên 1Gi\" hoặc \"Restart Pod payment-gw-7b9\"."
+        ],
+        "tips": "RCA tự động liên kết các bản ghi Kubernetes Events (Evicted, Unhealthy, BackOff) với dữ liệu viễn trắc để đưa ra kết luận."
+      },
+      "doc-self-healing": {
+        "title": "6. Thực Hiện và Theo Dõi Tự Phục Hồi (Self-Healing)",
+        "category": "Tự Phục Hồi (Self-Healing)",
+        "summary": "Thiết lập chính sách tự sửa chữa (Auto) và quy trình phê duyệt khẩn cấp (Human-in-the-Loop).",
+        "steps": [
+          "Bước 1: Tại trang \"Chính Sách Tự Động\" (/dashboard/self-healing/policies), kích hoạt các luật như Restart Pod, Scale Up Replica.",
+          "Bước 2: Đối với các hành động rủi ro cao (Drain Node, Rollback Deployment), hệ thống sẽ tạo yêu cầu tại \"Cổng Phê Duyệt (HITL)\".",
+          "Bước 3: SME Owner hoặc DevOps Lead kiểm tra lý do và bấm \"Chấp Thuận Hành Động\".",
+          "Bước 4: Theo dõi kết quả tại \"Lịch Sử Phục Hồi\" để đảm bảo hệ thống đã trở lại trạng thái lành mạnh (Healthy)."
+        ],
+        "tips": "Cơ chế Safe Remediation Rate-Limiter sẽ tự động tạm dừng nếu cùng một hành động thất bại quá 3 lần liên tiếp."
+      },
+      "doc-rbac-security": {
+        "title": "7. Cấu Hình Quyền và Chính Sách An Toàn",
+        "category": "Bảo Mật & Phân Quyền",
+        "summary": "Nguyên tắc đặc quyền tối thiểu (Least Privilege) giữa Super Admin, Admin, SME Owner, DevOps và Viewer.",
+        "steps": [
+          "Bước 1: Quản trị viên Tối cao thiết lập ma trận vai trò tại Cổng Quản Trị Hệ Thống (/admin/roles).",
+          "Bước 2: Phân tách rõ ràng quyền nền tảng (Platform) và quyền trong nội bộ doanh nghiệp (Tenant).",
+          "Bước 3: Kiểm toán tất cả các lượt gán quyền qua \"Nhật Ký Kiểm Toán SHA-256\" (/admin/audit-logs)."
+        ],
+        "tips": "Không cấp quyền SUPER_ADMIN cho các kỹ sư chỉ phụ trách một tổ chức doanh nghiệp đơn lẻ."
+      }
+    },
+    "faqsData": {
+      "faq-1": {
+        "category": "Agent & Kết Nối",
+        "question": "Vì sao Agent không kết nối được Backend?",
+        "answer": "Nguyên nhân thường gặp nhất là do firewall chặn cổng WebSocket (/api/v1/telemetry/ws) hoặc Agent Token bị hết hạn. Hãy kiểm tra lại outbound kết nối HTTPS/WSS từ cụm K8s tới domain Backend và tạo lại Token mới tại trang Quản Lý Tác Tử.",
+        "actionText": "Kiểm Tra Danh Sách Tác Tử"
+      },
+      "faq-2": {
+        "category": "Hạ Tầng & Metrics",
+        "question": "Vì sao Cluster không hiển thị Metrics?",
+        "answer": "Hệ thống yêu cầu DaemonSet selfheal-agent chạy ít nhất trên 1 worker node và kubelet cAdvisor hoạt động bình thường. Nếu cụm dùng OpenShift hoặc Bottlerocket, vui lòng kiểm tra SELinux policy cho eBPF socket.",
+        "actionText": "Xem Chi Tiết Cụm K8s"
+      },
+      "faq-3": {
+        "category": "AI & Tự Phục Hồi",
+        "question": "Tại sao AI dự đoán bất thường nhưng không tự phục hồi?",
+        "answer": "Hành động tự phục hồi chỉ được kích hoạt tự động nếu chính sách tương ứng được đặt ở chế độ \"AUTOMATIC\" và điểm tin cậy AI vượt ngưỡng threshold (mặc định > 85%). Nếu chính sách đặt ở chế độ \"HITL_REQUIRED\", hành động sẽ chờ bạn bấm phê duyệt.",
+        "actionText": "Tới Cổng Phê Duyệt (HITL)"
+      },
+      "faq-4": {
+        "category": "Tự Phục Hồi (Self-Healing)",
+        "question": "Vì sao hành động Restart Pod bị từ chối?",
+        "answer": "Hệ thống áp dụng cơ chế tự vệ (Circuit Breaker): Nếu số lượng Pod lành mạnh còn lại trong Deployment thấp hơn cấu hình PodDisruptionBudget (PDB) hoặc đã restart quá 5 lần trong 1 giờ qua, hành động tự động sẽ bị chặn để tránh gián đoạn dịch vụ toàn diện.",
+        "actionText": "Xem Chính Sách Tự Động"
+      },
+      "faq-5": {
+        "category": "Tổ Chức & Thành Viên",
+        "question": "Làm thế nào để mời thành viên vào Company?",
+        "answer": "Bạn vào Bàn điều khiển Doanh Nghiệp -> mục \"Tổ Chức Doanh Nghiệp\" -> chọn tab \"Thành Viên & Phân Quyền\" -> bấm nút \"+ Mời Thành Viên\". Nhập email và chọn vai trò mong muốn. Người được mời sẽ nhận thông báo tại Cổng Cá Nhân để chấp nhận.",
+        "actionText": "Quản Lý Thành Viên Company"
+      },
+      "faq-6": {
+        "category": "Phân Quyền & Bảo Mật",
+        "question": "Làm thế nào để thu hồi quyền của một thành viên?",
+        "answer": "Tại danh sách thành viên của Company, tìm người cần thu hồi, bấm nút menu dấu ba chấm -> chọn \"Xóa Khỏi Tổ Chức\" hoặc \"Đổi Vai Trò\" về Viewer. Quyền truy cập hạ tầng và tài nguyên sẽ bị vô hiệu hóa ngay lập tức.",
+        "actionText": "Xem Danh Sách Thành Viên"
+      }
+    }
+  }
+}

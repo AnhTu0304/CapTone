@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import { clusterService } from '../../../services/clusterService';
@@ -35,6 +37,8 @@ import {
 } from 'lucide-react';
 
 export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
+  const { t, i18n } = useTranslation('dashMonitoring');
+  const intlLocale = getIntlLocale(i18n.language);
   const { currentOrg, isRefreshing: isGlobalRefreshing } = useDashboard();
   const [clusterData, setClusterData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -170,7 +174,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       setRotatedTokenResult(res);
       await fetchDetail(true);
     } catch (err) {
-      setActionError(err.message || 'Lỗi khi xoay vòng mã token');
+      setActionError(err.message || t('clusters.detail.actions.rotateError'));
     } finally {
       setIsRotating(false);
     }
@@ -184,7 +188,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
   // 2. Chức năng Thu Hồi Token
   const handleRevokeToken = async (tokenId) => {
-    if (!window.confirm('Bạn có chắc chắn muốn thu hồi Token này? Tác tử đang dùng token này sẽ mất quyền kết nối tới hệ thống.')) {
+    if (!window.confirm(t('clusters.detail.actions.revokeConfirm'))) {
       return;
     }
     setIsRevokingId(tokenId);
@@ -192,7 +196,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       await clusterService.revokeClusterToken(clusterId, tokenId, currentOrg?.id);
       await fetchDetail(true);
     } catch (err) {
-      alert('Không thể thu hồi token: ' + (err.message || 'Lỗi hệ thống'));
+      alert(t('clusters.detail.actions.revokeError', { message: err.message || t('clusters.detail.actions.systemError') }));
     } finally {
       setIsRevokingId(null);
     }
@@ -215,7 +219,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       await fetchDetail(true);
       setTimeout(() => setConfigSaveSuccess(false), 3000);
     } catch (err) {
-      alert('Lỗi lưu cấu hình: ' + (err.message || 'Lỗi máy chủ'));
+      alert(t('clusters.detail.configForm.saveError', { message: err.message || t('clusters.detail.actions.serverError') }));
     } finally {
       setIsSavingConfig(false);
     }
@@ -229,7 +233,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       setShowDisconnectModal(false);
       await fetchDetail(true);
     } catch (err) {
-      alert('Lỗi ngắt kết nối: ' + (err.message || 'Lỗi hệ thống'));
+      alert(t('clusters.detail.actions.disconnectError', { message: err.message || t('clusters.detail.actions.systemError') }));
     } finally {
       setIsDisconnecting(false);
     }
@@ -241,7 +245,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     try {
       await fetchDetail(true);
     } catch (err) {
-      alert('Lỗi làm mới trạng thái: ' + (err.message || 'Lỗi hệ thống'));
+      alert(t('clusters.detail.actions.refreshError', { message: err.message || t('clusters.detail.actions.systemError') }));
     } finally {
       setIsRefreshing(false);
     }
@@ -250,7 +254,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
   // 5. Chức năng Xóa Cụm Kubernetes (Remove Cluster)
   const handleRemoveCluster = async () => {
     if (confirmClusterName.trim() !== clusterData?.name) {
-      alert('Tên cụm xác nhận không trùng khớp.');
+      alert(t('clusters.detail.actions.confirmNameMismatch'));
       return;
     }
     setIsRemoving(true);
@@ -263,7 +267,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
         onBack();
       }
     } catch (err) {
-      alert('Lỗi xóa cụm: ' + (err.message || 'Lỗi hệ thống'));
+      alert(t('clusters.detail.actions.removeError', { message: err.message || t('clusters.detail.actions.systemError') }));
       setIsRemoving(false);
     }
   };
@@ -273,7 +277,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       <div style={{ padding: '32px 0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div style={{ height: '40px', width: '240px', backgroundColor: '#F1F5F9', borderRadius: '8px' }} />
         <div style={{ height: '140px', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid var(--dash-border)' }} />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+        <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
           {[1, 2, 3, 4].map((i) => (
             <div key={i} style={{ height: '100px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--dash-border)' }} />
           ))}
@@ -286,9 +290,9 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
     return (
       <div className="dash-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
         <AlertTriangle size={36} color="#F59E0B" style={{ marginBottom: '12px' }} />
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 8px 0' }}>Không tìm thấy thông tin Cụm Kubernetes</h2>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 8px 0' }}>{t('clusters.detail.notFoundTitle')}</h2>
         <p style={{ color: 'var(--dash-text-secondary)', marginBottom: '20px' }}>
-          Cụm máy chủ có thể đã bị xóa hoặc bạn không có quyền truy cập.
+          {t('clusters.detail.notFoundDesc')}
         </p>
         <button
           onClick={handleBack}
@@ -302,7 +306,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
             fontWeight: 600,
           }}
         >
-          Quay lại danh sách Cụm
+          {t('clusters.detail.backToList')}
         </button>
       </div>
     );
@@ -388,7 +392,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
   const agentStatusText = isOnline
     ? 'Online'
-    : (isDegraded ? 'Degraded' : (isConnecting ? 'Chờ kết nối (Connecting)' : 'Offline'));
+    : (isDegraded ? 'Degraded' : (isConnecting ? t('clusters.detail.agentConnecting') : 'Offline'));
 
   const statusColor = isOnline
     ? '#059669'
@@ -404,7 +408,9 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
   const latestLatency = heartbeats[0]?.latency_ms != null ? heartbeats[0].latency_ms : null;
   const isControlPlaneHealthy = (isOnline || isDegraded || nodes.length > 0) && readyNodesCount > 0;
   const isControlPlanePending = isConnecting || (nodes.length === 0 && !isOnline);
-  const controlPlaneText = isControlPlaneHealthy ? 'Healthy (100%)' : (isControlPlanePending ? 'Chờ kết nối (0%)' : 'Ngoại tuyến');
+  const controlPlaneText = isControlPlaneHealthy
+    ? t('clusters.status.cpHealthy')
+    : (isControlPlanePending ? t('clusters.status.cpWaitingConn') : t('common.offline'));
   const controlPlaneColor = isControlPlaneHealthy ? '#059669' : (isControlPlanePending ? '#D97706' : '#64748B');
 
 
@@ -432,7 +438,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
           }}
         >
           <ArrowLeft size={14} />
-          <span>Quay lại danh sách Cụm K8s</span>
+          <span>{t('clusters.detail.backBtn')}</span>
         </button>
       </div>
 
@@ -525,20 +531,20 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '5px', fontSize: '0.78rem', color: '#64748B', flexWrap: 'wrap' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <Building size={13} color="#94A3B8" />
-                  Tổ chức: <strong style={{ color: '#0F172A' }}>{clusterData.organization_name || currentOrg?.name || 'Doanh Nghiệp'}</strong>
+                  {t('clusters.detail.orgLabel')} <strong style={{ color: '#0F172A' }}>{clusterData.organization_name || currentOrg?.name || t('clusters.orgDisplayFallback')}</strong>
                 </span>
                 <span>&bull;</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <Layers size={13} color="#94A3B8" />
-                  Môi trường: <strong style={{ color: '#0F172A' }}>{clusterData.environment_name} ({clusterData.environment_code || 'prod'})</strong>
+                  {t('clusters.detail.envLabel')} <strong style={{ color: '#0F172A' }}>{clusterData.environment_name} ({clusterData.environment_code || 'prod'})</strong>
                 </span>
                 <span>&bull;</span>
                 <span style={{ fontFamily: 'var(--font-mono)' }}>UUID: {clusterData.id?.slice(0, 18)}...</span>
                 <span>&bull;</span>
-                <span>K8s: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{clusterData.kubernetes_version || 'Chưa cập nhật'}</strong></span>
+                <span>K8s: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{clusterData.kubernetes_version || t('common.notUpdated')}</strong></span>
                 <span>&bull;</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Clock size={13} /> Khởi tạo: {new Date(clusterData.created_at).toLocaleDateString('vi-VN')}
+                  <Clock size={13} /> {t('clusters.detail.createdLabel')} {new Date(clusterData.created_at).toLocaleDateString(intlLocale)}
                 </span>
               </div>
             </div>
@@ -563,7 +569,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertTriangle size={15} />
               <span>
-                Không thể làm mới trạng thái tài nguyên tự động ({pollingError.message}). Dữ liệu đang hiển thị từ lần quan sát trước.
+                {t('clusters.detail.pollingError', { message: pollingError.message })}
               </span>
             </div>
             <button
@@ -580,7 +586,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 fontSize: '0.74rem',
               }}
             >
-              Thử Lại
+              {t('common.retryTitle')}
             </button>
           </div>
         )}
@@ -602,7 +608,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
           >
             <AlertTriangle size={15} style={{ flexShrink: 0 }} />
             <span>
-              {liveFreshness.warning || 'Dữ liệu quan sát đã cũ hoặc Agent mất kết nối. Trạng thái hiện tại chưa thể xác minh.'}
+              {liveFreshness.warning || t('clusters.detail.staleDefault')}
             </span>
           </div>
         )}
@@ -622,20 +628,20 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
           <div style={{ padding: '11px 14px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: `2.5px solid ${statusDot}`, borderRadius: '11px' }}>
             <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Tác tử eBPF Agent</span>
+              <span>{t('clusters.card.agentLabel').replace(':', '')}</span>
               <Radio size={13} color="#059669" />
             </span>
             <div style={{ fontSize: '0.96rem', fontWeight: 800, color: statusColor, marginTop: '5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: statusDot }} />
               <span>
-                {(isOnline || isDegraded) ? `Online${latestLatency != null ? ` (${latestLatency} ms)` : ''}` : (isConnecting ? 'Chờ kết nối...' : 'Offline')}
+                {(isOnline || isDegraded) ? `Online${latestLatency != null ? ` (${latestLatency} ms)` : ''}` : (isConnecting ? t('clusters.detail.agentWaiting') : 'Offline')}
               </span>
             </div>
           </div>
 
           <div style={{ padding: '11px 14px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2.5px solid #3B82F6', borderRadius: '11px' }}>
             <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Máy chủ Nodes</span>
+              <span>{t('clusters.detail.kpi.nodesTitle')}</span>
               <Cpu size={13} color="#3B82F6" />
             </span>
             <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '5px' }}>
@@ -647,14 +653,14 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   </span>
                 </>
               ) : (
-                <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>0 Nodes &bull; Chờ kết nối...</span>
+                <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>{t('clusters.detail.kpi.nodesZero')}</span>
               )}
             </div>
           </div>
 
           <div style={{ padding: '11px 14px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2.5px solid #8B5CF6', borderRadius: '11px' }}>
             <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Khối lượng Pods</span>
+              <span>{t('clusters.detail.kpi.podsTitle')}</span>
               <Box size={13} color="#8B5CF6" />
             </span>
             <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '5px' }}>
@@ -672,14 +678,14 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   </span>
                 </>
               ) : (
-                <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>0 Pods &bull; Chưa có dữ liệu</span>
+                <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>{t('clusters.detail.kpi.podsZero')}</span>
               )}
             </div>
           </div>
 
           <div style={{ padding: '11px 14px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2.5px solid #10B981', borderRadius: '11px' }}>
             <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Deployments</span>
+              <span>{t('clusters.detail.kpi.deploymentsTitle')}</span>
               <Layers size={13} color="#10B981" />
             </span>
             <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '5px' }}>
@@ -697,7 +703,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   </span>
                 </>
               ) : (
-                <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>0 Deployments</span>
+                <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>{t('clusters.detail.kpi.deploymentsZero')}</span>
               )}
             </div>
           </div>
@@ -707,9 +713,9 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       {/* Tabs Navigation Bar (Segmented Pill Style) */}
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '12px', alignSelf: 'flex-start', maxWidth: '100%', overflowX: 'auto' }}>
         {[
-          { id: 'agent', label: 'Quản Lý & Kết Nối Agent', icon: Radio, count: null },
-          { id: 'logs', label: 'Nhật Ký Kết Nối (Connection Logs)', icon: FileText, count: connectionLogs.length },
-          { id: 'config', label: 'Cấu Hình & Vùng Thao Tác', icon: Settings, count: null },
+          { id: 'agent', label: t('clusters.detail.tabs.agent'), icon: Radio, count: null },
+          { id: 'logs', label: t('clusters.detail.tabs.logs'), icon: FileText, count: connectionLogs.length },
+          { id: 'config', label: t('clusters.detail.tabs.config'), icon: Settings, count: null },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -763,7 +769,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
       {activeTab === 'agent' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* 2 Top Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px' }}>
+          <div className="dash-grid-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '14px' }}>
             
             {/* 4. Agent Status Card */}
             <div className="dash-card" style={{ padding: '18px 20px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -772,7 +778,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   <div style={{ width: '32px', height: '32px', borderRadius: '9px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Radio size={16} color="#059669" />
                   </div>
-                  <h3 style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>Tác tử Giám Sát eBPF Sensor</h3>
+                  <h3 style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>{t('clusters.detail.agentCard.title')}</h3>
                 </div>
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, color: statusColor, backgroundColor: statusBg, padding: '3px 10px', borderRadius: '999px', border: `1px solid ${statusColor}30` }}>
                   {agentStatusText}
@@ -781,37 +787,37 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', fontSize: '0.8rem', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>Tên Tác Tử:</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.agentCard.agentName')}</span>
                   <strong>{clusterData.agent_name || `${clusterData.name}-agent`}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>Agent UID:</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.agentCard.agentUid')}</span>
                   <span style={{ fontFamily: 'var(--font-mono)' }}>{clusterData.agent_uid || `agent-${clusterData.id?.slice(0, 8)}`}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>Phiên bản Agent:</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{clusterData.agent_version || 'Chưa cập nhật'}</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.agentCard.agentVersion')}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{clusterData.agent_version || t('common.notUpdated')}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>Môi trường triển khai:</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.agentCard.deployEnv')}</span>
                   <strong style={{ color: isProd ? '#059669' : '#2563EB' }}>
                     {clusterData.environment_name} ({clusterData.environment_type})
                   </strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>Độ trễ phản hồi (Latency):</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.agentCard.latencyLabel')}</span>
                   <strong style={{ color: (isOnline || isDegraded) ? 'var(--dash-primary)' : '#64748B' }}>
                     {latestLatency != null
                       ? `${latestLatency} ms (Live probe)`
-                      : ((isOnline || isDegraded) ? 'Đang đo...' : 'Chưa có tín hiệu (Đang chờ kết nối...)')}
+                      : ((isOnline || isDegraded) ? t('clusters.detail.agentCard.latencyMeasuring') : t('clusters.detail.agentCard.latencyWaiting'))}
                   </strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>Nhịp tim gần nhất (Heartbeat):</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.agentCard.heartbeatLabel')}</span>
                   <span>
                     {heartbeats[0]
-                      ? `${new Date(heartbeats[0].reported_at).toLocaleTimeString('vi-VN')} (${Math.max(0, Math.round((Date.now() - new Date(heartbeats[0].reported_at).getTime()) / 1000))}s trước)`
-                      : ((isOnline || isDegraded) ? 'Vừa kết nối (Đang nhận heartbeat)' : 'Chưa nhận tín hiệu (Chờ cài đặt Agent trên K8s)')}
+                      ? `${new Date(heartbeats[0].reported_at).toLocaleTimeString(intlLocale)} (${t('clusters.detail.agentCard.heartbeatSecondsAgo', { sec: Math.max(0, Math.round((Date.now() - new Date(heartbeats[0].reported_at).getTime()) / 1000)) })})`
+                      : ((isOnline || isDegraded) ? t('clusters.detail.agentCard.heartbeatJustConnected') : t('clusters.detail.agentCard.heartbeatWaiting'))}
                   </span>
                 </div>
               </div>
@@ -819,7 +825,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               {/* 4 Cảm biến eBPF nhân Linux Kernel */}
               <div>
                 <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, margin: '0 0 10px 0', textTransform: 'uppercase', color: 'var(--dash-text-muted)' }}>
-                  Cảm biến nhân Kernel eBPF đang kích hoạt
+                  {t('clusters.detail.agentCard.probesTitle')}
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '0.75rem' }}>
                   {[
@@ -831,7 +837,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     <div key={probe.key} style={{ padding: '8px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ color: '#334155' }}>{probe.name}</span>
                       <span style={{ color: probe.active ? '#059669' : '#94A3B8', fontWeight: 700 }}>
-                        {probe.active ? '● Bật' : '○ Tắt'}
+                        {probe.active ? t('clusters.detail.agentCard.probeOn') : t('clusters.detail.agentCard.probeOff')}
                       </span>
                     </div>
                   ))}
@@ -844,7 +850,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <KeyRound size={20} color="var(--dash-primary)" />
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Mã Token Xác Thực & Xoay Vòng</h3>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>{t('clusters.detail.tokenCard.title')}</h3>
                 </div>
                 {/* Rotate Token Button */}
                 {can(PERMISSIONS.AGENT_MANAGE) && (
@@ -866,7 +872,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   }}
                 >
                   <Key size={13} />
-                  <span>Xoay Vòng / Đổi Token (Rotate Token)</span>
+                  <span>{t('clusters.detail.tokenCard.rotateBtn')}</span>
                 </button>
                 )}
               </div>
@@ -875,11 +881,11 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                   <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>
-                    Active Token
+                    {t('clusters.detail.tokenCard.activeToken')}
                   </label>
                   {activeToken?.expires_at && (
                     <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
-                      Hết hạn: {new Date(activeToken.expires_at).toLocaleDateString('vi-VN')}
+                      {t('clusters.detail.tokenCard.expiresAt', { date: new Date(activeToken.expires_at).toLocaleDateString(intlLocale) })}
                     </span>
                   )}
                 </div>
@@ -895,19 +901,19 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     style={{ padding: '8px 12px', backgroundColor: '#FFFFFF', border: '1px solid var(--dash-border)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600 }}
                   >
                     {copiedField === 'agent_token' ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-                    <span>{copiedField === 'agent_token' ? 'Đã chép' : 'Sao chép'}</span>
+                    <span>{copiedField === 'agent_token' ? t('common.copiedShort') : t('common.copy')}</span>
                   </button>
                 </div>
                 {!hasRawToken && (
                   <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: '#64748B' }}>
-                    Token gốc chỉ hiển thị một lần lúc khởi tạo và được lưu trữ dưới dạng SHA-256 hash trên server. Nếu chưa lưu mã token, vui lòng nhấn <strong>Rotate Token</strong> ở bên dưới để cấp phát mã mới.
+                    {t('clusters.detail.tokenCard.oneTimeNotice')}
                   </p>
                 )}
               </div>
               <div style={{ padding: '10px 12px', backgroundColor: '#F0FDF4', borderRadius: '6px', border: '1px solid #BBF7D0', fontSize: '0.75rem', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <CheckCircle2 size={16} color="#16A34A" style={{ flexShrink: 0 }} />
                 <span>
-                  Hệ thống duy trì 1 Agent duy nhất cho cụm này. Khi cần thay đổi, sử dụng chức năng <strong>Rotate Token</strong> để thay thế mã an toàn.
+                  {t('clusters.detail.tokenCard.singleAgentNotice')}
                 </span>
               </div>
             </div>
@@ -919,7 +925,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Terminal size={20} color="var(--dash-primary)" />
                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>
-                  Cài Đặt Agent K8s
+                  {t('clusters.detail.installer.title')}
                 </h3>
               </div>
 
@@ -944,7 +950,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   }}
                 >
                   <Sparkles size={13} color={connectTab !== 'uninstall' ? 'var(--dash-primary)' : '#64748B'} />
-                  ⚡ Cài Đặt Agent
+                  {t('clusters.detail.installer.tabInstall')}
                 </button>
                 <button
                   type="button"
@@ -965,7 +971,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   }}
                 >
                   <Trash2 size={13} color={connectTab === 'uninstall' ? '#DC2626' : '#64748B'} />
-                  🗑️ Gỡ Cài Đặt
+                  {t('clusters.detail.installer.tabUninstall')}
                 </button>
               </div>
             </div>
@@ -976,7 +982,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                 {/* Header Controls: OS Switcher */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>Hệ điều hành máy quản trị:</span>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.installer.adminOs')}</span>
                     <div style={{ display: 'inline-flex', gap: '4px', backgroundColor: '#FFFFFF', padding: '2px', border: '1px solid #CBD5E1', borderRadius: '6px' }}>
                       <button
                         type="button"
@@ -1014,7 +1020,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   </div>
 
                   <span style={{ fontSize: '0.75rem', color: '#059669', backgroundColor: '#ECFDF5', padding: '3px 8px', borderRadius: '4px', fontWeight: 600 }}>
-                    Cài đặt từng bước &bull; Nhập Token an toàn
+                    {t('clusters.detail.installer.stepByStepBadge')}
                   </span>
                 </div>
 
@@ -1025,12 +1031,12 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'var(--dash-primary)', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>1</span>
-                        <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>Chạy lệnh khởi chạy trình cài đặt</strong>
+                        <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{t('clusters.detail.installer.step1Title')}</strong>
                       </div>
-                      <span style={{ fontSize: '0.6875rem', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>Bước 1</span>
+                      <span style={{ fontSize: '0.6875rem', color: '#059669', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>{t('clusters.detail.installer.step1Badge')}</span>
                     </div>
                     <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      Chạy lệnh bên dưới trên Terminal máy quản trị cụm K8s để bắt đầu quá trình cài đặt:
+                      {t('clusters.detail.installer.step1Desc')}
                     </p>
                     <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '10px 80px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
                       <code>{getOneLinerCommand(scriptOs)}</code>
@@ -1038,7 +1044,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                         onClick={() => handleCopy(getOneLinerCommand(scriptOs), 'oneliner_cmd')}
                         style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        {copiedField === 'oneliner_cmd' ? <><Check size={12} color="#10B981" /> Đã chép</> : <><Copy size={12} /> Sao chép</>}
+                        {copiedField === 'oneliner_cmd' ? <><Check size={12} color="#10B981" /> {t('common.copiedShort')}</> : <><Copy size={12} /> {t('common.copy')}</>}
                       </button>
                     </div>
                   </div>
@@ -1048,12 +1054,12 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#2563EB', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>2</span>
-                        <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>Nhập Token xác thực (khi script yêu cầu)</strong>
+                        <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{t('clusters.detail.installer.step2Title')}</strong>
                       </div>
-                      <span style={{ fontSize: '0.6875rem', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>Xác Thực</span>
+                      <span style={{ fontSize: '0.6875rem', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>{t('clusters.detail.installer.step2Badge')}</span>
                     </div>
                     <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      Khi màn hình terminal xuất hiện dòng nhắc <code>Nhập Token do SelfHeal cấp:</code>, hãy dán mã Token bảo mật dưới đây vào rồi nhấn <strong>Enter</strong>:
+                      {t('clusters.detail.installer.step2DescPrefix')} <code>Nhập Token do SelfHeal cấp:</code>{t('clusters.detail.installer.step2DescSuffix')} <strong>Enter</strong>:
                     </p>
                     <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '10px 105px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
                       <code>{tokenCopyValue || '<YOUR_AGENT_TOKEN>'}</code>
@@ -1061,7 +1067,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                         onClick={() => handleCopy(tokenCopyValue, 'step2_token')}
                         style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        {copiedField === 'step2_token' ? <><Check size={12} color="#10B981" /> Đã chép</> : <><Copy size={12} /> Sao chép Token</>}
+                        {copiedField === 'step2_token' ? <><Check size={12} color="#10B981" /> {t('common.copiedShort')}</> : <><Copy size={12} /> {t('clusters.detail.installer.step2CopyBtn')}</>}
                       </button>
                     </div>
                   </div>
@@ -1071,12 +1077,12 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#10B981', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800 }}>3</span>
-                        <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>Kiểm tra trạng thái Agent Pod</strong>
+                        <strong style={{ fontSize: '0.8125rem', color: 'var(--dash-text-primary)' }}>{t('clusters.detail.installer.step3Title')}</strong>
                       </div>
-                      <span style={{ fontSize: '0.6875rem', color: '#10B981', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Hoàn Tất</span>
+                      <span style={{ fontSize: '0.6875rem', color: '#10B981', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>{t('clusters.detail.installer.step3Badge')}</span>
                     </div>
                     <p style={{ margin: 0, color: 'var(--dash-text-secondary)', fontSize: '0.75rem' }}>
-                      Kiểm tra trạng thái Pod của Agent trong cụm. Khi thấy Pod đạt trạng thái <code>Running</code>, hệ thống sẽ tự động kích hoạt <strong>Online</strong>:
+                      {t('clusters.detail.installer.step3DescPrefix')} <code>Running</code>{t('clusters.detail.installer.step3DescMiddle')} <strong>Online</strong>:
                     </p>
                     <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '10px 80px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
                       <code>kubectl get pods -n selfheal-system</code>
@@ -1084,7 +1090,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                         onClick={() => handleCopy('kubectl get pods -n selfheal-system', 'qs_step2')}
                         style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        {copiedField === 'qs_step2' ? <><Check size={12} color="#10B981" /> Đã chép</> : <><Copy size={12} /> Sao chép</>}
+                        {copiedField === 'qs_step2' ? <><Check size={12} color="#10B981" /> {t('common.copiedShort')}</> : <><Copy size={12} /> {t('common.copy')}</>}
                       </button>
                     </div>
                   </div>
@@ -1099,8 +1105,8 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   {/* Method 1: Automated Script */}
                   <div style={{ padding: '16px', backgroundColor: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: '0.8125rem', color: '#991B1B' }}>Cách 1: Lệnh Gỡ Tự Động (Script)</strong>
-                      <span style={{ fontSize: '0.6875rem', color: '#991B1B', backgroundColor: '#FEE2E2', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>Nhanh Nhất</span>
+                      <strong style={{ fontSize: '0.8125rem', color: '#991B1B' }}>{t('clusters.detail.installer.uninstall.method1Title')}</strong>
+                      <span style={{ fontSize: '0.6875rem', color: '#991B1B', backgroundColor: '#FEE2E2', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{t('clusters.detail.installer.uninstall.method1Badge')}</span>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1112,7 +1118,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                             onClick={() => handleCopy(`curl -fsSL "${getInstallerOrigin()}/agent/uninstall.sh" | bash`, 'un_sh')}
                             style={{ position: 'absolute', top: '6px', right: '6px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FCA5A5', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
                           >
-                            {copiedField === 'un_sh' ? 'Đã chép' : 'Sao chép'}
+                            {copiedField === 'un_sh' ? t('common.copiedShort') : t('common.copy')}
                           </button>
                         </div>
                       </div>
@@ -1125,7 +1131,7 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                             onClick={() => handleCopy(`& ([scriptblock]::Create((irm "${getInstallerOrigin()}/agent/uninstall.ps1")))`, 'un_ps1')}
                             style={{ position: 'absolute', top: '6px', right: '6px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FCA5A5', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
                           >
-                            {copiedField === 'un_ps1' ? 'Đã chép' : 'Sao chép'}
+                            {copiedField === 'un_ps1' ? t('common.copiedShort') : t('common.copy')}
                           </button>
                         </div>
                       </div>
@@ -1135,17 +1141,17 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   {/* Method 2: Kubectl */}
                   <div style={{ padding: '16px', backgroundColor: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: '0.8125rem', color: '#991B1B' }}>Cách 2: Kubectl</strong>
+                      <strong style={{ fontSize: '0.8125rem', color: '#991B1B' }}>{t('clusters.detail.installer.uninstall.method2Title')}</strong>
                       <span style={{ fontSize: '0.6875rem', color: '#991B1B', backgroundColor: '#FEE2E2', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>K8s CLI</span>
                     </div>
-                    <div style={{ fontSize: '0.6875rem', color: '#7F1D1D', fontWeight: 600 }}>Xóa toàn bộ tài nguyên và Namespace của Agent:</div>
+                    <div style={{ fontSize: '0.6875rem', color: '#7F1D1D', fontWeight: 600 }}>{t('clusters.detail.installer.uninstall.method2Desc')}</div>
                     <div style={{ backgroundColor: '#0F172A', color: '#FCA5A5', padding: '10px 65px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
                       <code>kubectl delete namespace selfheal-system</code>
                       <button
                         onClick={() => handleCopy('kubectl delete namespace selfheal-system', 'un_k8s')}
                         style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FCA5A5', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
                       >
-                        {copiedField === 'un_k8s' ? 'Đã chép' : 'Sao chép'}
+                        {copiedField === 'un_k8s' ? t('common.copiedShort') : t('common.copy')}
                       </button>
                     </div>
                   </div>
@@ -1153,10 +1159,10 @@ export const ClusterDetailPage = ({ clusterId, onNavigate, onBack }) => {
                   {/* Method 3: Helm */}
                   <div style={{ padding: '16px', backgroundColor: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: '0.8125rem', color: '#991B1B' }}>Cách 3: Helm</strong>
+                      <strong style={{ fontSize: '0.8125rem', color: '#991B1B' }}>{t('clusters.detail.installer.uninstall.method3Title')}</strong>
                       <span style={{ fontSize: '0.6875rem', color: '#991B1B', backgroundColor: '#FEE2E2', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>Package Manager</span>
                     </div>
-                    <div style={{ fontSize: '0.6875rem', color: '#7F1D1D', fontWeight: 600 }}>Gỡ Helm Release và dọn sạch Namespace:</div>
+                    <div style={{ fontSize: '0.6875rem', color: '#7F1D1D', fontWeight: 600 }}>{t('clusters.detail.installer.uninstall.method3Desc')}</div>
                     <div style={{ backgroundColor: '#0F172A', color: '#FCA5A5', padding: '10px 65px 10px 12px', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', position: 'relative', wordBreak: 'break-all' }}>
                       <code>{`helm uninstall selfheal-agent -n selfheal-system
 kubectl delete namespace selfheal-system`}</code>
@@ -1164,7 +1170,7 @@ kubectl delete namespace selfheal-system`}</code>
                         onClick={() => handleCopy(`helm uninstall selfheal-agent -n selfheal-system\nkubectl delete namespace selfheal-system`, 'un_helm')}
                         style={{ position: 'absolute', top: '7px', right: '8px', background: 'rgba(255,255,255,0.15)', border: 'none', color: '#FCA5A5', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6875rem' }}
                       >
-                        {copiedField === 'un_helm' ? 'Đã chép' : 'Sao chép'}
+                        {copiedField === 'un_helm' ? t('common.copiedShort') : t('common.copy')}
                       </button>
                     </div>
                   </div>
@@ -1179,12 +1185,12 @@ kubectl delete namespace selfheal-system`}</code>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Sliders size={18} color="var(--dash-primary)" />
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>
-                  Cấu Hình Tác Tử Giám Sát (Agent Configuration)
+                  {t('clusters.detail.configForm.title')}
                 </h3>
               </div>
               {configSaveSuccess && (
                 <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <CheckCheck size={14} /> Đã lưu cấu hình thành công!
+                  <CheckCheck size={14} /> {t('clusters.detail.configForm.saveSuccess')}
                 </span>
               )}
             </div>
@@ -1193,35 +1199,35 @@ kubectl delete namespace selfheal-system`}</code>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                    Chu kỳ gửi Metrics Telemetry
+                    {t('clusters.detail.configForm.intervalLabel')}
                   </label>
                   <select
                     value={metricInterval}
                     onChange={(e) => setMetricInterval(e.target.value)}
                     style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
                   >
-                    <option value={5}>Mỗi 5 giây (Thời gian thực / Tải cao)</option>
-                    <option value={15}>Mỗi 15 giây (Khuyên dùng tiêu chuẩn)</option>
-                    <option value={30}>Mỗi 30 giây (Tiết kiệm băng thông)</option>
-                    <option value={60}>Mỗi 60 giây (Tiết kiệm tài nguyên)</option>
+                    <option value={5}>{t('clusters.detail.configForm.interval5')}</option>
+                    <option value={15}>{t('clusters.detail.configForm.interval15')}</option>
+                    <option value={30}>{t('clusters.detail.configForm.interval30')}</option>
+                    <option value={60}>{t('clusters.detail.configForm.interval60')}</option>
                   </select>
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                    Phạm vi Namespaces Giám Sát
+                    {t('clusters.detail.configForm.nsScopeLabel')}
                   </label>
                   <select
                     value={monitoredNs}
                     onChange={(e) => setMonitoredNs(e.target.value)}
                     style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
                   >
-                    <option value="ALL">Toàn bộ Namespaces (ALL Namespaces)</option>
+                    <option value="ALL">{t('clusters.detail.configForm.nsAll')}</option>
                     {namespaces.map((ns) => {
                       const nsName = ns.name || ns;
                       return (
                         <option key={nsName} value={nsName}>
-                          Chỉ giám sát: {nsName}
+                          {t('clusters.detail.configForm.nsOnly', { ns: nsName })}
                         </option>
                       );
                     })}
@@ -1230,17 +1236,17 @@ kubectl delete namespace selfheal-system`}</code>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                    Mức độ ghi nhật ký Agent (Log Level)
+                    {t('clusters.detail.configForm.logLevelLabel')}
                   </label>
                   <select
                     value={logLevel}
                     onChange={(e) => setLogLevel(e.target.value)}
                     style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
                   >
-                    <option value="INFO">INFO (Thông tin chuẩn)</option>
-                    <option value="DEBUG">DEBUG (Chi tiết hỗ trợ gỡ lỗi)</option>
-                    <option value="WARN">WARN (Chỉ ghi nhận cảnh báo)</option>
-                    <option value="ERROR">ERROR (Chỉ ghi lỗi)</option>
+                    <option value="INFO">{t('clusters.detail.configForm.logInfo')}</option>
+                    <option value="DEBUG">{t('clusters.detail.configForm.logDebug')}</option>
+                    <option value="WARN">{t('clusters.detail.configForm.logWarn')}</option>
+                    <option value="ERROR">{t('clusters.detail.configForm.logError')}</option>
                   </select>
                 </div>
               </div>
@@ -1248,7 +1254,7 @@ kubectl delete namespace selfheal-system`}</code>
               {/* Probes Toggles */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '8px' }}>
-                  Kích hoạt các cảm biến eBPF Kernel Probes
+                  {t('clusters.detail.configForm.probesLabel')}
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
                   {[
@@ -1289,7 +1295,7 @@ kubectl delete namespace selfheal-system`}</code>
                   }}
                 >
                   <Check size={14} />
-                  <span>{isSavingConfig ? 'Đang lưu...' : 'Lưu Cấu Hình Tác Tử'}</span>
+                  <span>{isSavingConfig ? t('clusters.detail.configForm.saving') : t('clusters.detail.configForm.saveBtn')}</span>
                 </button>
               </div>
             </form>
@@ -1305,11 +1311,11 @@ kubectl delete namespace selfheal-system`}</code>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <FileText size={18} color="var(--dash-primary)" />
                 <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>
-                  Nhật Ký Kết Nối, Lỗi Xác Thực & Tín Hiệu Agent (Connection Logs)
+                  {t('clusters.detail.connLogs.title')}
                 </h3>
               </div>
               <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
-                Hiển thị {connectionLogs.length} sự kiện kết nối gần nhất
+                {t('clusters.detail.connLogs.showingCount', { count: connectionLogs.length })}
               </span>
             </div>
 
@@ -1317,18 +1323,18 @@ kubectl delete namespace selfheal-system`}</code>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FAFAFA', color: 'var(--dash-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
-                    <th style={{ padding: '12px 18px' }}>Thời Gian</th>
-                    <th style={{ padding: '12px 18px' }}>Loại Sự Kiện</th>
-                    <th style={{ padding: '12px 18px' }}>Mức Độ</th>
-                    <th style={{ padding: '12px 18px' }}>Chi Tiết Thông Báo Kết Nối</th>
-                    <th style={{ padding: '12px 18px' }}>Nguồn IP / Node</th>
+                    <th style={{ padding: '12px 18px' }}>{t('clusters.detail.connLogs.colTime')}</th>
+                    <th style={{ padding: '12px 18px' }}>{t('clusters.detail.connLogs.colType')}</th>
+                    <th style={{ padding: '12px 18px' }}>{t('clusters.detail.connLogs.colSeverity')}</th>
+                    <th style={{ padding: '12px 18px' }}>{t('clusters.detail.connLogs.colDetails')}</th>
+                    <th style={{ padding: '12px 18px' }}>{t('clusters.detail.connLogs.colSource')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedLogs.length === 0 ? (
                     <tr>
                       <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8' }}>
-                        Chưa có sự kiện kết nối nào được ghi nhận.
+                        {t('clusters.detail.connLogs.empty')}
                       </td>
                     </tr>
                   ) : (
@@ -1339,7 +1345,7 @@ kubectl delete namespace selfheal-system`}</code>
                       return (
                         <tr key={log.id || idx} style={{ borderBottom: '1px solid var(--dash-border)' }}>
                           <td style={{ padding: '12px 18px', color: '#64748B', whiteSpace: 'nowrap' }}>
-                            {new Date(log.created_at).toLocaleString('vi-VN')}
+                            {new Date(log.created_at).toLocaleString(intlLocale)}
                           </td>
                           <td style={{ padding: '12px 18px' }}>
                             <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.75rem' }}>
@@ -1378,8 +1384,7 @@ kubectl delete namespace selfheal-system`}</code>
                 }}
               >
                 <div style={{ fontSize: '0.78125rem', color: '#64748B', fontWeight: 500 }}>
-                  Hiển thị <strong style={{ color: '#0F172A' }}>{startLogIdx + 1}–{endLogIdx}</strong> trong tổng số{' '}
-                  <strong style={{ color: '#0F172A' }}>{connectionLogs.length}</strong> sự kiện ({LOGS_PER_PAGE} bản ghi / trang)
+                  {t('clusters.detail.connLogs.pagination', { start: startLogIdx + 1, end: endLogIdx, total: connectionLogs.length, perPage: LOGS_PER_PAGE })}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1398,7 +1403,7 @@ kubectl delete namespace selfheal-system`}</code>
                       cursor: safeLogPage <= 1 ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    &laquo; Trước
+                    {t('clusters.detail.connLogs.prevPage')}
                   </button>
 
                   {Array.from({ length: totalLogPages }, (_, i) => i + 1).map((pg) => (
@@ -1439,7 +1444,7 @@ kubectl delete namespace selfheal-system`}</code>
                       cursor: safeLogPage >= totalLogPages ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    Sau &raquo;
+                    {t('clusters.detail.connLogs.nextPage')}
                   </button>
                 </div>
               </div>
@@ -1453,40 +1458,40 @@ kubectl delete namespace selfheal-system`}</code>
       {/* ============================================================== */}
       {activeTab === 'config' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+          <div className="dash-grid-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '20px' }}>
             {/* Cấu hình kỹ thuật */}
             <div className="dash-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Thông Số Kỹ Thuật Kubernetes</h3>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>{t('clusters.detail.techTab.specsTitle')}</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8125rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #F1F5F9' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>Mã Định Danh (Cluster ID):</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.techTab.clusterId')}</span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{clusterData.id}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #F1F5F9' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>Môi trường triển khai:</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.techTab.deployEnv')}</span>
                   <strong style={{ color: isProd ? '#059669' : '#2563EB' }}>{clusterData.environment_type}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #F1F5F9' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>Nhà cung cấp hạ tầng:</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.techTab.provider')}</span>
                   <span>{clusterData.provider}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #F1F5F9' }}>
-                  <span style={{ color: 'var(--dash-text-secondary)' }}>Phiên bản Kubernetes:</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{clusterData.kubernetes_version || 'Chưa cập nhật'}</span>
+                  <span style={{ color: 'var(--dash-text-secondary)' }}>{t('clusters.detail.techTab.k8sVersion')}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{clusterData.kubernetes_version || t('common.notUpdated')}</span>
                 </div>
               </div>
             </div>
 
             {/* Self-Healing Status */}
             <div className="dash-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Cơ Chế Tự Phục Hồi (Self-Healing Status)</h3>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>{t('clusters.detail.techTab.healingTitle')}</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.8125rem' }}>
                 <div style={{ padding: '12px', backgroundColor: '#ECFDF5', borderRadius: '8px', border: '1px solid #A7F3D0' }}>
                   <strong style={{ color: '#065F46', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <CheckCircle2 size={16} /> Chính sách tự chữa lành đang kích hoạt
+                    <CheckCircle2 size={16} /> {t('clusters.detail.techTab.healingActive')}
                   </strong>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#047857' }}>
-                    Tác tử giám sát đã liên kết cụm máy chủ với mô hình AI dự báo RCA và hệ thống Self-Healing tự sửa khi phát hiện sự cố.
+                    {t('clusters.detail.techTab.healingDesc')}
                   </p>
                 </div>
               </div>
@@ -1498,20 +1503,20 @@ kubectl delete namespace selfheal-system`}</code>
           <div className="dash-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B' }}>
               <ShieldAlert size={20} />
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>Vùng Thao Tác An Toàn & Gỡ Bỏ (Danger Zone)</h3>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{t('clusters.detail.techTab.dangerTitle')}</h3>
             </div>
             <p style={{ margin: 0, fontSize: '0.8125rem', color: '#7F1D1D' }}>
-              Các thao tác dưới đây có thể ảnh hưởng trực tiếp đến kết nối của tác tử giám sát hoặc xóa bỏ cấu hình cụm máy chủ.
+              {t('clusters.detail.techTab.dangerDesc')}
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px', paddingTop: '8px' }}>
+            <div className="dash-grid-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '14px', paddingTop: '8px' }}>
               {/* Ngắt kết nối Agent */}
               {can(PERMISSIONS.AGENT_MANAGE) && (
               <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #F87171', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#991B1B' }}>Ngắt Kết Nối Agent (Disconnect)</h4>
+                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#991B1B' }}>{t('clusters.detail.techTab.disconnectTitle')}</h4>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#64748B' }}>
-                    Tạm dừng thu thập telemetry và vô hiệu hóa Token xác thực của Agent trên cụm này.
+                    {t('clusters.detail.techTab.disconnectDesc')}
                   </p>
                 </div>
                 <button
@@ -1533,7 +1538,7 @@ kubectl delete namespace selfheal-system`}</code>
                   }}
                 >
                   <PowerOff size={14} />
-                  <span>Ngắt Kết Nối Agent</span>
+                  <span>{t('clusters.detail.techTab.disconnectBtn')}</span>
                 </button>
               </div>
               )}
@@ -1542,9 +1547,9 @@ kubectl delete namespace selfheal-system`}</code>
               {can(PERMISSIONS.ENV_DELETE) && (
               <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #DC2626', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#7F1D1D' }}>Xóa Cụm Kubernetes (Remove Cluster)</h4>
+                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#7F1D1D' }}>{t('clusters.detail.techTab.removeTitle')}</h4>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#64748B' }}>
-                    Gỡ bỏ hoàn toàn cụm này khỏi hệ thống quản lý. Thao tác không thể hoàn tác.
+                    {t('clusters.detail.techTab.removeDesc')}
                   </p>
                 </div>
                 <button
@@ -1566,7 +1571,7 @@ kubectl delete namespace selfheal-system`}</code>
                   }}
                 >
                   <Trash2 size={14} />
-                  <span>Xóa Cụm Kubernetes</span>
+                  <span>{t('clusters.detail.techTab.removeBtn')}</span>
                 </button>
               </div>
               )}
@@ -1620,7 +1625,7 @@ kubectl delete namespace selfheal-system`}</code>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Key size={18} color="var(--dash-primary)" />
                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                  {rotatedTokenResult ? 'Mã Token Mới Đã Tạo Thành Công' : 'Xoay Vòng Mã Token Agent (Rotate Token)'}
+                  {rotatedTokenResult ? t('clusters.detail.rotateModal.titleSuccess') : t('clusters.detail.rotateModal.titleForm')}
                 </h3>
               </div>
               <button
@@ -1637,16 +1642,16 @@ kubectl delete namespace selfheal-system`}</code>
                 <div style={{ padding: '14px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065F46', fontWeight: 700, fontSize: '0.875rem' }}>
                     <CheckCircle2 size={18} />
-                    <span>Mã Token bí mật mới đã được khởi tạo! Token cũ đã bị thu hồi.</span>
+                    <span>{t('clusters.detail.rotateModal.successTitle')}</span>
                   </div>
                   <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: '#047857' }}>
-                    Lưu ý: Vì mục đích bảo mật, mã raw token dưới đây <strong>chỉ hiển thị một lần duy nhất</strong>. Hãy sao chép ngay để cấu hình lại DaemonSet.
+                    {t('clusters.detail.rotateModal.successWarningPrefix')} <strong>{t('clusters.detail.rotateModal.successWarningStrong')}</strong>{t('clusters.detail.rotateModal.successWarningSuffix')}
                   </p>
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)', marginBottom: '4px' }}>
-                    Mã Token Mới (Raw Token)
+                    {t('clusters.detail.rotateModal.newTokenLabel')}
                   </label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input
@@ -1683,7 +1688,7 @@ kubectl delete namespace selfheal-system`}</code>
                       }}
                     >
                       {copiedField === 'new_token' ? <Check size={14} /> : <Copy size={14} />}
-                      <span>{copiedField === 'new_token' ? 'Đã sao chép' : 'Sao chép'}</span>
+                      <span>{copiedField === 'new_token' ? t('common.copied') : t('common.copy')}</span>
                     </button>
                   </div>
                 </div>
@@ -1691,7 +1696,7 @@ kubectl delete namespace selfheal-system`}</code>
                 {rotatedTokenResult.install_command && (
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-secondary)', marginBottom: '4px' }}>
-                      Lệnh cập nhật Kubernetes DaemonSet với Token mới
+                      {t('clusters.detail.rotateModal.daemonsetLabel')}
                     </label>
                     <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px', borderRadius: '8px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', lineHeight: '1.5' }}>
                       <code>{rotatedTokenResult.install_command}</code>
@@ -1714,7 +1719,7 @@ kubectl delete namespace selfheal-system`}</code>
                       cursor: 'pointer',
                     }}
                   >
-                    Đã Lưu Xong & Đóng
+                    {t('clusters.detail.rotateModal.doneBtn')}
                   </button>
                 </div>
               </div>
@@ -1728,12 +1733,12 @@ kubectl delete namespace selfheal-system`}</code>
                 )}
 
                 <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', lineHeight: '1.5' }}>
-                  Mỗi Cụm Kubernetes duy trì <strong>1 Agent và 1 Token hoạt động duy nhất</strong>. Thao tác xoay vòng sẽ tự động thu hồi Token cũ và cấp phát Token mới an toàn.
+                  {t('clusters.detail.rotateModal.formDescPrefix')} <strong>{t('clusters.detail.rotateModal.formDescStrong')}</strong>{t('clusters.detail.rotateModal.formDescSuffix')}
                 </p>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                    Thời hạn hiệu lực của Token mới
+                    {t('clusters.detail.rotateModal.expiryLabel')}
                   </label>
                   <select
                     value={rotateExpiresInDays}
@@ -1747,16 +1752,16 @@ kubectl delete namespace selfheal-system`}</code>
                       backgroundColor: '#FFFFFF',
                     }}
                   >
-                    <option value={30}>30 ngày (Khuyên dùng thử nghiệm)</option>
-                    <option value={90}>90 ngày (Tiêu chuẩn bảo mật)</option>
-                    <option value={180}>180 ngày (6 tháng)</option>
-                    <option value={365}>365 ngày (1 năm)</option>
-                    <option value="never">Vô thời hạn (Không bao giờ hết hạn)</option>
+                    <option value={30}>{t('clusters.detail.rotateModal.expiry30')}</option>
+                    <option value={90}>{t('clusters.detail.rotateModal.expiry90')}</option>
+                    <option value={180}>{t('clusters.detail.rotateModal.expiry180')}</option>
+                    <option value={365}>{t('clusters.detail.rotateModal.expiry365')}</option>
+                    <option value="never">{t('clusters.detail.rotateModal.expiryNever')}</option>
                   </select>
                 </div>
 
                 <div style={{ padding: '12px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid var(--dash-border)', fontSize: '0.75rem', color: '#64748B' }}>
-                  Khi xoay vòng thành công, hãy cập nhật Secret hoặc DaemonSet trong cụm K8s với mã token mới để duy trì kết nối liên tục.
+                  {t('clusters.detail.rotateModal.note')}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
@@ -1773,7 +1778,7 @@ kubectl delete namespace selfheal-system`}</code>
                       cursor: 'pointer',
                     }}
                   >
-                    Hủy
+                    {t('common.cancel')}
                   </button>
                   <button
                     type="button"
@@ -1795,7 +1800,7 @@ data-testid="confirm-rotate-token-btn"
                     }}
                   >
                     <Key size={14} />
-                    <span>{isRotating ? 'Đang xoay vòng...' : 'Xác Nhận Đổi Token Mới'}</span>
+                    <span>{isRotating ? t('clusters.detail.rotateModal.rotating') : t('clusters.detail.rotateModal.submitBtn')}</span>
                   </button>
                 </div>
               </form>
@@ -1837,10 +1842,10 @@ data-testid="confirm-rotate-token-btn"
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#DC2626' }}>
               <PowerOff size={22} />
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Xác Nhận Ngắt Kết Nối Agent</h3>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>{t('clusters.detail.disconnectModal.title')}</h3>
             </div>
             <p style={{ margin: 0, fontSize: '0.8125rem', color: '#475569', lineHeight: '1.5' }}>
-              Bạn có chắc chắn muốn ngắt kết nối Agent khỏi cụm <strong>{clusterData.name}</strong>? Tác tử sẽ ngừng gửi viễn trắc telemetry và token hiện tại sẽ bị thu hồi.
+              {t('clusters.detail.disconnectModal.descPrefix')} <strong>{clusterData.name}</strong>{t('clusters.detail.disconnectModal.descSuffix')}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
               <button
@@ -1848,7 +1853,7 @@ data-testid="confirm-rotate-token-btn"
                 onClick={() => setShowDisconnectModal(false)}
                 style={{ padding: '8px 14px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8125rem' }}
               >
-                Hủy Bỏ
+                {t('common.cancelAction')}
               </button>
               <button
                 type="button"
@@ -1856,7 +1861,7 @@ data-testid="confirm-rotate-token-btn"
                 onClick={handleDisconnectAgent}
                 style={{ padding: '8px 16px', backgroundColor: '#DC2626', color: '#FFFFFF', border: 'none', borderRadius: '6px', cursor: isDisconnecting ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '0.8125rem' }}
               >
-                {isDisconnecting ? 'Đang ngắt kết nối...' : 'Xác Nhận Ngắt'}
+                {isDisconnecting ? t('clusters.detail.disconnectModal.disconnecting') : t('clusters.detail.disconnectModal.confirmBtn')}
               </button>
             </div>
           </div>
@@ -1896,14 +1901,14 @@ data-testid="confirm-rotate-token-btn"
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#991B1B' }}>
               <ShieldAlert size={22} />
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Xác Nhận Xóa Cụm Kubernetes</h3>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>{t('clusters.detail.removeModal.title')}</h3>
             </div>
             <div style={{ padding: '12px', backgroundColor: '#FEF2F2', borderRadius: '6px', border: '1px solid #FECACA', fontSize: '0.8125rem', color: '#991B1B' }}>
-              Thao tác này sẽ gỡ bỏ cụm <strong>{clusterData.name}</strong>, thu hồi Agent và xóa toàn bộ cấu hình giám sát. Thao tác không thể hoàn tác!
+              {t('clusters.detail.removeModal.warningPrefix')} <strong>{clusterData.name}</strong>{t('clusters.detail.removeModal.warningSuffix')}
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Nhập chính xác tên cụm: <strong>{clusterData.name}</strong>
+                {t('clusters.detail.removeModal.inputLabel')} <strong>{clusterData.name}</strong>
               </label>
               <input
                 type="text"
@@ -1924,7 +1929,7 @@ data-testid="confirm-rotate-token-btn"
                   onChange={(e) => setForceRemoveCluster(e.target.checked)}
                 />
                 <label htmlFor="forceRemoveCluster" style={{ fontSize: '0.75rem', color: '#92400E', fontWeight: 600, cursor: 'pointer' }}>
-                  Agent đang ONLINE. Đánh dấu để xác nhận xóa bắt buộc (force=true) và thu hồi Agent ngay lập tức.
+                  {t('clusters.detail.removeModal.forceLabel')}
                 </label>
               </div>
             )}
@@ -1934,7 +1939,7 @@ data-testid="confirm-rotate-token-btn"
                 onClick={() => { setShowRemoveModal(false); setConfirmClusterName(''); }}
                 style={{ padding: '8px 14px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8125rem' }}
               >
-                Hủy
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -1951,7 +1956,7 @@ data-testid="confirm-rotate-token-btn"
                   fontSize: '0.8125rem',
                 }}
               >
-                {isRemoving ? 'Đang xóa cụm...' : 'Tôi Hiểu Hậu Quả, Xóa Cụm Này'}
+                {isRemoving ? t('clusters.detail.removeModal.removing') : t('clusters.detail.removeModal.confirmBtn')}
               </button>
             </div>
           </div>

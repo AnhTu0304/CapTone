@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Save,
   CheckCircle2,
@@ -11,8 +12,10 @@ import { profileService, formatVnDate, formatVnDateTime } from '../../services/p
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { resolveUserSystemRole } from '../../components/common/UserProfileDropdown';
+import { getIntlLocale, normalizeLanguage } from '../../i18n';
 
 export const PersonalProfilePage = () => {
+  const { t, i18n } = useTranslation('portal');
   const { user } = useAuth();
   const toast = useToast();
 
@@ -84,11 +87,11 @@ export const PersonalProfilePage = () => {
     const file = e.target.files && e.target.files[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
-        setErrorMessage('Vui lòng chọn file hình ảnh hợp lệ (PNG, JPG, WEBP).');
+        setErrorMessage(t('profile.messages.invalidImage'));
         return;
       }
       if (file.size > 3 * 1024 * 1024) {
-        setErrorMessage('Dung lượng ảnh đại diện không được vượt quá 3MB.');
+        setErrorMessage(t('profile.messages.imageTooLarge'));
         return;
       }
       setErrorMessage('');
@@ -109,7 +112,7 @@ export const PersonalProfilePage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.fullName.trim()) {
-      setErrorMessage('Họ và tên không được để trống.');
+      setErrorMessage(t('profile.messages.fullNameRequired'));
       return;
     }
 
@@ -144,14 +147,14 @@ export const PersonalProfilePage = () => {
       }));
 
       setIsSaved(true);
-      setSaveMessage('Đã cập nhật thông tin hồ sơ cá nhân thành công!');
+      setSaveMessage(t('profile.messages.savedSuccess'));
       if (toast?.success) {
-        toast.success('Hồ sơ đã được lưu thành công vào cơ sở dữ liệu!');
+        toast.success(t('profile.messages.savedToast'));
       }
 
       setTimeout(() => setIsSaved(false), 3500);
     } catch (err) {
-      const msg = err.message || 'Không thể lưu thông tin hồ sơ';
+      const msg = err.message || t('profile.messages.saveFailed');
       setErrorMessage(msg);
       if (toast?.error) {
         toast.error(msg);
@@ -161,7 +164,7 @@ export const PersonalProfilePage = () => {
     }
   };
 
-  const userInitials = (formData.fullName || user?.full_name || 'Quản Trị Viên')
+  const userInitials = (formData.fullName || user?.full_name || t('profile.defaultAdminInitials'))
     .split(' ')
     .filter(Boolean)
     .map((w) => w[0])
@@ -170,20 +173,33 @@ export const PersonalProfilePage = () => {
     .toUpperCase();
 
   const resolvedSystemRole = resolveUserSystemRole(user);
-  const highestRole = resolvedSystemRole || 'Chưa được gán System Role';
+  const highestRole = resolvedSystemRole || t('profile.noSystemRole');
 
   const accountStatus = (profile.accountStatus || user?.status || 'ACTIVE').toUpperCase();
-  const joinedDate = profile.createdAt || (user?.created_at ? formatVnDate(user.created_at) : '21/10/2026');
-  const lastLoginTime = profile.lastLogin || (user?.last_login_at ? formatVnDateTime(user.last_login_at) : '16:36:02 22/10/2026');
+  const intlLocale = getIntlLocale(i18n.language);
+  const joinedDate =
+    profile.createdAt ||
+    (user?.created_at
+      ? normalizeLanguage(i18n.language) === 'en'
+        ? new Date(user.created_at).toLocaleDateString(intlLocale)
+        : formatVnDate(user.created_at)
+      : '21/10/2026');
+  const lastLoginTime =
+    profile.lastLogin ||
+    (user?.last_login_at
+      ? normalizeLanguage(i18n.language) === 'en'
+        ? new Date(user.last_login_at).toLocaleString(intlLocale)
+        : formatVnDateTime(user.last_login_at)
+      : '16:36:02 22/10/2026');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div>
         <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-          Hồ Sơ Cá Nhân
+          {t('profile.title')}
         </h2>
         <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
-          Xem và điều chỉnh thông tin định danh người dùng, hình ảnh đại diện và vai trò thành viên.
+          {t('profile.subtitle')}
         </p>
       </div>
 
@@ -268,7 +284,7 @@ export const PersonalProfilePage = () => {
 
             <label
               htmlFor="avatar-file-input"
-              title="Thay đổi ảnh đại diện"
+              title={t('profile.changeAvatarTitle')}
               style={{
                 position: 'absolute',
                 bottom: '2px',
@@ -300,10 +316,10 @@ export const PersonalProfilePage = () => {
 
           <div>
             <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              {formData.fullName || 'Người Dùng'}
+              {formData.fullName || t('profile.defaultUserName')}
             </h3>
             <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '4px 0 0 0' }}>
-              {formData.jobTitle || 'Trưởng nhóm SRE & DevOps Lead'}
+              {formData.jobTitle || t('profile.defaultJobTitle')}
             </p>
           </div>
 
@@ -322,7 +338,7 @@ export const PersonalProfilePage = () => {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#64748B' }}>Trạng thái tài khoản:</span>
+              <span style={{ color: '#64748B' }}>{t('profile.statusLabel')}</span>
               <span
                 style={{
                   color: accountStatus === 'ACTIVE' ? '#059669' : '#DC2626',
@@ -333,24 +349,24 @@ export const PersonalProfilePage = () => {
                 }}
               >
                 <CheckCircle2 size={13} />
-                <span>{accountStatus === 'ACTIVE' ? 'KÍCH HOẠT (ACTIVE)' : accountStatus}</span>
+                <span>{accountStatus === 'ACTIVE' ? t('profile.statusActive') : accountStatus}</span>
               </span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#64748B' }}>Vai trò cao nhất:</span>
+              <span style={{ color: '#64748B' }}>{t('profile.highestRoleLabel')}</span>
               <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono, monospace)' }}>
                 {highestRole}
               </strong>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#64748B' }}>Ngày tham gia:</span>
+              <span style={{ color: '#64748B' }}>{t('profile.joinedDateLabel')}</span>
               <span>{joinedDate}</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#64748B' }}>Đăng nhập gần nhất:</span>
+              <span style={{ color: '#64748B' }}>{t('profile.lastLoginLabel')}</span>
               <span>{lastLoginTime}</span>
             </div>
           </div>
@@ -371,17 +387,17 @@ export const PersonalProfilePage = () => {
         >
           <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Thông Tin Định Danh & Liên Hệ
+              {t('profile.formTitle')}
             </h3>
             <p style={{ fontSize: '0.78125rem', color: '#64748B', margin: '3px 0 0 0' }}>
-              Cập nhật thông tin để các thành viên trong Company nhận diện và phối hợp công việc
+              {t('profile.formSubtitle')}
             </p>
           </div>
 
           <div className="portal-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label htmlFor="field-fullname" style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Họ và Tên *
+                {t('profile.fields.fullName')}
               </label>
               <input
                 id="field-fullname"
@@ -403,7 +419,7 @@ export const PersonalProfilePage = () => {
 
             <div>
               <label htmlFor="field-email" style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Địa Chỉ Email (Tên đăng nhập)
+                {t('profile.fields.email')}
               </label>
               <input
                 id="field-email"
@@ -426,13 +442,13 @@ export const PersonalProfilePage = () => {
 
             <div>
               <label htmlFor="field-phone" style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Số Điện Thoại
+                {t('profile.fields.phone')}
               </label>
               <input
                 id="field-phone"
                 type="tel"
                 name="phone"
-                placeholder="Ví dụ: 0912345678"
+                placeholder={t('profile.fields.phonePlaceholder')}
                 value={formData.phone}
                 onChange={handleFormChange}
                 style={{
@@ -448,13 +464,13 @@ export const PersonalProfilePage = () => {
 
             <div>
               <label htmlFor="field-jobtitle" style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Chức Danh Chuyên Môn (Job Title)
+                {t('profile.fields.jobTitle')}
               </label>
               <input
                 id="field-jobtitle"
                 type="text"
                 name="jobTitle"
-                placeholder="Ví dụ: Senior DevOps Engineer"
+                placeholder={t('profile.fields.jobTitlePlaceholder')}
                 value={formData.jobTitle}
                 onChange={handleFormChange}
                 style={{
@@ -471,7 +487,7 @@ export const PersonalProfilePage = () => {
 
           <div>
             <label htmlFor="field-department" style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-              Phòng Ban / Đơn Vị Phụ Trách
+              {t('profile.fields.department')}
             </label>
             <input
               id="field-department"
@@ -492,7 +508,7 @@ export const PersonalProfilePage = () => {
 
           <div>
             <label htmlFor="field-bio" style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-              Giới Thiệu Ngắn (Bio)
+              {t('profile.fields.bio')}
             </label>
             <textarea
               id="field-bio"
@@ -535,12 +551,12 @@ export const PersonalProfilePage = () => {
               {isSubmitting ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  <span>Đang Lưu Hồ Sơ...</span>
+                  <span>{t('profile.submitting')}</span>
                 </>
               ) : (
                 <>
                   <Save size={16} />
-                  <span>Lưu Thay Đổi Hồ Sơ</span>
+                  <span>{t('profile.submit')}</span>
                 </>
               )}
             </button>

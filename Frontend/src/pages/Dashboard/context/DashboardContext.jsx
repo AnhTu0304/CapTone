@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n, { getIntlLocale } from '../../../i18n';
 import { request, setActiveOrganizationId, cancelPendingRequests, getAuthToken } from '../../../services/apiClient';
 import multiTabSync, { SYNC_EVENTS } from '../../../services/multiTabSync';
 
@@ -35,6 +37,7 @@ const normalizeNotification = (item) => {
 };
 
 export const DashboardProvider = ({ children, onNavigate }) => {
+  const { t } = useTranslation('dashboard');
   // Ref để chống race condition khi chuyển đổi tổ chức / tải cụm K8s
   const activeOrgFetchIdRef = useRef(null);
   const { error: toastError } = useToast();
@@ -49,7 +52,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     }
     return {
       id: savedId,
-      name: savedName || 'Tổ chức hiện tại',
+      name: savedName || i18n.t('dashboard:context.currentOrgFallback'),
       slug: (savedName || 'org').toLowerCase().replace(/\s+/g, '-'),
       plan: 'SME Production Pro',
       clusterCount: 0,
@@ -181,7 +184,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
 
   // 5. Auto-refresh & Timestamp State
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState('Vừa xong');
+  const [lastUpdated, setLastUpdated] = useState(() => t('context.justNow'));
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Trigger manual refresh
@@ -193,7 +196,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     fetchNotifications();
     setTimeout(() => {
       const now = new Date();
-      setLastUpdated(now.toLocaleTimeString());
+      setLastUpdated(now.toLocaleTimeString(getIntlLocale(i18n.language)));
       setIsRefreshing(false);
     }, 400);
   }, [currentOrg?.id, fetchOrgEnvironmentsAndClusters]);
@@ -244,10 +247,10 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     setCurrentEnv({
       id: null,
       clusterId: null,
-      name: 'Chưa liên kết cụm K8s',
-      displayName: 'Chưa liên kết cụm K8s',
+      name: i18n.t('dashboard:context.unlinkedCluster'),
+      displayName: i18n.t('dashboard:context.unlinkedCluster'),
       cluster: null,
-      envName: 'Môi trường mặc định',
+      envName: i18n.t('dashboard:context.defaultEnv'),
       status: 'Pending',
       agentStatus: 'OFFLINE',
       nodes: 0,
@@ -344,7 +347,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
       }
     } catch (err) {
       console.warn('[DashboardContext] Lỗi tải danh sách tổ chức:', err);
-      setOrgError(err.message || 'Không thể tải danh sách tổ chức');
+      setOrgError(err.message || i18n.t('dashboard:context.loadOrgsError'));
       setOrgList([]);
       setCurrentOrg(null);
       setCurrentEnv(null);
@@ -453,7 +456,7 @@ export const DashboardProvider = ({ children, onNavigate }) => {
     if (!isAutoRefresh) return;
     const interval = setInterval(() => {
       const now = new Date();
-      setLastUpdated(now.toLocaleTimeString());
+      setLastUpdated(now.toLocaleTimeString(getIntlLocale(i18n.language)));
     }, 30000);
     return () => clearInterval(interval);
   }, [isAutoRefresh]);
@@ -636,9 +639,12 @@ export const DashboardProvider = ({ children, onNavigate }) => {
           if (payload.type === 'approval_created') {
             const newNotif = {
               id: `notif-appr-${Date.now()}`,
-              title: 'Cần Phê Duyệt Tự Phục Hồi (HITL)',
-              desc: `AI đề xuất hành động [${payload.data?.action_name || 'Phục hồi'}] trên ${payload.data?.target_name || 'Dịch vụ'}`,
-              time: 'Vừa xong',
+              title: i18n.t('dashboard:context.notifApprovalTitle'),
+              desc: i18n.t('dashboard:context.notifApprovalDesc', {
+                action: payload.data?.action_name || i18n.t('dashboard:context.defaultAction'),
+                target: payload.data?.target_name || i18n.t('dashboard:context.defaultService'),
+              }),
+              time: i18n.t('dashboard:context.justNow'),
               type: 'warning',
               read: false,
               unread: true,
@@ -657,9 +663,11 @@ export const DashboardProvider = ({ children, onNavigate }) => {
           fetchActiveIncidentsCount();
           const newNotif = {
             id: `notif-inc-${Date.now()}`,
-            title: 'Sự cố mới phát hiện',
-            desc: payload.data.title || `Sự cố trên dịch vụ ${payload.data.service_id || ''}`,
-            time: 'Vừa xong',
+            title: i18n.t('dashboard:context.notifIncidentTitle'),
+            desc:
+              payload.data.title ||
+              i18n.t('dashboard:context.notifIncidentDesc', { service: payload.data.service_id || '' }),
+            time: i18n.t('dashboard:context.justNow'),
             type: 'error',
             read: false,
             unread: true,
@@ -680,34 +688,34 @@ export const DashboardProvider = ({ children, onNavigate }) => {
           const incCode =
             payload.data.incident_code ||
             (incId ? `INC-${String(incId).slice(0, 8).toUpperCase()}` : 'CRITICAL');
-          const svc = payload.data.service_name || 'dịch vụ';
+          const svc = payload.data.service_name || i18n.t('dashboard:context.defaultServiceLower');
           const deepLink =
             payload.data.link || (incId ? `/dashboard/incidents?incident=${incId}` : '/dashboard/incidents');
 
           toastError(
-            `${payload.data.message || payload.data.title || 'Sự cố khẩn cấp cần kỹ sư kiểm tra ngay!'} (Dịch vụ: ${svc})`,
-            `🚨 CẢNH BÁO KHẨN CẤP [${incCode}]`
+            `${payload.data.message || payload.data.title || i18n.t('dashboard:context.criticalFallbackMsg')} (${i18n.t('dashboard:context.serviceLabel')}: ${svc})`,
+            `🚨 ${i18n.t('dashboard:context.criticalAlertPrefix')} [${incCode}]`
           );
 
           const critNotif = normalizeNotification({
             id: `notif-crit-${incId || Date.now()}`,
             type: 'INFRASTRUCTURE',
             severity: 'CRITICAL',
-            title: `🚨 [${incCode}] Khẩn cấp trên ${svc}`,
+            title: `🚨 ${i18n.t('dashboard:context.criticalNotifTitle', { code: incCode, service: svc })}`,
             desc:
               payload.data.message ||
               payload.data.title ||
-              `Sự cố nghiêm trọng trên ${svc} cần kiểm tra ngay.`,
+              i18n.t('dashboard:context.criticalNotifFallbackDesc', { service: svc }),
             message:
               payload.data.message ||
               payload.data.title ||
-              `Sự cố nghiêm trọng trên ${svc} cần kiểm tra ngay.`,
-            time: 'Vừa xong',
+              i18n.t('dashboard:context.criticalNotifFallbackDesc', { service: svc }),
+            time: i18n.t('dashboard:context.justNow'),
             read: false,
             unread: true,
             link: deepLink,
             actionPath: deepLink,
-            actionText: 'Xem Sự Cố',
+            actionText: i18n.t('dashboard:context.viewIncident'),
             incidentId: incId || null,
           });
           setNotifications((prev) => {

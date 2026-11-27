@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../../i18n';
 import { X, Sliders, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { alertService, DEFAULT_RULE_METADATA } from '../../../services/alertService';
 
@@ -9,48 +11,52 @@ export const validateAlertRuleForm = (form, unitsMap = DEFAULT_RULE_METADATA.uni
 
   const name = String(form.name || '').trim();
   if (!name || name.length < 2) {
-    errors.name = 'Tên cấu hình cảnh báo phải có ít nhất 2 ký tự';
+    errors.name = i18n.t('dashHealing:alertRuleModal.validation.nameMin');
   } else if (name.length > 255) {
-    errors.name = 'Tên cấu hình không được vượt quá 255 ký tự';
+    errors.name = i18n.t('dashHealing:alertRuleModal.validation.nameMax');
   }
 
   if (!form.metric_type) {
-    errors.metric_type = 'Vui lòng chọn loại chỉ số (Metric Type)';
+    errors.metric_type = i18n.t('dashHealing:alertRuleModal.validation.metricRequired');
   }
 
   if (!form.operator) {
-    errors.operator = 'Vui lòng chọn toán tử so sánh (Operator)';
+    errors.operator = i18n.t('dashHealing:alertRuleModal.validation.operatorRequired');
   }
 
   const allowedUnits = unitsMap?.[form.metric_type] || ['%'];
   if (!form.unit || !allowedUnits.includes(form.unit)) {
-    errors.unit = `Đơn vị '${form.unit || ''}' không hợp lệ cho chỉ số ${form.metric_type}. Cho phép: ${allowedUnits.join(', ')}`;
+    errors.unit = i18n.t('dashHealing:alertRuleModal.validation.unitInvalid', {
+      unit: form.unit || '',
+      metric: form.metric_type,
+      allowed: allowedUnits.join(', '),
+    });
   }
 
   const thresholdNum = Number(form.threshold_value);
   if (form.threshold_value === '' || form.threshold_value === null || form.threshold_value === undefined || !Number.isFinite(thresholdNum)) {
-    errors.threshold_value = 'Giá trị ngưỡng phải là một số hợp lệ';
+    errors.threshold_value = i18n.t('dashHealing:alertRuleModal.validation.thresholdNumber');
   } else if (form.unit === '%') {
     if (thresholdNum < 0 || thresholdNum > 100) {
-      errors.threshold_value = 'Ngưỡng phần trăm (%) phải nằm trong khoảng từ 0 đến 100';
+      errors.threshold_value = i18n.t('dashHealing:alertRuleModal.validation.thresholdPercent');
     }
   } else if (thresholdNum <= 0) {
-    errors.threshold_value = `Ngưỡng cảnh báo theo đơn vị '${form.unit}' phải lớn hơn 0`;
+    errors.threshold_value = i18n.t('dashHealing:alertRuleModal.validation.thresholdPositive', { unit: form.unit });
   }
 
   const evalWin = String(form.evaluation_window || '').trim();
   if (!evalWin || !EVAL_WINDOW_REGEX.test(evalWin)) {
-    errors.evaluation_window = 'Cửa sổ đánh giá phải có định dạng hợp lệ (vd: 30s, 1m, 5m, 15m, 1h)';
+    errors.evaluation_window = i18n.t('dashHealing:alertRuleModal.validation.evalWindowFormat');
   }
 
   const durationNum = Number(form.duration);
   if (form.duration === '' || !Number.isInteger(durationNum) || durationNum < 0) {
-    errors.duration = 'Thời gian duy trì (Duration) phải là số nguyên không âm (giây)';
+    errors.duration = i18n.t('dashHealing:alertRuleModal.validation.durationNonNeg');
   }
 
   const cooldownNum = Number(form.cooldown_seconds);
   if (form.cooldown_seconds === '' || !Number.isInteger(cooldownNum) || cooldownNum < 0) {
-    errors.cooldown_seconds = 'Thời gian chờ lặp lại (Cooldown) phải là số nguyên không âm (giây)';
+    errors.cooldown_seconds = i18n.t('dashHealing:alertRuleModal.validation.cooldownNonNeg');
   }
 
   return {
@@ -68,6 +74,7 @@ export const AlertRuleModal = ({
   canManageRules = false,
   onSaved,
 }) => {
+  const { t } = useTranslation('dashHealing');
   const effectiveMeta = metadata || DEFAULT_RULE_METADATA;
   const metricTypes = effectiveMeta.metric_types || DEFAULT_RULE_METADATA.metric_types;
   const operators = effectiveMeta.operators || DEFAULT_RULE_METADATA.operators;
@@ -175,7 +182,7 @@ export const AlertRuleModal = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!canManageRules) {
-      setSubmitError('Bạn không có quyền tạo hoặc chỉnh sửa cấu hình cảnh báo.');
+      setSubmitError(t('alertRuleModal.messages.permissionDenied'));
       return;
     }
 
@@ -208,10 +215,10 @@ export const AlertRuleModal = ({
       let saved;
       if (editingRule?.id) {
         saved = await alertService.updateAlertRule(editingRule.id, payload);
-        setSubmitSuccess('Cập nhật cấu hình cảnh báo thành công!');
+        setSubmitSuccess(t('alertRuleModal.messages.updateSuccess'));
       } else {
         saved = await alertService.createAlertRule(payload);
-        setSubmitSuccess('Tạo cấu hình cảnh báo mới thành công!');
+        setSubmitSuccess(t('alertRuleModal.messages.createSuccess'));
       }
 
       if (onSaved) {
@@ -221,7 +228,7 @@ export const AlertRuleModal = ({
         onClose();
       }, 400);
     } catch (err) {
-      setSubmitError(err.message || 'Không thể lưu cấu hình cảnh báo');
+      setSubmitError(err.message || t('alertRuleModal.messages.saveError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -273,10 +280,10 @@ export const AlertRuleModal = ({
             <Sliders size={20} color="var(--dash-primary)" />
             <div>
               <h2 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--dash-text-primary)', margin: 0 }}>
-                {editingRule ? 'Cập Nhật Quy Tắc Cảnh Báo (Edit Alert Rule)' : 'Tạo Quy Tắc Cảnh Báo Mới (Create Alert Rule)'}
+                {editingRule ? t('alertRuleModal.header.editTitle') : t('alertRuleModal.header.createTitle')}
               </h2>
               <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
-                Thiết lập điều kiện ngưỡng cho Hạ tầng (Node), Kubernetes và APM
+                {t('alertRuleModal.header.subtitle')}
               </p>
             </div>
           </div>
@@ -343,17 +350,17 @@ export const AlertRuleModal = ({
           )}
 
           {/* Row 1: Rule Name & Cluster */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '14px' }}>
+          <div className="dash-grid-2" style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '14px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Tên quy tắc (Rule Name) <span style={{ color: '#DC2626' }}>*</span>
+                {t('alertRuleModal.fields.name')} <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <input
                 type="text"
                 data-testid="input-rule-name"
                 value={form.name}
                 onChange={(e) => handleChange('name', e.target.value)}
-                placeholder="VD: Cảnh báo Bão hòa CPU Máy chủ"
+                placeholder={t('alertRuleModal.placeholders.name')}
                 style={{
                   width: '100%',
                   padding: '9px 12px',
@@ -372,7 +379,7 @@ export const AlertRuleModal = ({
 
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Phạm vi Cụm K8s (Cluster)
+                {t('alertRuleModal.fields.cluster')}
               </label>
               <select
                 data-testid="select-rule-cluster"
@@ -387,7 +394,7 @@ export const AlertRuleModal = ({
                   backgroundColor: '#FFFFFF',
                 }}
               >
-                <option value="">Toàn tổ chức (All Clusters / Org-Wide)</option>
+                <option value="">{t('alertRuleModal.fields.allClustersOption')}</option>
                 {clusters.map((c) => (
                   <option key={c.id || c.clusterId} value={c.id || c.clusterId}>
                     {c.cluster || c.name}
@@ -400,14 +407,14 @@ export const AlertRuleModal = ({
           {/* Row 2: Description */}
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-              Mô tả chi tiết (Description)
+              {t('alertRuleModal.fields.description')}
             </label>
             <textarea
               data-testid="input-rule-description"
               rows={2}
               value={form.description}
               onChange={(e) => handleChange('description', e.target.value)}
-              placeholder="Mô tả mục đích giám sát và hướng dẫn xử lý khi vượt ngưỡng..."
+              placeholder={t('alertRuleModal.placeholders.description')}
               style={{
                 width: '100%',
                 padding: '9px 12px',
@@ -421,10 +428,10 @@ export const AlertRuleModal = ({
           </div>
 
           {/* Row 3: Metric Type & Operator */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
+          <div className="dash-grid-2" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Loại Chỉ số (Metric Type) <span style={{ color: '#DC2626' }}>*</span>
+                {t('alertRuleModal.fields.metricType')} <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <select
                 data-testid="select-rule-metric-type"
@@ -449,7 +456,7 @@ export const AlertRuleModal = ({
 
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Toán tử điều kiện (Operator) <span style={{ color: '#DC2626' }}>*</span>
+                {t('alertRuleModal.fields.operator')} <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <select
                 data-testid="select-rule-operator"
@@ -474,10 +481,10 @@ export const AlertRuleModal = ({
           </div>
 
           {/* Row 4: Threshold, Unit, Severity */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+          <div className="dash-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Ngưỡng kích hoạt (Threshold) <span style={{ color: '#DC2626' }}>*</span>
+                {t('alertRuleModal.fields.threshold')} <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <input
                 type="number"
@@ -503,7 +510,7 @@ export const AlertRuleModal = ({
 
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Đơn vị đo (Unit) <span style={{ color: '#DC2626' }}>*</span>
+                {t('alertRuleModal.fields.unit')} <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <select
                 data-testid="select-rule-unit"
@@ -533,7 +540,7 @@ export const AlertRuleModal = ({
 
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Mức độ nghiêm trọng (Severity) <span style={{ color: '#DC2626' }}>*</span>
+                {t('alertRuleModal.fields.severity')} <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <select
                 data-testid="select-rule-severity"
@@ -559,17 +566,17 @@ export const AlertRuleModal = ({
           </div>
 
           {/* Row 5: Evaluation Window, Duration, Cooldown */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+          <div className="dash-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Cửa sổ đánh giá (Eval Window) <span style={{ color: '#DC2626' }}>*</span>
+                {t('alertRuleModal.fields.evalWindow')} <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <input
                 type="text"
                 data-testid="input-rule-eval-window"
                 value={form.evaluation_window}
                 onChange={(e) => handleChange('evaluation_window', e.target.value)}
-                placeholder="VD: 30s, 5m, 15m, 1h"
+                placeholder={t('alertRuleModal.placeholders.evalWindow')}
                 style={{
                   width: '100%',
                   padding: '9px 12px',
@@ -588,7 +595,7 @@ export const AlertRuleModal = ({
 
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Thời gian duy trì (Duration - giây) <span style={{ color: '#DC2626' }}>*</span>
+                {t('alertRuleModal.fields.duration')} <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <input
                 type="number"
@@ -613,7 +620,7 @@ export const AlertRuleModal = ({
 
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}>
-                Thời gian chờ (Cooldown - giây) <span style={{ color: '#DC2626' }}>*</span>
+                {t('alertRuleModal.fields.cooldown')} <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <input
                 type="number"
@@ -651,10 +658,10 @@ export const AlertRuleModal = ({
           >
             <div>
               <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                Kích hoạt quy tắc cảnh báo (Enabled)
+                {t('alertRuleModal.enabled.title')}
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)' }}>
-                Rule Engine sẽ tự động quét và đánh giá quy tắc này trong mỗi chu kỳ
+                {t('alertRuleModal.enabled.subtitle')}
               </div>
             </div>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
@@ -666,7 +673,7 @@ export const AlertRuleModal = ({
                 style={{ width: '18px', height: '18px', cursor: 'pointer' }}
               />
               <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: form.enabled ? '#059669' : 'var(--dash-text-muted)' }}>
-                {form.enabled ? 'Đang bật (Enabled)' : 'Đang tắt (Disabled)'}
+                {form.enabled ? t('alertRuleModal.enabled.on') : t('alertRuleModal.enabled.off')}
               </span>
             </label>
           </div>
@@ -696,7 +703,7 @@ export const AlertRuleModal = ({
                 cursor: 'pointer',
               }}
             >
-              Hủy bỏ
+              {t('common.cancelAction')}
             </button>
 
             <button
@@ -718,7 +725,7 @@ export const AlertRuleModal = ({
               }}
             >
               {isSubmitting && <RefreshCw size={14} className="animate-spin" />}
-              <span>{isSubmitting ? 'Đang lưu...' : editingRule ? 'Lưu Cập Nhật' : 'Tạo Quy Tắc'}</span>
+              <span>{isSubmitting ? t('alertRuleModal.footer.saving') : editingRule ? t('alertRuleModal.footer.saveEdit') : t('alertRuleModal.footer.saveCreate')}</span>
             </button>
           </div>
         </form>

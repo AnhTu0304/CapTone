@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Cpu, Box, Layers, AlertTriangle, ShieldAlert } from 'lucide-react';
 import K8sFreshnessBadge from './K8sFreshnessBadge';
 
@@ -6,7 +7,16 @@ import K8sFreshnessBadge from './K8sFreshnessBadge';
  * Modal hiển thị chi tiết tài nguyên K8s: Node, Pod, hoặc Deployment
  */
 export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
+  const { t } = useTranslation('dashMonitoring');
+
   if (!resource) return null;
+
+  const typeTitle =
+    type === 'NODE'
+      ? t('k8sComponents.resourceModal.titleNode')
+      : type === 'POD'
+        ? t('k8sComponents.resourceModal.titlePod')
+        : t('k8sComponents.resourceModal.titleDeployment');
 
   return (
     <div
@@ -57,7 +67,7 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
             {type === 'DEPLOYMENT' && <Layers size={20} color="#059669" />}
             <div>
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0F172A' }}>
-                Chi Tiết {type === 'NODE' ? 'Máy Chủ Node' : type === 'POD' ? 'Pod K8s' : 'Deployment'}: {resource.name}
+                {t('k8sComponents.resourceModal.titlePrefix')} {typeTitle}: {resource.name}
               </h3>
               <span style={{ fontSize: '0.75rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
                 UID: {resource.kubernetes_uid || resource.id || 'N/A'}
@@ -78,7 +88,7 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
           {/* Freshness Bar */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
             <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155' }}>
-              Trạng thái & Độ tươi quan sát:
+              {t('k8sComponents.resourceModal.freshnessLabel')}
             </span>
             <K8sFreshnessBadge freshness={resource.freshness} showDetails />
           </div>
@@ -95,13 +105,13 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                 <div style={{ padding: '12px', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>Trạng Thái Báo Cáo / Xác Minh</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('k8sComponents.resourceModal.nodeStatusLabel')}</span>
                   <div style={{ fontWeight: 700, marginTop: '4px', fontSize: '0.9375rem', color: resource.ready ? '#059669' : '#DC2626' }}>
                     {resource.status} ({resource.effective_status})
                   </div>
                 </div>
                 <div style={{ padding: '12px', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>Phiên bản Kubelet</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('k8sComponents.resourceModal.kubeletVersion')}</span>
                   <div style={{ fontWeight: 700, marginTop: '4px', fontSize: '0.9375rem', fontFamily: 'var(--font-mono)' }}>
                     {resource.kubelet_version || 'N/A'}
                   </div>
@@ -111,7 +121,7 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
               {/* Conditions */}
               <div>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: '0.875rem', fontWeight: 700, color: '#334155' }}>
-                  Điều kiện Máy Chủ (Node Conditions):
+                  {t('k8sComponents.resourceModal.nodeConditions')}
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
                   {Object.entries(resource.conditions || {}).map(([cond, statusVal]) => {
@@ -144,7 +154,7 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
               {Array.isArray(resource.active_pressures) && resource.active_pressures.length > 0 && (
                 <div style={{ padding: '12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontWeight: 700, fontSize: '0.8125rem', marginBottom: '6px' }}>
-                    <ShieldAlert size={16} /> Áp Lực Hệ Thống Đang Kích Hoạt (Active Pressures):
+                    <ShieldAlert size={16} /> {t('k8sComponents.resourceModal.activePressures')}
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {resource.active_pressures.map((p) => (
@@ -161,9 +171,9 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem', textAlign: 'left' }}>
                   <thead style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                     <tr>
-                      <th style={{ padding: '8px 12px' }}>Tài Nguyên</th>
-                      <th style={{ padding: '8px 12px' }}>Dung Lượng (Capacity)</th>
-                      <th style={{ padding: '8px 12px' }}>Có Thể Phân Bổ (Allocatable)</th>
+                      <th style={{ padding: '8px 12px' }}>{t('k8sComponents.resourceModal.colResource')}</th>
+                      <th style={{ padding: '8px 12px' }}>{t('k8sComponents.resourceModal.colCapacity')}</th>
+                      <th style={{ padding: '8px 12px' }}>{t('k8sComponents.resourceModal.colAllocatable')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -173,12 +183,12 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
                       <td style={{ padding: '8px 12px' }}>{resource.allocatable?.cpu_millicores ? `${resource.allocatable.cpu_millicores / 1000} vCPU` : 'N/A'}</td>
                     </tr>
                     <tr style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '8px 12px', fontWeight: 600 }}>Bộ Nhớ RAM</td>
+                      <td style={{ padding: '8px 12px', fontWeight: 600 }}>{t('k8sComponents.resourceModal.ramLabel')}</td>
                       <td style={{ padding: '8px 12px' }}>{resource.capacity?.memory_bytes ? `${(resource.capacity.memory_bytes / 1024 ** 3).toFixed(1)} GB` : 'N/A'}</td>
                       <td style={{ padding: '8px 12px' }}>{resource.allocatable?.memory_bytes ? `${(resource.allocatable.memory_bytes / 1024 ** 3).toFixed(1)} GB` : 'N/A'}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '8px 12px', fontWeight: 600 }}>Giới Hạn Pods</td>
+                      <td style={{ padding: '8px 12px', fontWeight: 600 }}>{t('k8sComponents.resourceModal.podsLimitLabel')}</td>
                       <td style={{ padding: '8px 12px' }}>{resource.capacity?.pods ?? 110}</td>
                       <td style={{ padding: '8px 12px' }}>{resource.allocatable?.pods_allocatable ?? resource.allocatable?.pods_capacity ?? 110}</td>
                     </tr>
@@ -193,13 +203,13 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                 <div style={{ padding: '12px', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>Pod Phase / Status</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('k8sComponents.resourceModal.podPhaseStatus')}</span>
                   <div style={{ fontWeight: 700, marginTop: '4px', fontSize: '0.9375rem', color: resource.is_healthy ? '#059669' : '#DC2626' }}>
                     {resource.phase} &bull; {resource.status}
                   </div>
                 </div>
                 <div style={{ padding: '12px', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>Node Máy Chủ</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('k8sComponents.resourceModal.podNode')}</span>
                   <div style={{ fontWeight: 700, marginTop: '4px', fontSize: '0.9375rem', fontFamily: 'var(--font-mono)' }}>
                     {resource.node_name || 'unassigned'}
                   </div>
@@ -210,12 +220,12 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
               {Array.isArray(resource.crash_loop_containers) && resource.crash_loop_containers.length > 0 && (
                 <div style={{ padding: '14px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#DC2626', fontWeight: 700, fontSize: '0.875rem', marginBottom: '8px' }}>
-                    <AlertTriangle size={18} /> Phát Hiện Container CrashLoopBackOff:
+                    <AlertTriangle size={18} /> {t('k8sComponents.resourceModal.crashLoopTitle')}
                   </div>
                   {resource.crash_loop_containers.map((c, i) => (
                     <div key={i} style={{ fontSize: '0.8125rem', color: '#7F1D1D', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div>Container: <strong>{c.name}</strong> (Khởi động lại {c.restart_count} lần)</div>
-                      {c.last_terminated_reason && <div>Lý do dừng trước đó: <strong>{c.last_terminated_reason}</strong> (Exit Code: {c.last_exit_code})</div>}
+                      <div>Container: <strong>{c.name}</strong> {t('k8sComponents.resourceModal.crashLoopRestarts', { count: c.restart_count })}</div>
+                      {c.last_terminated_reason && <div>{t('k8sComponents.resourceModal.crashLoopLastReason')} <strong>{c.last_terminated_reason}</strong> (Exit Code: {c.last_exit_code})</div>}
                       {c.waiting_message && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', backgroundColor: '#FEE2E2', padding: '6px 10px', borderRadius: '4px' }}>{c.waiting_message}</div>}
                     </div>
                   ))}
@@ -225,7 +235,7 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
               {/* Containers List */}
               <div>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: '0.875rem', fontWeight: 700, color: '#334155' }}>
-                  Danh Sách Containers ({resource.containers?.length || 0}):
+                  {t('k8sComponents.resourceModal.containersListTitle', { count: resource.containers?.length || 0 })}
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {(resource.containers || []).map((c, i) => (
@@ -242,7 +252,7 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
                       }}
                     >
                       <div>
-                        <strong>{c.name}</strong> <span style={{ color: '#64748B', fontSize: '0.75rem' }}>({c.image || 'no image'})</span>
+                        <strong>{c.name}</strong> <span style={{ color: '#64748B', fontSize: '0.75rem' }}>({c.image || t('k8sComponents.resourceModal.noImage')})</span>
                         {c.is_init && <span style={{ marginLeft: '6px', fontSize: '0.6875rem', backgroundColor: '#DBEAFE', color: '#1E40AF', padding: '1px 5px', borderRadius: '3px' }}>INIT</span>}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -263,13 +273,13 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                 <div style={{ padding: '12px', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>Trạng Thái Rollout</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('k8sComponents.resourceModal.rolloutStatus')}</span>
                   <div style={{ fontWeight: 700, marginTop: '4px', fontSize: '0.9375rem', color: resource.is_healthy ? '#059669' : '#DC2626' }}>
                     {resource.status} ({resource.effective_status})
                   </div>
                 </div>
                 <div style={{ padding: '12px', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>Observed vs Target Generation</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('k8sComponents.resourceModal.generationLabel')}</span>
                   <div style={{ fontWeight: 700, marginTop: '4px', fontSize: '0.9375rem', fontFamily: 'var(--font-mono)' }}>
                     Gen {resource.observed_generation ?? '—'} / {resource.generation ?? '—'}
                   </div>
@@ -279,19 +289,19 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
               {/* Replica Breakdown Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
                 <div style={{ padding: '10px', backgroundColor: '#F8FAFC', borderRadius: '6px', textAlign: 'center', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Mong Muốn</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('k8sComponents.resourceModal.desired')}</div>
                   <div style={{ fontSize: '1.125rem', fontWeight: 700, marginTop: '2px' }}>{resource.desired_replicas ?? resource.replicas?.desired ?? '—'}</div>
                 </div>
                 <div style={{ padding: '10px', backgroundColor: '#F8FAFC', borderRadius: '6px', textAlign: 'center', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Sẵn Sàng</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('k8sComponents.resourceModal.ready')}</div>
                   <div style={{ fontSize: '1.125rem', fontWeight: 700, color: '#059669', marginTop: '2px' }}>{resource.ready_replicas ?? resource.replicas?.ready ?? '—'}</div>
                 </div>
                 <div style={{ padding: '10px', backgroundColor: '#F8FAFC', borderRadius: '6px', textAlign: 'center', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Khả Dụng</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('k8sComponents.resourceModal.available')}</div>
                   <div style={{ fontSize: '1.125rem', fontWeight: 700, color: '#2563EB', marginTop: '2px' }}>{resource.available_replicas ?? resource.replicas?.available ?? '—'}</div>
                 </div>
                 <div style={{ padding: '10px', backgroundColor: '#F8FAFC', borderRadius: '6px', textAlign: 'center', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Đã Cập Nhật</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('k8sComponents.resourceModal.updated')}</div>
                   <div style={{ fontSize: '1.125rem', fontWeight: 700, color: '#7C3AED', marginTop: '2px' }}>{resource.updated_replicas ?? resource.replicas?.updated ?? '—'}</div>
                 </div>
               </div>
@@ -299,7 +309,7 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
               {/* Degraded Alert */}
               {resource.replicas?.missing_ready > 0 && (
                 <div style={{ padding: '10px 14px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px', color: '#DC2626', fontSize: '0.8125rem' }}>
-                  <strong>Cảnh báo thiếu Pod:</strong> Hiện còn thiếu {resource.replicas.missing_ready} Replicas sẵn sàng và {resource.replicas.missing_available || 0} Replicas khả dụng so với cấu hình mong muốn.
+                  <strong>{t('k8sComponents.resourceModal.missingPodsTitle')}</strong> {t('k8sComponents.resourceModal.missingPodsDesc', { missingReady: resource.replicas.missing_ready, missingAvail: resource.replicas.missing_available || 0 })}
                 </div>
               )}
 
@@ -307,7 +317,7 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
               {Array.isArray(resource.conditions) && resource.conditions.length > 0 && (
                 <div>
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '0.8125rem', fontWeight: 700, color: '#475569' }}>
-                    Điều Kiện Rollout (Conditions):
+                    {t('k8sComponents.resourceModal.rolloutConditionsTitle')}
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     {resource.conditions.map((cond, idx) => (
@@ -339,7 +349,7 @@ export const K8sResourceDetailModal = ({ resource, type, onClose }) => {
               cursor: 'pointer',
             }}
           >
-            Đóng
+            {t('common.close')}
           </button>
         </div>
       </div>

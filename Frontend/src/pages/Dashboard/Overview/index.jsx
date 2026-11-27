@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import { aiService } from '../../../services/aiService';
 import { selfHealingService } from '../../../services/selfHealingService';
@@ -51,18 +53,19 @@ const saveSelectedWorkload = (clusterId, workload) => {
   } catch {}
 };
 
-const METRIC_CONFIGS = [
-  { key: 'cpu', label: 'CPU (%)', unit: '%' },
-  { key: 'ram', label: 'RAM (%)', unit: '%' },
-  { key: 'disk', label: 'Đĩa Disk (%)', unit: '%' },
-  { key: 'latency', label: 'Độ trễ (ms)', unit: 'ms' },
-  { key: 'request_rate', label: 'Lưu lượng (Req/s)', unit: 'req/s' },
-  { key: 'error_5xx', label: 'Lỗi 5xx (%)', unit: '%' },
-  { key: 'pod_restart_count', label: 'Khởi động lại (Lần)', unit: 'lần' },
-  { key: 'replica_count', label: 'Bản sao Pod', unit: 'pod' },
-];
-
 export const OverviewPage = () => {
+  const { t, i18n } = useTranslation('dashboard');
+  const METRIC_CONFIGS = useMemo(() => [
+    { key: 'cpu', label: t('overview.metrics.cpu'), unit: '%' },
+    { key: 'ram', label: t('overview.metrics.ram'), unit: '%' },
+    { key: 'disk', label: t('overview.metrics.disk'), unit: '%' },
+    { key: 'latency', label: t('overview.metrics.latency'), unit: 'ms' },
+    { key: 'request_rate', label: t('overview.metrics.request_rate'), unit: 'req/s' },
+    { key: 'error_5xx', label: t('overview.metrics.error_5xx'), unit: '%' },
+    { key: 'pod_restart_count', label: t('overview.metrics.pod_restart_count'), unit: t('overview.units.times') },
+    { key: 'replica_count', label: t('overview.metrics.replica_count'), unit: t('overview.units.pod') },
+  ], [t]);
+
   const {
     currentOrg,
     currentEnv,
@@ -839,7 +842,7 @@ export const OverviewPage = () => {
         const d = new Date(item.collected_at);
         const timeLabel = isNaN(d.getTime())
           ? ''
-          : d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          : d.toLocaleTimeString(getIntlLocale(i18n.language), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
         map.set(key, {
           rawTime: item.collected_at,
@@ -878,7 +881,7 @@ export const OverviewPage = () => {
       stepLabel: `T${idx + 1}`,
       displayTime: item.timeLabel || `T${idx + 1}`,
     }));
-  }, [currentInputs]);
+  }, [currentInputs, i18n.language]);
 
   // Thống kê nhanh 6 chỉ số viễn trắc
   const seriesSummaries = useMemo(() => {
@@ -899,7 +902,7 @@ export const OverviewPage = () => {
         latest: Number(latest || 0).toFixed(2),
       };
     });
-  }, [timesteps]);
+  }, [timesteps, METRIC_CONFIGS]);
 
   const currentActiveStep = isClusterOnline ? (serviceStepMap[currentServiceTarget] || 12) : 0;
 
@@ -977,7 +980,7 @@ export const OverviewPage = () => {
       act?.action_code ||
       act?.result?.action ||
       act?.action ||
-      'Hành động tự phục hồi';
+      t('overview.actions.defaultHealing');
 
     const serviceIncidents = (incidents || []).filter((inc) =>
       doesRecordMatchServiceTarget(inc, targetLower, knownServices)
@@ -1082,21 +1085,21 @@ export const OverviewPage = () => {
     const isCircuitBreakerTripped = Boolean(activeOpenIncident) && recActionStr === 'NO_ACTION';
 
     const ACTION_VI_MAP = {
-      RESTART_POD: 'Khởi động lại Pod',
-      'Restart Pod': 'Khởi động lại Pod',
-      REPLACE_POD: 'Thay thế Pod',
-      'Replace Pod': 'Thay thế Pod',
-      SCALE_REPLICAS: 'Điều chỉnh bản sao Pod',
-      SCALE_UP: 'Tăng bản sao Pod',
-      'Scale Replicas': 'Điều chỉnh bản sao Pod',
-      SCALE_DOWN: 'Thu nhỏ bản sao Pod',
-      ROLLBACK_DEPLOYMENT: 'Rollback phiên bản',
-      'Rollback Deployment': 'Rollback phiên bản',
-      CLEANUP_TEMP_FILES: 'Dọn dẹp ổ đĩa',
-      CLEANUP_STORAGE: 'Dọn dẹp ổ đĩa',
-      DRAIN_NODE: 'Sơ tán Node (Drain)',
-      BLOCK_IP_TEMP: 'Chặn IP tạm thời',
-      TEMPORARY_IP_BLOCK: 'Chặn IP tạm thời',
+      RESTART_POD: t('overview.actions.RESTART_POD'),
+      'Restart Pod': t('overview.actions.RESTART_POD'),
+      REPLACE_POD: t('overview.actions.REPLACE_POD'),
+      'Replace Pod': t('overview.actions.REPLACE_POD'),
+      SCALE_REPLICAS: t('overview.actions.SCALE_REPLICAS'),
+      SCALE_UP: t('overview.actions.SCALE_UP'),
+      'Scale Replicas': t('overview.actions.SCALE_REPLICAS'),
+      SCALE_DOWN: t('overview.actions.SCALE_DOWN'),
+      ROLLBACK_DEPLOYMENT: t('overview.actions.ROLLBACK_DEPLOYMENT'),
+      'Rollback Deployment': t('overview.actions.ROLLBACK_DEPLOYMENT'),
+      CLEANUP_TEMP_FILES: t('overview.actions.CLEANUP_STORAGE'),
+      CLEANUP_STORAGE: t('overview.actions.CLEANUP_STORAGE'),
+      DRAIN_NODE: t('overview.actions.DRAIN_NODE'),
+      BLOCK_IP_TEMP: t('overview.actions.BLOCK_IP_TEMP'),
+      TEMPORARY_IP_BLOCK: t('overview.actions.BLOCK_IP_TEMP'),
     };
 
     const extractBlockedIp = (item) => {
@@ -1142,7 +1145,7 @@ export const OverviewPage = () => {
     };
 
     const translateActionVi = (raw, item = null) => {
-      if (!raw) return 'Hành động tự phục hồi';
+      if (!raw) return t('overview.actions.defaultHealing');
       const str = String(raw).trim();
       const norm = str.toUpperCase().replace(/\s+/g, '_');
 
@@ -1155,7 +1158,7 @@ export const OverviewPage = () => {
         str.toLowerCase().includes('chặn ip')
       ) {
         const ip = extractBlockedIp(item);
-        return ip ? `Chặn IP (${ip})` : 'Chặn IP tạm thời';
+        return ip ? t('overview.actions.BLOCK_IP_SPECIFIC', { ip }) : t('overview.actions.BLOCK_IP_TEMP');
       }
 
       if (norm === 'SCALE_REPLICAS' || norm === 'SCALE_DOWN' || norm === 'SCALE_UP') {
@@ -1202,7 +1205,7 @@ export const OverviewPage = () => {
           isUp = false;
         }
 
-        const base = isDown ? 'Thu nhỏ bản sao Pod' : isUp ? 'Tăng bản sao Pod' : 'Điều chỉnh bản sao Pod';
+        const base = isDown ? t('overview.actions.SCALE_DOWN') : isUp ? t('overview.actions.SCALE_UP') : t('overview.actions.SCALE_REPLICAS');
         return rep !== undefined && rep !== null ? `${base} (→ ${rep})` : base;
       }
       return ACTION_VI_MAP[str] || ACTION_VI_MAP[norm] || str;
@@ -1303,9 +1306,9 @@ export const OverviewPage = () => {
 
       const isRunning = execStatus === 'RUNNING' && !isAgentAwaitingVerify;
       const d = ts ? new Date(ts) : null;
-      // Hiển thị cả ngày và giờ (dd/MM/yyyy HH:mm:ss) theo đúng yêu cầu
+      const intlLocale = getIntlLocale(i18n.language);
       const timeStr = d
-        ? `${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+        ? `${d.toLocaleDateString(intlLocale, { day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
         : '--:--:--';
 
       mergedMap.set(key, {
@@ -1318,14 +1321,14 @@ export const OverviewPage = () => {
         isVerifying,
         isRunning,
         verdictLabel: isRunning
-          ? 'Đang thực thi'
+          ? t('overview.verdict.running')
           : isFailedOrUnrecovered
-            ? 'Chưa phục hồi'
+            ? t('overview.verdict.unrecovered')
             : isVerifiedRecovered
-              ? 'Đã phục hồi'
+              ? t('overview.verdict.recovered')
               : isVerifying
-                ? 'Đang hậu kiểm'
-                : execStatus || 'Đã ghi nhận',
+                ? t('overview.verdict.verifying')
+                : execStatus || t('overview.verdict.recorded'),
         tsMs,
         timeStr,
       });
@@ -1395,28 +1398,28 @@ export const OverviewPage = () => {
           if (curRep !== undefined && curRep !== null && !isNaN(Number(curRep)) && Number(curRep) !== numRep) {
             const numCurRep = Number(curRep);
             if (numRep < numCurRep) {
-              finalLabel = `Thu nhỏ bản sao Pod (→ ${numRep})`;
+              finalLabel = `${t('overview.actions.SCALE_DOWN')} (→ ${numRep})`;
             } else {
-              finalLabel = `Tăng bản sao Pod (→ ${numRep})`;
+              finalLabel = `${t('overview.actions.SCALE_UP')} (→ ${numRep})`;
             }
           }
           // Ưu tiên 2: So sánh theo tiến trình thời gian với số Pod của bước trước (prevRepTrack)
           else if (prevRepTrack !== null && !isNaN(prevRepTrack) && numRep !== prevRepTrack) {
             if (numRep < prevRepTrack) {
-              finalLabel = `Thu nhỏ bản sao Pod (→ ${numRep})`;
+              finalLabel = `${t('overview.actions.SCALE_DOWN')} (→ ${numRep})`;
             } else {
-              finalLabel = `Tăng bản sao Pod (→ ${numRep})`;
+              finalLabel = `${t('overview.actions.SCALE_UP')} (→ ${numRep})`;
             }
           }
           // Ưu tiên 3: Nếu là bước đầu tiên hoặc số Pod không đổi, xét từ khóa hành động trực tiếp
           else if (isExplicitUp && !isExplicitDown) {
-            finalLabel = `Tăng bản sao Pod (→ ${numRep})`;
+            finalLabel = `${t('overview.actions.SCALE_UP')} (→ ${numRep})`;
           } else if (isExplicitDown && !isExplicitUp) {
-            finalLabel = `Thu nhỏ bản sao Pod (→ ${numRep})`;
+            finalLabel = `${t('overview.actions.SCALE_DOWN')} (→ ${numRep})`;
           } else if (numRep >= 3) {
-            finalLabel = `Tăng bản sao Pod (→ ${numRep})`;
+            finalLabel = `${t('overview.actions.SCALE_UP')} (→ ${numRep})`;
           } else {
-            finalLabel = `Thu nhỏ bản sao Pod (→ ${numRep})`;
+            finalLabel = `${t('overview.actions.SCALE_DOWN')} (→ ${numRep})`;
           }
 
           prevRepTrack = numRep;
@@ -1431,7 +1434,7 @@ export const OverviewPage = () => {
       ) {
         const ip = extractBlockedIp(item);
         if (ip) {
-          finalLabel = `Chặn IP (${ip})`;
+          finalLabel = t('overview.actions.BLOCK_IP_SPECIFIC', { ip });
         }
       }
 
@@ -1508,26 +1511,26 @@ export const OverviewPage = () => {
     const rcaAgentsSummary = {
       metricsSub:
         relatedRisksArr.length > 0
-          ? `${timesteps.length || 12} bước • ${relatedRisksArr.length} rủi ro`
+          ? t('overview.rcaAgents.metricsStepsRisks', { steps: timesteps.length || 12, risks: relatedRisksArr.length })
           : timesteps.length > 0
-            ? `${timesteps.length} bước thực`
-            : 'Đang gom mẫu',
+            ? t('overview.rcaAgents.metricsSteps', { steps: timesteps.length })
+            : t('overview.rcaAgents.sampling'),
       logSub: activeOpenIncident
         ? logEvidenceCount > 0
-          ? `${logEvidenceCount} dấu hiệu lỗi`
-          : '0 lỗi log'
-        : 'Đang giám sát',
+          ? t('overview.rcaAgents.logErrors', { count: logEvidenceCount })
+          : t('overview.rcaAgents.zeroLogErrors')
+        : t('overview.rcaAgents.monitoring'),
       k8sEventSub: activeOpenIncident
         ? k8sEventEvidenceCount > 0
-          ? `${k8sEventEvidenceCount} sự kiện K8s`
+          ? t('overview.rcaAgents.k8sEvents', { count: k8sEventEvidenceCount })
           : isMissingK8sEvents
-            ? '0 sự kiện K8s'
-            : 'Không bất thường'
-        : 'Pod ổn định',
+            ? t('overview.rcaAgents.zeroK8sEvents')
+            : t('overview.rcaAgents.noAnomaly')
+        : t('overview.rcaAgents.podStable'),
       historySub:
         similarIdsArr.length > 0
-          ? `${similarIdsArr.length} ca tương tự`
-          : `${serviceIncidents.length} lịch sử DV`,
+          ? t('overview.rcaAgents.similarCases', { count: similarIdsArr.length })
+          : t('overview.rcaAgents.serviceHistory', { count: serviceIncidents.length }),
       rcaConfidencePct,
       evidenceStatus,
       relatedRisksCount: relatedRisksArr.length,
@@ -1566,7 +1569,7 @@ export const OverviewPage = () => {
         isServiceScope: true,
       },
     };
-  }, [currentServiceTarget, incidents, incidentDetailsMap, recommendations, policies, healingActions, totalHealingActions, approvals, timesteps.length]);
+  }, [currentServiceTarget, incidents, incidentDetailsMap, recommendations, policies, healingActions, totalHealingActions, approvals, timesteps.length, t, i18n.language]);
 
   // ==========================================
   // 8 THẺ KPI HẠ TẦNG & VẬN HÀNH THỜI GIAN THỰC (CHỈ HIỂN THỊ KHI CỤM/AGENT ONLINE — MẤT KẾT NỐI ĐƯA TOÀN BỘ VỀ 0)
@@ -1675,12 +1678,12 @@ export const OverviewPage = () => {
           : 0;
     const diskUsedGb = isClusterOnline ? Math.round((diskVal / 100) * totalDiskTbNum * 1024) : 0;
     const diskStatusText = !isClusterOnline
-      ? 'Chưa kết nối'
+      ? t('overview.kpi.disconnected')
       : diskVal > 85
-        ? 'Cảnh báo đầy'
+        ? t('overview.kpi.diskFullAlert')
         : diskVal > 70
-          ? 'Cần theo dõi'
-          : 'Bình thường';
+          ? t('overview.kpi.diskWatch')
+          : t('overview.kpi.normal');
 
     const openIncidentsTotal = !isClusterOnline
       ? 0
@@ -1707,7 +1710,7 @@ export const OverviewPage = () => {
     return [
       {
         id: 'cpu',
-        label: 'CPU Cụm',
+        label: t('overview.kpi.cpuCluster'),
         value: `${nodeCpuPercent}%`,
         subtext:
           totalCpuCores > 0
@@ -1723,7 +1726,7 @@ export const OverviewPage = () => {
       },
       {
         id: 'ram',
-        label: 'RAM Cụm',
+        label: t('overview.kpi.ramCluster'),
         value: `${nodeRamPercent}%`,
         subtext:
           totalRamGbNum > 0 ? `${nodeRamGb} / ${totalRamGb} GiB` : `${nodeRamGb} GiB`,
@@ -1737,7 +1740,7 @@ export const OverviewPage = () => {
       },
       {
         id: 'disk',
-        label: 'Ổ Đĩa Cụm',
+        label: t('overview.kpi.diskCluster'),
         value: `${diskVal}%`,
         subtext:
           totalDiskTbNum > 0
@@ -1755,9 +1758,9 @@ export const OverviewPage = () => {
       },
       {
         id: 'pods',
-        label: 'Pods & Nodes',
+        label: t('overview.kpi.podsAndNodes'),
         value: `${runningPodsCount} / ${totalPodsCount}`,
-        inlineBadge: isClusterOnline ? `${readyNodesCount}/${totalNodesCount} Node` : '0 Node',
+        inlineBadge: isClusterOnline ? t('overview.kpi.nodeBadge', { ready: readyNodesCount, total: totalNodesCount }) : t('overview.kpi.zeroNodes'),
         inlineBadgeColor: !isClusterOnline
           ? '#64748B'
           : allNodesHealthy
@@ -1769,10 +1772,10 @@ export const OverviewPage = () => {
             ? '#E0F2FE'
             : '#FEF3C7',
         subtext: !isClusterOnline
-          ? 'Chưa kết nối'
+          ? t('overview.kpi.disconnected')
           : allPodsHealthy && allNodesHealthy
-            ? '100% Bình thường'
-            : `${runningPodsCount}/${totalPodsCount} Pod • ${readyNodesCount}/${totalNodesCount} Node`,
+            ? t('overview.kpi.allHealthy')
+            : t('overview.kpi.podsNodesSub', { readyPods: runningPodsCount, totalPods: totalPodsCount, readyNodes: readyNodesCount, totalNodes: totalNodesCount }),
         tooltip:
           nodeNamesList.length > 0
             ? `Pods: ${runningPodsCount}/${totalPodsCount} Running • Nodes: ${rawNodes.map((n) => `${n.name} (${n.status || 'Unknown'})`).join(', ')}`
@@ -1802,10 +1805,10 @@ export const OverviewPage = () => {
       },
       {
         id: 'incidents',
-        label: 'Sự cố Mở',
+        label: t('overview.kpi.openIncidents'),
         value: `${openIncidentsTotal}`,
         valueColor: openIncidentsTotal > 0 ? '#D97706' : '#0F172A',
-        subtext: openIncidentsTotal === 0 ? 'An toàn' : 'Cần chú ý',
+        subtext: openIncidentsTotal === 0 ? t('overview.kpi.safe') : t('overview.kpi.needsAttention'),
         subColor: openIncidentsTotal > 0 ? '#D97706' : '#059669',
         accent: openIncidentsTotal > 0 ? '#F59E0B' : '#10B981',
         iconBg: openIncidentsTotal > 0 ? '#FFFBEB' : '#ECFDF5',
@@ -1815,13 +1818,13 @@ export const OverviewPage = () => {
       },
       {
         id: 'agent',
-        label: 'Tác tử Agent',
-        value: isClusterOnline ? 'Trực tuyến' : 'Ngoại tuyến',
+        label: t('overview.kpi.agent'),
+        value: isClusterOnline ? t('overview.kpi.online') : t('overview.kpi.offline'),
         valueSize: '1.02rem',
         valueColor: isClusterOnline ? '#0F172A' : '#94A3B8',
         subtext: isClusterOnline
-          ? `${agentLatencyMs}ms • ${isWsConnected ? 'Live' : 'Sync'}`
-          : 'Mất kết nối',
+          ? `${agentLatencyMs}ms • ${isWsConnected ? t('overview.kpi.live') : t('overview.kpi.sync')}`
+          : t('overview.kpi.connectionLost'),
         subColor: isClusterOnline ? '#059669' : '#DC2626',
         accent: isClusterOnline ? '#10B981' : '#EF4444',
         iconBg: isClusterOnline ? '#ECFDF5' : '#FEF2F2',
@@ -1832,12 +1835,12 @@ export const OverviewPage = () => {
       },
       {
         id: 'healing',
-        label: 'Tự Phục Hồi 24h',
+        label: t('overview.kpi.healing24h'),
         value: `${remediationsTotal}`,
         subtext:
           remediationsTotal > 0
-            ? `${remediationsSuccessRate}% Thành công`
-            : 'Chưa có sự cố',
+            ? t('overview.kpi.successRate', { rate: remediationsSuccessRate })
+            : t('overview.kpi.noIncidents'),
         subColor: '#059669',
         accent: '#0EA5E9',
         iconBg: '#EFF6FF',
@@ -1847,10 +1850,10 @@ export const OverviewPage = () => {
       },
       {
         id: 'hitl',
-        label: 'Chờ Duyệt HITL',
+        label: t('overview.kpi.hitlPending'),
         value: `${pendingHitlTotal}`,
         valueColor: pendingHitlTotal > 0 ? '#7C3AED' : '#0F172A',
-        subtext: pendingHitlTotal > 0 ? 'Cần phê duyệt' : 'Không có chờ duyệt',
+        subtext: pendingHitlTotal > 0 ? t('overview.kpi.needsApproval') : t('overview.kpi.noPending'),
         subColor: pendingHitlTotal > 0 ? '#7C3AED' : '#64748B',
         accent: pendingHitlTotal > 0 ? '#8B5CF6' : '#64748B',
         iconBg: pendingHitlTotal > 0 ? '#F5F3FF' : '#F8FAFC',
@@ -1870,6 +1873,7 @@ export const OverviewPage = () => {
     ctxPendingApprovalsCount,
     isClusterOnline,
     isWsConnected,
+    t,
   ]);
 
   return (
@@ -1888,6 +1892,7 @@ export const OverviewPage = () => {
     >
       {/* 1. KHỐI TRÊN ĐẦU NỔI KÍNH MỜ: 8 THẺ KPI HẠ TẦNG + THANH ĐIỀU KHIỂN DỊCH VỤ (NỔI TRÊN CANVAS VÔ CỰC GIỐNG STITCH) */}
       <div
+        className="overview-floating-header"
         style={{
           position: 'absolute',
           top: 0,
@@ -1918,7 +1923,7 @@ export const OverviewPage = () => {
                 key={card.id}
                 type="button"
                 onClick={() => onNavigate && card.path && onNavigate(card.path)}
-                title={card.tooltip || `Xem chi tiết ${card.label}`}
+                title={card.tooltip || t('overview.kpi.viewDetails', { label: card.label })}
                 style={{
                   pointerEvents: 'auto',
                   position: 'relative',
@@ -2160,15 +2165,15 @@ export const OverviewPage = () => {
                         display: 'inline-block',
                       }}
                     />
-                    {isClusterOnline ? 'LIVE' : 'OFFLINE'}
+                    {isClusterOnline ? t('overview.controls.live') : t('overview.controls.offline')}
                   </span>
                   <strong style={{ fontFamily: 'var(--font-mono)', color: '#15803D' }}>
-                    {currentServiceMetadata.pods} Pod
+                    {t('overview.controls.podCount', { count: currentServiceMetadata.pods })}
                   </strong>
                   <span style={{ color: '#94A3B8' }}>•</span>
                   <strong
                     style={{ fontFamily: 'var(--font-mono)', color: '#475569' }}
-                    title={`Dịch vụ đang chiếm ${currentServiceMetadata.nodes} Node trên tổng số ${currentServiceMetadata.totalClusterNodes} Node của cụm`}
+                    title={t('overview.controls.nodesUsageTooltip', { nodes: currentServiceMetadata.nodes, total: currentServiceMetadata.totalClusterNodes })}
                   >
                     {currentServiceMetadata.nodes} / {currentServiceMetadata.totalClusterNodes} Node
                   </strong>
@@ -2199,10 +2204,10 @@ export const OverviewPage = () => {
                         display: 'inline-block',
                       }}
                     />
-                    DỪNG
+                    {t('overview.controls.stopped')}
                   </span>
                   <strong style={{ fontFamily: 'var(--font-mono)', color: '#64748B' }}>
-                    0 Pod (Chưa triển khai)
+                    {t('overview.controls.zeroPods')}
                   </strong>
                   <span style={{ color: '#94A3B8' }}>•</span>
                   <strong
@@ -2223,7 +2228,7 @@ export const OverviewPage = () => {
                     border: '1px solid #E2E8F0',
                     fontFamily: 'var(--font-mono)',
                   }}
-                  title={`Danh sách Node thực tế đang chạy Pod của dịch vụ: ${currentServiceMetadata.nodeNames.join(', ')}`}
+                  title={t('overview.controls.nodeNamesTooltip', { nodes: currentServiceMetadata.nodeNames.join(', ') })}
                 >
                   {currentServiceMetadata.nodeNames.join(', ')}
                 </span>
@@ -2262,14 +2267,14 @@ export const OverviewPage = () => {
                 }}
               >
                 <Server size={12} color={isClusterOnline ? '#2563EB' : '#94A3B8'} />
-                Dịch vụ
+                {t('overview.controls.serviceLabel')}
                 <strong
                   style={{
                     fontFamily: 'var(--font-mono)',
                     color: isClusterOnline ? '#1D4ED8' : '#64748B',
                     fontWeight: 800,
                   }}
-                  title={`Cụm hiện có tổng cộng ${availableWorkloads.length} dịch vụ`}
+                  title={t('overview.controls.totalServicesTooltip', { count: availableWorkloads.length })}
                 >
                   ({availableWorkloads.length})
                 </strong>:
@@ -2297,7 +2302,7 @@ export const OverviewPage = () => {
                   }}
                 >
                   {availableWorkloads.length === 0 ? (
-                    <option value="">{isClusterOnline ? 'Đang tải...' : 'Chưa kết nối Agent'}</option>
+                    <option value="">{isClusterOnline ? t('overview.controls.loading') : t('overview.controls.agentNotConnected')}</option>
                   ) : (
                     availableWorkloads.map((wl) => (
                       <option key={wl} value={wl}>
@@ -2337,7 +2342,7 @@ export const OverviewPage = () => {
               }}
             >
               <Sliders size={11} />
-              <span>Thang: {scaleMode === 'auto' ? 'Tự co giãn' : '0 - 100%'}</span>
+              <span>{t('overview.controls.scalePrefix', { mode: scaleMode === 'auto' ? t('overview.controls.scaleAuto') : t('overview.controls.scaleStandard') })}</span>
             </button>
 
             {/* Nút Làm mới */}
@@ -2363,7 +2368,7 @@ export const OverviewPage = () => {
               }}
             >
               <RefreshCw size={11} className={isLoading || isRefreshing ? 'animate-spin' : ''} />
-              <span>Làm mới</span>
+              <span>{t('overview.controls.refresh')}</span>
             </button>
           </div>
         </div>
@@ -2371,6 +2376,7 @@ export const OverviewPage = () => {
 
       {/* 2. KHUNG CHÍNH: SƠ ĐỒ LUỒNG AI + NỀN LƯỚI CHẤM ĐỒNG BỘ PHÓNG TO/THU NHỎ TOÀN KHUNG (CHUẨN STITCH) */}
       <div
+        className="overview-canvas-wrapper"
         style={{
           position: 'absolute',
           inset: 0,
@@ -2381,7 +2387,7 @@ export const OverviewPage = () => {
         }}
       >
         <AIPipelineFlowCanvas
-          selectedService={isClusterOnline ? (currentServiceTarget || 'Đang tải...') : 'Chưa kết nối'}
+          selectedService={isClusterOnline ? (currentServiceTarget || t('overview.controls.loading')) : t('overview.controls.disconnected')}
           seriesSummaries={isClusterOnline ? seriesSummaries : []}
           prediction={isClusterOnline ? displaySelectedPrediction : null}
           currentActiveStep={isClusterOnline ? currentActiveStep : 0}

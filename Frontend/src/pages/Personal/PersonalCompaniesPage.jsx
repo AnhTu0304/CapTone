@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Building2,
   Search,
@@ -13,6 +14,7 @@ import {
 import { personalPortalService } from '../../services/personalPortalService';
 
 export const PersonalCompaniesPage = ({ onNavigate }) => {
+  const { t } = useTranslation('portal');
   const [companies, setCompanies] = useState(() => personalPortalService.getMyCompanies());
   const [invitations, setInvitations] = useState(() => personalPortalService.getInvitations());
   const [activeTab, setActiveTab] = useState('joined'); // 'joined' | 'invitations'
@@ -66,7 +68,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
   const handleCreateCompany = async (e) => {
     e.preventDefault();
     if (!newOrgName.trim()) {
-      setCreateError('Vui lòng nhập tên công ty');
+      setCreateError(t('companies.createModal.nameRequired'));
       return;
     }
     try {
@@ -85,7 +87,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
       setNewOrgDesc('');
       setCreateError('');
     } catch (err) {
-      setCreateError(err.message || 'Lỗi khi tạo công ty');
+      setCreateError(err.message || t('companies.createModal.createFailed'));
     }
   };
 
@@ -106,7 +108,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
       setCompanies(updatedComps || []);
       setLeaveModalOrg(null);
     } catch (err) {
-      alert(err.message || 'Không thể rời công ty');
+      alert(err.message || t('companies.leaveModal.leaveFailed'));
     }
   };
 
@@ -120,7 +122,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
       setInvitations(invs);
       setCompanies(comps);
     } catch (err) {
-      alert(err.message || 'Không thể chấp nhận lời mời');
+      alert(err.message || t('companies.errors.acceptInviteFailed'));
     }
   };
 
@@ -144,10 +146,10 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-            Công Ty Của Tôi
+            {t('companies.title')}
           </h2>
           <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
-            Quản trị các tổ chức bạn đang trực thuộc, chuyển đổi không gian làm việc hoặc tạo mới công ty.
+            {t('companies.subtitle')}
           </p>
         </div>
 
@@ -170,7 +172,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
           }}
         >
           <Plus size={16} />
-          <span>Tạo Công Ty Mới</span>
+          <span>{t('companies.createButton')}</span>
         </button>
       </div>
 
@@ -203,7 +205,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
           }}
         >
           <Building2 size={16} />
-          <span>Công Ty Đang Tham Gia ({companies.length})</span>
+          <span>{t('companies.tabs.joined', { count: companies.length })}</span>
         </button>
 
         <button
@@ -226,7 +228,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
           }}
         >
           <Mail size={16} />
-          <span>Lời Mời Đang Chờ ({invitations.length})</span>
+          <span>{t('companies.tabs.invitations', { count: invitations.length })}</span>
           {invitations.length > 0 && (
             <span
               style={{
@@ -264,7 +266,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
               />
               <input
                 type="text"
-                placeholder="Tìm kiếm theo tên công ty hoặc slug..."
+                placeholder={t('companies.filters.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 style={{
@@ -294,10 +296,10 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                 fontWeight: 500,
               }}
             >
-              <option value="ALL">Tất cả vai trò</option>
-              <option value="SME_OWNER">SME Owner (Chủ sở hữu)</option>
-              <option value="DEVOPS">DevOps Lead</option>
-              <option value="VIEWER">Viewer (Người xem)</option>
+              <option value="ALL">{t('companies.filters.allRoles')}</option>
+              <option value="SME_OWNER">{t('companies.filters.roleOwner')}</option>
+              <option value="DEVOPS">{t('companies.filters.roleDevops')}</option>
+              <option value="VIEWER">{t('companies.filters.roleViewer')}</option>
             </select>
           </div>
 
@@ -367,14 +369,14 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                         color: '#059669',
                       }}
                     >
-                      {company.status === 'ACTIVE' ? 'Đang hoạt động' : 'Tạm khóa'}
+                      {company.status === 'ACTIVE' ? t('companies.card.statusActive') : t('companies.card.statusSuspended')}
                     </span>
                   </div>
 
                   {/* Role & Metadata */}
                   <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78125rem' }}>
-                      <span style={{ color: '#64748B' }}>Vai trò của bạn:</span>
+                      <span style={{ color: '#64748B' }}>{t('companies.card.yourRole')}</span>
                       <strong style={{ color: '#0F172A' }}>
                         {(() => {
                           const r = String(company.role || company.roleTitle || '').toUpperCase();
@@ -387,13 +389,18 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78125rem' }}>
-                      <span style={{ color: '#64748B' }}>Hạ tầng K8s:</span>
-                      <span>{company.clustersCount} Cụm • {company.activeWorkloads} Workloads</span>
+                      <span style={{ color: '#64748B' }}>{t('companies.card.k8sInfra')}</span>
+                      <span>
+                        {t('companies.card.infraValue', {
+                          clusters: company.clustersCount,
+                          workloads: company.activeWorkloads,
+                        })}
+                      </span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78125rem' }}>
-                      <span style={{ color: '#64748B' }}>Thành viên:</span>
-                      <span>{company.membersCount} người</span>
+                      <span style={{ color: '#64748B' }}>{t('companies.card.members')}</span>
+                      <span>{t('companies.card.membersCount', { count: company.membersCount })}</span>
                     </div>
                   </div>
                 </div>
@@ -419,7 +426,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                       gap: '6px',
                     }}
                   >
-                    <span>Vào Workspace</span>
+                    <span>{t('companies.card.enterWorkspace')}</span>
                     <ArrowRight size={14} />
                   </button>
 
@@ -427,7 +434,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                   <button
                     type="button"
                     onClick={() => setLeaveModalOrg(company)}
-                    title="Rời khỏi Company này"
+                    title={t('companies.card.leaveTooltip')}
                     style={{
                       padding: '8px 10px',
                       borderRadius: '8px',
@@ -460,11 +467,13 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
               }}
             >
               <Building2 size={36} color="#94A3B8" style={{ margin: '0 auto 12px auto' }} />
-              <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>{searchTerm || roleFilter !== 'ALL' ? 'Không tìm thấy Company nào phù hợp' : 'Chưa tham gia Company nào'}</div>
+              <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>
+                {searchTerm || roleFilter !== 'ALL' ? t('companies.empty.noMatchTitle') : t('companies.empty.noJoinedTitle')}
+              </div>
               <p style={{ fontSize: '0.8125rem', margin: '4px 0 0 0' }}>
                 {searchTerm || roleFilter !== 'ALL'
-                  ? 'Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc vai trò.'
-                  : 'Hiện tại bạn chưa thuộc Company nào hoặc chưa được cấp quyền truy cập. Hãy tạo Company nếu bạn có quyền hoặc liên hệ quản trị viên để được mời tham gia.'}
+                  ? t('companies.empty.noMatchDesc')
+                  : t('companies.empty.noJoinedDesc')}
               </p>
             </div>
           )}
@@ -487,10 +496,10 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
             >
               <Mail size={36} color="#94A3B8" style={{ margin: '0 auto 12px auto' }} />
               <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>
-                Không có lời mời nào đang chờ
+                {t('companies.empty.noInvitationsTitle')}
               </div>
               <p style={{ fontSize: '0.8125rem', margin: '4px 0 0 0' }}>
-                Khi một doanh nghiệp mời email của bạn tham gia dự án, lời mời sẽ hiển thị tại đây để bạn xác nhận.
+                {t('companies.empty.noInvitationsDesc')}
               </p>
             </div>
           ) : (
@@ -532,7 +541,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                           {inv.organizationName}
                         </div>
                         <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                          Lời mời từ: <strong>{inv.inviterName}</strong> ({inv.inviterEmail})
+                          {t('companies.invitation.fromPrefix')} <strong>{inv.inviterName}</strong> ({inv.inviterEmail})
                         </span>
                       </div>
                     </div>
@@ -547,11 +556,11 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78125rem' }}>
-                        <span style={{ color: '#64748B' }}>Vai trò được chỉ định:</span>
+                        <span style={{ color: '#64748B' }}>{t('companies.invitation.assignedRole')}</span>
                         <strong style={{ color: '#059669' }}>{inv.invitedRoleTitle}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78125rem', marginTop: '6px' }}>
-                        <span style={{ color: '#64748B' }}>Hạn chót phản hồi:</span>
+                        <span style={{ color: '#64748B' }}>{t('companies.invitation.expiresAt')}</span>
                         <span>{inv.expiresAt}</span>
                       </div>
                     </div>
@@ -578,7 +587,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                       }}
                     >
                       <Check size={16} />
-                      <span>Chấp Nhận Tham Gia</span>
+                      <span>{t('companies.invitation.accept')}</span>
                     </button>
 
                     <button
@@ -595,7 +604,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                         cursor: 'pointer',
                       }}
                     >
-                      Từ Chối
+                      {t('companies.invitation.reject')}
                     </button>
                   </div>
                 </div>
@@ -633,7 +642,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Building2 size={20} color="#059669" />
                 <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Tạo Mới Công Ty
+                  {t('companies.createModal.title')}
                 </h3>
               </div>
               <button
@@ -664,11 +673,11 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
             <form onSubmit={handleCreateCompany} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Tên Doanh Nghiệp / Công Ty *
+                  {t('companies.createModal.nameLabel')}
                 </label>
                 <input
                   type="text"
-                  placeholder="Ví dụ: TechHub Vietnam Co., Ltd"
+                  placeholder={t('companies.createModal.namePlaceholder')}
                   value={newOrgName}
                   onChange={(e) => handleNameChange(e.target.value)}
                   required
@@ -685,7 +694,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Định danh Slug URL (Hệ thống tự sinh) *
+                  {t('companies.createModal.slugLabel')}
                 </label>
                 <input
                   type="text"
@@ -707,11 +716,11 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Tên Miền Doanh Nghiệp (Domain)
+                  {t('companies.createModal.domainLabel')}
                 </label>
                 <input
                   type="text"
-                  placeholder="Ví dụ: techhub.vn"
+                  placeholder={t('companies.createModal.domainPlaceholder')}
                   value={newOrgDomain}
                   onChange={(e) => setNewOrgDomain(e.target.value)}
                   style={{
@@ -727,11 +736,11 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                  Mô Tả Ngắn
+                  {t('companies.createModal.descLabel')}
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="Lĩnh vực kinh doanh hoặc mục đích cụm máy chủ..."
+                  placeholder={t('companies.createModal.descPlaceholder')}
                   value={newOrgDesc}
                   onChange={(e) => setNewOrgDesc(e.target.value)}
                   style={{
@@ -760,7 +769,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                     cursor: 'pointer',
                   }}
                 >
-                  Hủy Bỏ
+                  {t('companies.createModal.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -775,7 +784,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                     cursor: 'pointer',
                   }}
                 >
-                  Xác Nhận Tạo
+                  {t('companies.createModal.confirm')}
                 </button>
               </div>
             </form>
@@ -808,10 +817,10 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#DC2626', marginBottom: '12px' }}>
               <AlertTriangle size={24} />
-              <h3 style={{ fontSize: '1.125rem', fontWeight: 800, margin: 0 }}>Xác Nhận Rời Company</h3>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: 800, margin: 0 }}>{t('companies.leaveModal.title')}</h3>
             </div>
             <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.5, margin: '0 0 16px 0' }}>
-              Bạn có chắc chắn muốn rời khỏi tổ chức <strong>{leaveModalOrg.name}</strong>? Bạn sẽ mất toàn bộ quyền truy cập vào các cụm K8s và tài nguyên của công ty này.
+              {t('companies.leaveModal.confirmPrefix')} <strong>{leaveModalOrg.name}</strong>{t('companies.leaveModal.confirmSuffix')}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button
@@ -828,7 +837,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                   cursor: 'pointer',
                 }}
               >
-                Hủy
+                {t('companies.leaveModal.cancel')}
               </button>
               <button
                 type="button"
@@ -844,7 +853,7 @@ export const PersonalCompaniesPage = ({ onNavigate }) => {
                   cursor: 'pointer',
                 }}
               >
-                Xác Nhận Rời
+                {t('companies.leaveModal.confirm')}
               </button>
             </div>
           </div>

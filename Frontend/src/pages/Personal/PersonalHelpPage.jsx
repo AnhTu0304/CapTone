@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   BookOpen,
   HelpCircle,
@@ -14,6 +15,7 @@ import {
 } from '../../services/personalPortalService';
 
 export const PersonalHelpPage = ({ onNavigate }) => {
+  const { t } = useTranslation('portal');
   const [activeTab, setActiveTab] = useState('docs'); // 'docs' | 'faq'
 
   // Documentation state
@@ -27,11 +29,21 @@ export const PersonalHelpPage = ({ onNavigate }) => {
 
   // Filtered FAQs
   const filteredFaqs = FAQ_DATA.filter((f) => {
+    const q = t(`help.faqsData.${f.id}.question`, { defaultValue: f.question }).toLowerCase();
+    const a = t(`help.faqsData.${f.id}.answer`, { defaultValue: f.answer }).toLowerCase();
+    const searchLower = faqSearch.toLowerCase();
     const matchesSearch =
-      f.question.toLowerCase().includes(faqSearch.toLowerCase()) ||
-      f.answer.toLowerCase().includes(faqSearch.toLowerCase());
+      q.includes(searchLower) ||
+      a.includes(searchLower) ||
+      f.question.toLowerCase().includes(searchLower) ||
+      f.answer.toLowerCase().includes(searchLower);
     const matchesCat = faqCategory === 'ALL' || f.category.includes(faqCategory);
     return matchesSearch && matchesCat;
+  });
+
+  const activeDocSteps = t(`help.docsData.${activeDoc.id}.steps`, {
+    returnObjects: true,
+    defaultValue: activeDoc.steps,
   });
 
   return (
@@ -39,10 +51,10 @@ export const PersonalHelpPage = ({ onNavigate }) => {
       {/* Title */}
       <div>
         <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-          Trung Tâm Trợ Giúp & Hướng Dẫn Kỹ Thuật
+          {t('help.title')}
         </h2>
         <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
-          Tra cứu tài liệu quy trình vận hành và giải đáp các câu hỏi thường gặp về hệ thống giám sát eBPF & Tự phục hồi AI.
+          {t('help.subtitle')}
         </p>
       </div>
 
@@ -56,8 +68,8 @@ export const PersonalHelpPage = ({ onNavigate }) => {
         }}
       >
         {[
-          { id: 'docs', label: '1. Tài Liệu Hướng Dẫn Kỹ Thuật', icon: BookOpen },
-          { id: 'faq', label: '2. Câu Hỏi Thường Gặp (FAQ)', icon: HelpCircle },
+          { id: 'docs', label: t('help.tabs.docs'), icon: BookOpen },
+          { id: 'faq', label: t('help.tabs.faq'), icon: HelpCircle },
         ].map((tab) => {
           const isActive = activeTab === tab.id;
           const TabIcon = tab.icon;
@@ -115,11 +127,12 @@ export const PersonalHelpPage = ({ onNavigate }) => {
                 letterSpacing: '0.04em',
               }}
             >
-              Quy Trình Chuẩn SelfAI
+              {t('help.docs.tocTitle')}
             </div>
 
             {DOCUMENTATION_DATA.map((doc) => {
               const isSelected = doc.id === selectedDocId;
+              const docTitle = t(`help.docsData.${doc.id}.title`, { defaultValue: doc.title });
               return (
                 <button
                   key={doc.id}
@@ -143,7 +156,7 @@ export const PersonalHelpPage = ({ onNavigate }) => {
                   }}
                 >
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {doc.title}
+                    {docTitle}
                   </span>
                   {isSelected && <ChevronRight size={14} color="#059669" />}
                 </button>
@@ -175,23 +188,23 @@ export const PersonalHelpPage = ({ onNavigate }) => {
                   color: '#2563EB',
                 }}
               >
-                {activeDoc.category}
+                {t(`help.docsData.${activeDoc.id}.category`, { defaultValue: activeDoc.category })}
               </span>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A', margin: '8px 0 6px 0' }}>
-                {activeDoc.title}
+                {t(`help.docsData.${activeDoc.id}.title`, { defaultValue: activeDoc.title })}
               </h3>
               <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.5, margin: 0 }}>
-                {activeDoc.summary}
+                {t(`help.docsData.${activeDoc.id}.summary`, { defaultValue: activeDoc.summary })}
               </p>
             </div>
 
             {/* Step-by-Step Guide */}
             <div>
               <h4 style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#0F172A', marginBottom: '12px' }}>
-                Các bước thực hiện cụ thể:
+                {t('help.docs.stepsTitle')}
               </h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {activeDoc.steps.map((st, idx) => (
+                {(Array.isArray(activeDocSteps) ? activeDocSteps : activeDoc.steps).map((st, idx) => (
                   <div
                     key={idx}
                     style={{
@@ -232,7 +245,7 @@ export const PersonalHelpPage = ({ onNavigate }) => {
             {activeDoc.codeSnippet && (
               <div>
                 <h4 style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>
-                  Lệnh thực thi mẫu (Command-line):
+                  {t('help.docs.commandTitle')}
                 </h4>
                 <pre
                   style={{
@@ -266,10 +279,10 @@ export const PersonalHelpPage = ({ onNavigate }) => {
               <AlertTriangle size={18} color="#D97706" style={{ flexShrink: 0, marginTop: '2px' }} />
               <div>
                 <strong style={{ fontSize: '0.8125rem', color: '#92400E', display: 'block', marginBottom: '2px' }}>
-                  Kinh nghiệm xử lý & Lỗi thường gặp:
+                  {t('help.docs.tipsTitle')}
                 </strong>
                 <span style={{ fontSize: '0.8125rem', color: '#B45309', lineHeight: 1.4 }}>
-                  {activeDoc.tips}
+                  {t(`help.docsData.${activeDoc.id}.tips`, { defaultValue: activeDoc.tips })}
                 </span>
               </div>
             </div>
@@ -290,7 +303,7 @@ export const PersonalHelpPage = ({ onNavigate }) => {
               />
               <input
                 type="text"
-                placeholder="Tìm kiếm câu hỏi (Agent, Metrics, RCA, Self-Healing, Mời thành viên)..."
+                placeholder={t('help.faq.searchPlaceholder')}
                 value={faqSearch}
                 onChange={(e) => setFaqSearch(e.target.value)}
                 style={{
@@ -317,12 +330,12 @@ export const PersonalHelpPage = ({ onNavigate }) => {
                 outline: 'none',
               }}
             >
-              <option value="ALL">Tất cả danh mục câu hỏi</option>
-              <option value="Agent">Agent & Kết Nối</option>
-              <option value="Hạ Tầng">Hạ Tầng & Metrics</option>
-              <option value="AI">AI & Tự Phục Hồi</option>
-              <option value="Tổ Chức">Tổ Chức & Thành Viên</option>
-              <option value="Phân Quyền">Phân Quyền & Bảo Mật</option>
+              <option value="ALL">{t('help.faq.categories.all')}</option>
+              <option value="Agent">{t('help.faq.categories.agent')}</option>
+              <option value="Hạ Tầng">{t('help.faq.categories.infra')}</option>
+              <option value="AI">{t('help.faq.categories.ai')}</option>
+              <option value="Tổ Chức">{t('help.faq.categories.org')}</option>
+              <option value="Phân Quyền">{t('help.faq.categories.rbac')}</option>
             </select>
           </div>
 
@@ -361,10 +374,10 @@ export const PersonalHelpPage = ({ onNavigate }) => {
                       <HelpCircle size={18} color="#059669" />
                       <div>
                         <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                          {faq.category}
+                          {t(`help.faqsData.${faq.id}.category`, { defaultValue: faq.category })}
                         </span>
                         <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
-                          {faq.question}
+                          {t(`help.faqsData.${faq.id}.question`, { defaultValue: faq.question })}
                         </div>
                       </div>
                     </div>
@@ -374,7 +387,7 @@ export const PersonalHelpPage = ({ onNavigate }) => {
                   {isExpanded && (
                     <div style={{ padding: '0 20px 20px 50px', borderTop: '1px solid #F1F5F9' }}>
                       <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.6, margin: '14px 0 12px 0' }}>
-                        {faq.answer}
+                        {t(`help.faqsData.${faq.id}.answer`, { defaultValue: faq.answer })}
                       </p>
 
                       {faq.actionPath && (
@@ -395,7 +408,7 @@ export const PersonalHelpPage = ({ onNavigate }) => {
                             gap: '6px',
                           }}
                         >
-                          <span>{faq.actionText}</span>
+                          <span>{t(`help.faqsData.${faq.id}.actionText`, { defaultValue: faq.actionText })}</span>
                           <ExternalLink size={13} />
                         </button>
                       )}

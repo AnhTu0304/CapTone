@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ShieldAlert,
   AlertTriangle,
@@ -20,6 +21,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { alertService, formatAlertApiError } from '../../../services/alertService';
 import { getAuthToken, getWsTicket, API_BASE_URL } from '../../../services/apiClient';
+import i18n from '../../../i18n';
 import AlertDetailDrawer, {
   getSeverityStyle,
   getStatusStyle,
@@ -27,16 +29,17 @@ import AlertDetailDrawer, {
 } from './AlertDetailDrawer';
 
 export const TIME_RANGE_PRESETS = [
-  { key: 'ALL', label: 'Tất cả thời gian', ms: null },
-  { key: '15m', label: '15 phút qua', ms: 15 * 60 * 1000 },
-  { key: '1h', label: '1 giờ qua', ms: 60 * 60 * 1000 },
-  { key: '6h', label: '6 giờ qua', ms: 6 * 60 * 60 * 1000 },
-  { key: '24h', label: '24 giờ qua', ms: 24 * 60 * 60 * 1000 },
-  { key: '7d', label: '7 ngày qua', ms: 7 * 24 * 60 * 60 * 1000 },
-  { key: '30d', label: '30 ngày qua', ms: 30 * 24 * 60 * 60 * 1000 },
+  { key: 'ALL', labelKey: 'alerts.timePresets.ALL', get label() { return i18n.t('dashHealing:alerts.timePresets.ALL'); }, ms: null },
+  { key: '15m', labelKey: 'alerts.timePresets.15m', get label() { return i18n.t('dashHealing:alerts.timePresets.15m'); }, ms: 15 * 60 * 1000 },
+  { key: '1h', labelKey: 'alerts.timePresets.1h', get label() { return i18n.t('dashHealing:alerts.timePresets.1h'); }, ms: 60 * 60 * 1000 },
+  { key: '6h', labelKey: 'alerts.timePresets.6h', get label() { return i18n.t('dashHealing:alerts.timePresets.6h'); }, ms: 6 * 60 * 60 * 1000 },
+  { key: '24h', labelKey: 'alerts.timePresets.24h', get label() { return i18n.t('dashHealing:alerts.timePresets.24h'); }, ms: 24 * 60 * 60 * 1000 },
+  { key: '7d', labelKey: 'alerts.timePresets.7d', get label() { return i18n.t('dashHealing:alerts.timePresets.7d'); }, ms: 7 * 24 * 60 * 60 * 1000 },
+  { key: '30d', labelKey: 'alerts.timePresets.30d', get label() { return i18n.t('dashHealing:alerts.timePresets.30d'); }, ms: 30 * 24 * 60 * 60 * 1000 },
 ];
 
 export const AlertHistoryPage = ({ onNavigate }) => {
+  const { t } = useTranslation('dashHealing');
   const dashboard = useDashboard();
   const auth = useAuth();
 
@@ -129,7 +132,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
       const startMs = new Date(historyStartDate).getTime();
       const endMs = new Date(historyEndDate).getTime();
       if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && startMs > endMs) {
-        setHistoryDateValidationError('Khoảng thời gian không hợp lệ: Ngày bắt đầu không được lớn hơn ngày kết thúc.');
+        setHistoryDateValidationError(i18n.t('dashHealing:alerts.toast.invalidDateRange'));
         setIsLoadingHistory(false);
         return;
       }
@@ -208,7 +211,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
     } catch (err) {
       if (reqId !== historyReqSeqRef.current) return;
       if (!err?.isAborted) {
-        setHistoryError(formatAlertApiError(err, 'Không thể tải lịch sử cảnh báo'));
+        setHistoryError(formatAlertApiError(err, i18n.t('dashHealing:alerts.toast.loadHistoryError')));
       }
     } finally {
       if (reqId === historyReqSeqRef.current) {
@@ -318,13 +321,13 @@ export const AlertHistoryPage = ({ onNavigate }) => {
     try {
       await alertService.acknowledgeAlert(
         item.id,
-        'Đã tiếp nhận xử lý từ bảng Lịch sử Cảnh báo',
+        t('alerts.toast.historyAckNote'),
         item.version
       );
-      showToast('success', `Đã tiếp nhận cảnh báo "${item.rule_name || item.title}".`);
+      showToast('success', t('alerts.toast.historyAckSuccess', { name: item.rule_name || item.title }));
       fetchAlertHistoryAndSummary();
     } catch (err) {
-      showToast('error', formatAlertApiError(err, 'Lỗi khi tiếp nhận cảnh báo'));
+      showToast('error', formatAlertApiError(err, t('alerts.toast.historyAckError')));
     } finally {
       setHistoryActionLoadingId(null);
     }
@@ -343,7 +346,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
     if (!canManageAlerts || !resolveModalTarget || isSubmittingModalResolve) return;
 
     if (resolveModalNote && resolveModalNote.length > 2000) {
-      setResolveNoteError('Ghi chú giải quyết không được vượt quá 2000 ký tự.');
+      setResolveNoteError(t('alerts.toast.noteTooLong'));
       return;
     }
     setResolveNoteError(null);
@@ -354,7 +357,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
       const noteText =
         resolveModalNote && resolveModalNote.trim()
           ? resolveModalNote.trim()
-          : 'Đã đánh dấu xử lý từ bảng Lịch sử Cảnh báo';
+          : t('alerts.toast.historyResolveNote');
       const updated = await alertService.resolveAlert(
         resolveModalTarget.id,
         noteText,
@@ -365,10 +368,10 @@ export const AlertHistoryPage = ({ onNavigate }) => {
       if (selectedAlert?.id === resolveModalTarget.id) {
         setSelectedAlert((prev) => ({ ...prev, ...updated, status: 'RESOLVED' }));
       }
-      showToast('success', `Đã đánh dấu xử lý cảnh báo "${resolveModalTarget.rule_name || resolveModalTarget.title}".`);
+      showToast('success', t('alerts.toast.historyResolveSuccess', { name: resolveModalTarget.rule_name || resolveModalTarget.title }));
       fetchAlertHistoryAndSummary();
     } catch (err) {
-      setResolveModalApiError(formatAlertApiError(err, 'Không thể cập nhật trạng thái Đã xử lý'));
+      setResolveModalApiError(formatAlertApiError(err, t('alerts.toast.historyResolveError')));
     } finally {
       setIsSubmittingModalResolve(false);
     }
@@ -420,10 +423,10 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 letterSpacing: '-0.02em',
               }}
             >
-              Lịch Sử Cảnh Báo & Nhật Ký Kiểm Toán (Alert History)
+              {t('alertHistory.header.title')}
             </h1>
             <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-              Tra cứu, lọc đa chiều, theo dõi thời lượng, phân công người phụ trách và kiểm toán xử lý toàn bộ sự kiện cảnh báo
+              {t('alertHistory.header.subtitle')}
             </p>
           </div>
         </div>
@@ -448,7 +451,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
             }}
           >
             <Activity size={14} />
-            <span>{autoRefresh ? 'Auto 15s: BẬT' : 'Auto 15s: TẮT'}</span>
+            <span>{autoRefresh ? t('alerts.header.autoOn') : t('alerts.header.autoOff')}</span>
           </button>
 
           <button
@@ -470,7 +473,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
             }}
           >
             <RefreshCw size={14} className={isRefreshing || isLoadingHistory ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
+            <span>{t('common.refresh')}</span>
           </button>
 
           {onNavigate && (
@@ -492,7 +495,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 cursor: 'pointer',
               }}
             >
-              <span>Cấu Hình Ngưỡng & Cảnh Báo Đang Mở</span>
+              <span>{t('alertHistory.header.backToRules')}</span>
               <ArrowRight size={14} />
             </button>
           )}
@@ -567,7 +570,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
               <Activity size={20} />
             </div>
             <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-muted)' }}>Tổng Lịch Sử</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-muted)' }}>{t('alertHistory.kpi.total')}</div>
               <div data-testid="kpi-history-total" style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
                 {historySummary.total_alerts}
               </div>
@@ -600,7 +603,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
               <ShieldAlert size={20} />
             </div>
             <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#DC2626' }}>Khẩn cấp (Critical)</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#DC2626' }}>{t('alertHistory.kpi.critical')}</div>
               <div data-testid="kpi-history-critical" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#DC2626' }}>
                 {historySummary.critical_alerts}
               </div>
@@ -633,7 +636,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
               <AlertTriangle size={20} />
             </div>
             <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#D97706' }}>Cảnh báo (Warning)</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#D97706' }}>{t('alertHistory.kpi.warning')}</div>
               <div data-testid="kpi-history-warning" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#D97706' }}>
                 {historySummary.warning_alerts}
               </div>
@@ -666,7 +669,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
               <Info size={20} />
             </div>
             <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1D4ED8' }}>Thông tin (Info)</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1D4ED8' }}>{t('alertHistory.kpi.info')}</div>
               <div data-testid="kpi-history-info" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1D4ED8' }}>
                 {historySummary.info_alerts}
               </div>
@@ -699,7 +702,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
               <AlertCircle size={20} />
             </div>
             <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#EA580C' }}>Chưa giải quyết</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#EA580C' }}>{t('alertHistory.kpi.active')}</div>
               <div data-testid="kpi-history-active" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#EA580C' }}>
                 {historySummary.active_alerts}
               </div>
@@ -732,7 +735,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
               <CheckCircle2 size={20} />
             </div>
             <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#059669' }}>Đã giải quyết (Resolved)</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#059669' }}>{t('alertHistory.kpi.resolved')}</div>
               <div data-testid="kpi-history-resolved" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#059669' }}>
                 {historySummary.resolved_alerts}
               </div>
@@ -771,7 +774,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
               <input
                 type="text"
                 data-testid="history-search-input"
-                placeholder="Tìm kiếm quy tắc, tài nguyên, namespace, message..."
+                placeholder={t('alertHistory.filters.searchPlaceholder')}
                 value={historySearch}
                 onChange={(e) => {
                   setHistorySearch(e.target.value);
@@ -806,10 +809,10 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 color: 'var(--dash-text-primary)',
               }}
             >
-              <option value="ALL">Tất cả Mức độ</option>
-              <option value="CRITICAL">CRITICAL (Khẩn cấp)</option>
-              <option value="WARNING">WARNING (Cảnh báo)</option>
-              <option value="INFO">INFO (Thông tin)</option>
+              <option value="ALL">{t('alertHistory.filters.allSeverities')}</option>
+              <option value="CRITICAL">{t('alerts.filters.sevCritical')}</option>
+              <option value="WARNING">{t('alerts.filters.sevWarning')}</option>
+              <option value="INFO">{t('alerts.filters.sevInfo')}</option>
             </select>
 
             {/* Status */}
@@ -830,10 +833,10 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 color: 'var(--dash-text-primary)',
               }}
             >
-              <option value="ALL">Tất cả Trạng thái</option>
-              <option value="ACTIVE">ACTIVE (Đang diễn ra)</option>
-              <option value="ACKNOWLEDGED">ACKNOWLEDGED (Đã tiếp nhận)</option>
-              <option value="RESOLVED">RESOLVED (Đã giải quyết)</option>
+              <option value="ALL">{t('alertHistory.filters.allStatuses')}</option>
+              <option value="ACTIVE">{t('alertHistory.filters.statusActive')}</option>
+              <option value="ACKNOWLEDGED">{t('alertHistory.filters.statusAck')}</option>
+              <option value="RESOLVED">{t('alertHistory.filters.statusResolved')}</option>
             </select>
 
             {/* Cluster */}
@@ -854,7 +857,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 color: 'var(--dash-text-primary)',
               }}
             >
-              <option value="ALL">Tất cả Cụm K8s</option>
+              <option value="ALL">{t('alertHistory.filters.allClusters')}</option>
               {(envList || []).map((env) => {
                 const cid = env.cluster_id || env.id;
                 const cname = env.cluster || env.name || cid;
@@ -884,10 +887,10 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 color: 'var(--dash-text-primary)',
               }}
             >
-              <option value="ALL">Tất cả Loại tài nguyên</option>
-              <option value="node">Node (Máy chủ)</option>
-              <option value="pod">Pod (Kubernetes)</option>
-              <option value="service">Service (Dịch vụ APM)</option>
+              <option value="ALL">{t('alertHistory.filters.allResourceTypes')}</option>
+              <option value="node">{t('alertHistory.filters.resNode')}</option>
+              <option value="pod">{t('alertHistory.filters.resPod')}</option>
+              <option value="service">{t('alertHistory.filters.resService')}</option>
             </select>
 
             {/* Time Range Preset */}
@@ -909,12 +912,12 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 color: 'var(--dash-text-primary)',
               }}
             >
-              {TIME_RANGE_PRESETS.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.label}
+              {TIME_RANGE_PRESETS.map((preset) => (
+                <option key={preset.key} value={preset.key}>
+                  {t(preset.labelKey)}
                 </option>
               ))}
-              <option value="CUSTOM">Tùy chỉnh khoảng thời gian...</option>
+              <option value="CUSTOM">{t('alerts.timePresets.CUSTOM')}</option>
             </select>
 
             {/* Sort By */}
@@ -935,11 +938,11 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 color: 'var(--dash-text-primary)',
               }}
             >
-              <option value="first_detected_at">Sắp xếp: Phát hiện lần đầu</option>
-              <option value="last_seen_at">Sắp xếp: Ghi nhận gần nhất</option>
-              <option value="resolved_at">Sắp xếp: Thời gian xử lý</option>
-              <option value="severity">Sắp xếp: Mức độ nghiêm trọng</option>
-              <option value="status">Sắp xếp: Trạng thái</option>
+              <option value="first_detected_at">{t('alertHistory.filters.sortFirstDetected')}</option>
+              <option value="last_seen_at">{t('alertHistory.filters.sortLastSeen')}</option>
+              <option value="resolved_at">{t('alertHistory.filters.sortResolvedAt')}</option>
+              <option value="severity">{t('alertHistory.filters.sortSeverity')}</option>
+              <option value="status">{t('alertHistory.filters.sortStatus')}</option>
             </select>
 
             {/* Sort Order */}
@@ -960,8 +963,8 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 color: 'var(--dash-text-primary)',
               }}
             >
-              <option value="desc">Mới nhất / Cao nhất (DESC)</option>
-              <option value="asc">Cũ nhất / Thấp nhất (ASC)</option>
+              <option value="desc">{t('alertHistory.filters.sortDesc')}</option>
+              <option value="asc">{t('alertHistory.filters.sortAsc')}</option>
             </select>
 
             {/* Reset Filter Button */}
@@ -993,7 +996,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 cursor: 'pointer',
               }}
             >
-              Đặt lại bộ lọc
+              {t('common.resetFilters')}
             </button>
           </div>
 
@@ -1002,7 +1005,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
-                  Từ ngày:
+                  {t('alertHistory.filters.fromDate')}
                 </span>
                 <input
                   type="datetime-local"
@@ -1020,7 +1023,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                   }}
                 />
                 <span style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', fontWeight: 600 }}>
-                  Đến ngày:
+                  {t('alertHistory.filters.toDate')}
                 </span>
                 <input
                   type="datetime-local"
@@ -1074,7 +1077,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
               style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--dash-text-secondary)' }}
             >
               <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px' }} />
-              <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>Đang tải danh sách lịch sử cảnh báo...</div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>{t('alertHistory.states.loading')}</div>
             </div>
           ) : historyError ? (
             <div
@@ -1098,7 +1101,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                   cursor: 'pointer',
                 }}
               >
-                Thử lại
+                {t('common.retry')}
               </button>
             </div>
           ) : historyAlerts.length === 0 ? (
@@ -1108,10 +1111,10 @@ export const AlertHistoryPage = ({ onNavigate }) => {
             >
               <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 12px', opacity: 0.7 }} />
               <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                Không tìm thấy sự kiện lịch sử nào
+                {t('alertHistory.states.emptyTitle')}
               </div>
               <div style={{ fontSize: '0.8125rem', marginTop: '4px' }}>
-                Không có cảnh báo nào thỏa mãn bộ lọc hiện tại hoặc hệ thống hoạt động ổn định.
+                {t('alertHistory.states.emptySub')}
               </div>
             </div>
           ) : (
@@ -1120,34 +1123,34 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 <thead>
                   <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--dash-border)' }}>
                     <th style={{ padding: '12px 16px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                      Cảnh báo / Quy tắc
+                      {t('alertHistory.table.colAlert')}
                     </th>
                     <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                      Mức độ
+                      {t('alertHistory.table.colSeverity')}
                     </th>
                     <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                      Trạng thái
+                      {t('alertHistory.table.colStatus')}
                     </th>
                     <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                      Tài nguyên / Cụm K8s
+                      {t('alertHistory.table.colResourceCluster')}
                     </th>
                     <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                      Giá trị đo / Ngưỡng
+                      {t('alertHistory.table.colValueThreshold')}
                     </th>
                     <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                      Thời lượng
+                      {t('alertHistory.table.colDuration')}
                     </th>
                     <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                      Phát hiện lần đầu
+                      {t('alertHistory.table.colFirstDetected')}
                     </th>
                     <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                      Người phụ trách
+                      {t('alertHistory.table.colAssignee')}
                     </th>
                     <th style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem' }}>
-                      Giải quyết lúc / Bởi
+                      {t('alertHistory.table.colResolved')}
                     </th>
                     <th style={{ padding: '12px 16px', fontWeight: 800, color: 'var(--dash-text-muted)', textTransform: 'uppercase', fontSize: '0.6875rem', textAlign: 'right' }}>
-                      Thao tác
+                      {t('alertHistory.table.colActions')}
                     </th>
                   </tr>
                 </thead>
@@ -1158,7 +1161,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                     const unitStr = item.unit ? ` ${item.unit}` : '';
                     const hasObserved = item.observed_value !== null && item.observed_value !== undefined;
                     const hasThreshold = item.threshold_value !== null && item.threshold_value !== undefined;
-                    const assigneeLabel = item.assignee_name || item.assignee_email || 'Chưa phân công';
+                    const assigneeLabel = item.assignee_name || item.assignee_email || t('alertHistory.table.unassigned');
 
                     return (
                       <tr
@@ -1171,7 +1174,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                       >
                         <td style={{ padding: '14px 16px' }}>
                           <div style={{ fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                            {item.rule_name || item.title || 'Cảnh báo hệ thống'}
+                            {item.rule_name || item.title || t('alertDetail.header.defaultName')}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', marginTop: '2px', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {item.message || '—'}
@@ -1226,7 +1229,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                             {item.namespace ? ` | ns: ${item.namespace}` : ''}
                           </div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--dash-text-secondary)', fontWeight: 600, marginTop: '2px' }}>
-                            {item.cluster_name || 'Toàn tổ chức'}
+                            {item.cluster_name || t('common.orgWide')}
                           </div>
                         </td>
 
@@ -1235,7 +1238,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                             {hasObserved ? `${item.observed_value}${unitStr}` : '—'}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-                            Ngưỡng: {hasThreshold ? `${item.threshold_value}${unitStr}` : '—'}
+                            {t('alerts.table.thresholdPrefix')} {hasThreshold ? `${item.threshold_value}${unitStr}` : '—'}
                           </div>
                         </td>
 
@@ -1266,7 +1269,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                             <div>
                               <div style={{ color: '#059669', fontWeight: 600 }}>{formatDateTime(item.resolved_at)}</div>
                               <div style={{ color: 'var(--dash-text-muted)', fontSize: '0.6875rem' }}>
-                                {item.resolver_name || item.resolver_email || item.details?.resolved_by || 'Hệ thống'}
+                                {item.resolver_name || item.resolver_email || item.details?.resolved_by || t('alertHistory.table.systemResolver')}
                               </div>
                             </div>
                           ) : (
@@ -1291,7 +1294,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                                 cursor: 'pointer',
                               }}
                             >
-                              Chi tiết
+                              {t('common.details')}
                             </button>
 
                             {canManageAlerts && item.status === 'ACTIVE' && (
@@ -1311,7 +1314,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                                   cursor: historyActionLoadingId === item.id ? 'not-allowed' : 'pointer',
                                 }}
                               >
-                                Tiếp nhận
+                                {t('alertHistory.table.ackBtn')}
                               </button>
                             )}
 
@@ -1331,7 +1334,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                                   cursor: 'pointer',
                                 }}
                               >
-                                Đã xử lý
+                                {t('alertHistory.table.resolveBtn')}
                               </button>
                             )}
                           </div>
@@ -1359,7 +1362,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
               }}
             >
               <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)' }}>
-                Trang <strong>{historyPagination.page}</strong> / <strong>{historyPagination.total_pages || 1}</strong> (Tổng <strong>{historyPagination.total}</strong> bản ghi)
+                {t('common.page')} <strong>{historyPagination.page}</strong> / <strong>{historyPagination.total_pages || 1}</strong> {t('alertHistory.pagination.totalPrefix')} <strong>{historyPagination.total}</strong> {t('alertHistory.pagination.totalSuffix')}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1378,9 +1381,9 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                     backgroundColor: '#FFFFFF',
                   }}
                 >
-                  <option value={10}>10 / trang</option>
-                  <option value={20}>20 / trang</option>
-                  <option value={50}>50 / trang</option>
+                  <option value={10}>{t('common.perPage', { count: 10 })}</option>
+                  <option value={20}>{t('common.perPage', { count: 20 })}</option>
+                  <option value={50}>{t('common.perPage', { count: 50 })}</option>
                 </select>
 
                 <button
@@ -1399,7 +1402,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                     opacity: historyPagination.page <= 1 ? 0.5 : 1,
                   }}
                 >
-                  Trước
+                  {t('common.prevShort')}
                 </button>
 
                 <button
@@ -1418,7 +1421,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                     opacity: historyPagination.page >= (historyPagination.total_pages || 1) ? 0.5 : 1,
                   }}
                 >
-                  Sau
+                  {t('common.nextShort')}
                 </button>
               </div>
             </div>
@@ -1483,7 +1486,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065F46', fontWeight: 800, fontSize: '0.95rem' }}>
                 <CheckCircle2 size={20} color="#059669" />
-                <span>Xác nhận Đánh dấu Đã xử lý (Mark as Resolved)</span>
+                <span>{t('alerts.resolveModal.title')}</span>
               </div>
               <button
                 type="button"
@@ -1512,11 +1515,11 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 }}
               >
                 <div style={{ fontWeight: 800, color: 'var(--dash-text-primary)' }}>
-                  {resolveModalTarget.rule_name || resolveModalTarget.title || 'Cảnh báo hệ thống'}
+                  {resolveModalTarget.rule_name || resolveModalTarget.title || t('alerts.resolveModal.defaultAlertName')}
                 </div>
                 <div style={{ color: 'var(--dash-text-secondary)', marginTop: '4px', fontSize: '0.75rem' }}>
-                  Tài nguyên: <strong>{resolveModalTarget.resource_id || '—'}</strong> ({resolveModalTarget.resource_type || '—'}) • Cụm:{' '}
-                  <strong>{resolveModalTarget.cluster_name || 'Toàn tổ chức'}</strong>
+                  {t('alerts.resolveModal.resourceLabel')} <strong>{resolveModalTarget.resource_id || '—'}</strong> ({resolveModalTarget.resource_type || '—'}) • {t('alerts.resolveModal.clusterLabel')}{' '}
+                  <strong>{resolveModalTarget.cluster_name || t('common.orgWide')}</strong>
                 </div>
               </div>
 
@@ -1525,7 +1528,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                   htmlFor="resolve-modal-note-input"
                   style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginBottom: '6px' }}
                 >
-                  Ghi chú xử lý (Resolution Note) <span style={{ fontWeight: 500, color: 'var(--dash-text-muted)' }}>(tối đa 2000 ký tự)</span>
+                  {t('alerts.resolveModal.noteLabel')} <span style={{ fontWeight: 500, color: 'var(--dash-text-muted)' }}>{t('alerts.resolveModal.noteLimit')}</span>
                 </label>
                 <textarea
                   id="resolve-modal-note-input"
@@ -1536,7 +1539,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                     setResolveModalNote(e.target.value);
                     if (resolveNoteError) setResolveNoteError(null);
                   }}
-                  placeholder="Mô tả nguyên nhân gốc rễ và hành động khắc phục đã thực hiện..."
+                  placeholder={t('alerts.resolveModal.notePlaceholder')}
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -1549,7 +1552,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                   }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '0.72rem', color: 'var(--dash-text-muted)' }}>
-                  <span>Sẽ được lưu vào Audit Trail kèm người thực hiện & dấu thời gian</span>
+                  <span>{t('alerts.resolveModal.auditHint')}</span>
                   <span>{resolveModalNote.length} / 2000</span>
                 </div>
               </div>
@@ -1615,7 +1618,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                   cursor: isSubmittingModalResolve ? 'not-allowed' : 'pointer',
                 }}
               >
-                Hủy bỏ
+                {t('common.cancelAction')}
               </button>
 
               <button
@@ -1638,7 +1641,7 @@ export const AlertHistoryPage = ({ onNavigate }) => {
                 }}
               >
                 <Check size={15} />
-                <span>{isSubmittingModalResolve ? 'Đang cập nhật...' : 'Xác nhận Đã xử lý'}</span>
+                <span>{isSubmittingModalResolve ? t('alerts.resolveModal.updating') : t('alerts.resolveModal.confirmBtn')}</span>
               </button>
             </div>
           </form>

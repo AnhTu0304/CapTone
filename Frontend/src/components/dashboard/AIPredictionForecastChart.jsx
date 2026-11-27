@@ -1,14 +1,10 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../i18n';
 import {
   Sparkles,
-  AlertTriangle,
-  Clock,
   Cpu,
   HardDrive,
-  TrendingUp,
-  Activity,
-  CheckCircle2,
-  ShieldAlert
 } from 'lucide-react';
 
 /**
@@ -28,11 +24,16 @@ export const AIPredictionForecastChart = ({
   metricType = 'RAM', // 'RAM' | 'CPU'
   totalCapacity = 64, // 64 GB or 32 vCPU
   unit = 'GB RSS',
-  title = 'Dự Báo Nguy Cơ Bão Hòa & Bất Thường Bằng AI (Multivariate Forecasting)',
-  subtitle = 'Mô hình chuỗi thời gian phân giải cao dự báo sớm 15-30 phút trước khi sự cố xảy ra',
+  title: titleProp,
+  subtitle: subtitleProp,
   className = '',
   height = 270,
 }) => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
+  const title = titleProp ?? t('charts.aiForecast.title');
+  const subtitle = subtitleProp ?? t('charts.aiForecast.subtitle');
+
   const [horizon, setHorizon] = useState('30m'); // '15m' | '30m' | '60m'
   const [hoverIndex, setHoverIndex] = useState(null);
   const [showConfidenceBand, setShowConfidenceBand] = useState(true);
@@ -42,7 +43,6 @@ export const AIPredictionForecastChart = ({
   const points = useMemo(() => {
     const historicalCount = 12;
     const futureCount = horizon === '15m' ? 5 : horizon === '30m' ? 10 : 16;
-    const totalPoints = historicalCount + futureCount;
     const now = Date.now();
     const intervalMinutes = 3;
     const stepMs = intervalMinutes * 60 * 1000;
@@ -51,8 +51,8 @@ export const AIPredictionForecastChart = ({
 
     // Historical Points (past 36 minutes up to now)
     for (let i = 0; i < historicalCount; i++) {
-      const t = new Date(now - (historicalCount - 1 - i) * stepMs);
-      const timeStr = t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const tPt = new Date(now - (historicalCount - 1 - i) * stepMs);
+      const timeStr = tPt.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit' });
       // Steady memory leak slope
       const val = Math.round(52 + i * 2.1 + (i % 2 === 0 ? 1 : -1));
       data.push({
@@ -69,8 +69,8 @@ export const AIPredictionForecastChart = ({
     // Future Predicted Points (next 15-48 minutes)
     const lastVal = data[historicalCount - 1].actual;
     for (let j = 1; j <= futureCount; j++) {
-      const t = new Date(now + j * stepMs);
-      const timeStr = '+' + (j * intervalMinutes) + 'm (' + t.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ')';
+      const tPt = new Date(now + j * stepMs);
+      const timeStr = '+' + (j * intervalMinutes) + 'm (' + tPt.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit' }) + ')';
       // Accelerated slope leading to saturation
       const projected = Math.min(Math.round(lastVal + j * 2.8 + Math.sin(j * 0.3) * 1.5), 98);
       // Expanding uncertainty fan
@@ -88,7 +88,7 @@ export const AIPredictionForecastChart = ({
     }
 
     return data;
-  }, [horizon]);
+  }, [horizon, intlLocale]);
 
   // Coordinate scales
   const padding = { top: 25, right: 35, bottom: 35, left: 45 };
@@ -191,7 +191,7 @@ export const AIPredictionForecastChart = ({
                 border: '1px solid #34D399',
               }}
             >
-              MỤC TIÊU: {targetService.toUpperCase()}
+              {t('charts.aiForecast.targetBadge', { service: targetService.toUpperCase() })}
             </span>
           </div>
           <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '2px 0 0 0' }}>
@@ -204,9 +204,9 @@ export const AIPredictionForecastChart = ({
           {/* Horizon Toggle */}
           <div style={{ display: 'flex', backgroundColor: 'rgba(61, 59, 79, 0.05)', padding: '2px', border: '1px solid var(--dash-border)' }}>
             {[
-              { id: '15m', label: '+15 phút' },
-              { id: '30m', label: '+30 phút' },
-              { id: '60m', label: '+1 giờ' },
+              { id: '15m', label: t('charts.aiForecast.horizon15m') },
+              { id: '30m', label: t('charts.aiForecast.horizon30m') },
+              { id: '60m', label: t('charts.aiForecast.horizon60m') },
             ].map((h) => (
               <button
                 key={h.id}
@@ -247,7 +247,7 @@ export const AIPredictionForecastChart = ({
               cursor: 'pointer',
             }}
           >
-            <span>Dải tin cậy 85-95%</span>
+            <span>{t('charts.aiForecast.confidenceBtn')}</span>
           </button>
         </div>
       </div>
@@ -332,7 +332,7 @@ export const AIPredictionForecastChart = ({
               fontWeight="700"
               fill="#E11D48"
             >
-              NGƯỠNG NGUY HIỂM 80%
+              {t('charts.aiForecast.dangerThreshold')}
             </text>
           </g>
 
@@ -363,7 +363,7 @@ export const AIPredictionForecastChart = ({
             fontWeight="700"
             fill="#38BDF8"
           >
-            HIỆN TẠI
+            {t('charts.aiForecast.nowMarker')}
           </text>
 
           {/* Future Confidence Interval Band */}
@@ -422,7 +422,7 @@ export const AIPredictionForecastChart = ({
                 fontWeight="700"
                 fill="#B91C1C"
               >
-                ĐIỂM BÙNG PHÁT (~{saturationPointIndex - historicalIndexEnd * 3}m)
+                {t('charts.aiForecast.inflectionLabel', { min: saturationPointIndex - historicalIndexEnd * 3 })}
               </text>
             </g>
           )}
@@ -502,9 +502,12 @@ export const AIPredictionForecastChart = ({
                 justifyContent: 'space-between',
               }}
             >
-              <span>THỜI ĐIỂM:</span>
+              <span>{t('charts.aiForecast.tooltipTime')}</span>
               <strong style={{ color: activePoint.isFuture ? '#FBBF24' : '#34D399' }}>
-                {activePoint.time} {activePoint.isFuture ? '(DỰ BÁO AI)' : '(THỰC TẾ)'}
+                {activePoint.time}{' '}
+                {activePoint.isFuture
+                  ? t('charts.aiForecast.tooltipForecastTag')
+                  : t('charts.aiForecast.tooltipActualTag')}
               </strong>
             </div>
 
@@ -520,7 +523,7 @@ export const AIPredictionForecastChart = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#60A5FA' }}>
                 {metricType === 'RAM' ? <HardDrive size={13} /> : <Cpu size={13} />}
-                <span>{metricType} Tiêu thụ:</span>
+                <span>{t('charts.aiForecast.tooltipUsage', { metric: metricType })}</span>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <span style={{ fontWeight: 800, color: '#FFFFFF' }}>
@@ -544,7 +547,7 @@ export const AIPredictionForecastChart = ({
                   marginBottom: '4px',
                 }}
               >
-                <span>Biên độ tin cậy 95%:</span>
+                <span>{t('charts.aiForecast.tooltipConfidence95')}</span>
                 <span>{activePoint.lowerBound}% - {activePoint.upperBound}%</span>
               </div>
             )}
@@ -562,8 +565,11 @@ export const AIPredictionForecastChart = ({
                 color: activePoint.probability >= 80 ? '#F87171' : activePoint.probability >= 50 ? '#FBBF24' : '#34D399',
               }}
             >
-              <span>XÁC SUẤT SỰ CỐ:</span>
-              <strong>{activePoint.probability}% {activePoint.probability >= 80 ? '(BÙNG PHÁT NGUY HIỂM)' : ''}</strong>
+              <span>{t('charts.aiForecast.tooltipProbability')}</span>
+              <strong>
+                {activePoint.probability}%{' '}
+                {activePoint.probability >= 80 ? t('charts.aiForecast.tooltipDanger') : ''}
+              </strong>
             </div>
           </div>
         )}
@@ -582,7 +588,7 @@ export const AIPredictionForecastChart = ({
       >
         <div style={{ padding: '8px 12px', backgroundColor: 'rgba(5, 150, 105, 0.05)', border: '1px solid rgba(5, 150, 105, 0.2)' }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: '#065F46', fontWeight: 700 }}>
-            TẢI THỰC TẾ HIỆN TẠI
+            {t('charts.aiForecast.footerCurrentLoad')}
           </div>
           <div style={{ fontSize: '1rem', fontWeight: 800, color: '#064E3B' }}>
             {points[historicalIndexEnd].actual}% ({((points[historicalIndexEnd].actual / 100) * totalCapacity).toFixed(1)} {unit})
@@ -591,7 +597,14 @@ export const AIPredictionForecastChart = ({
 
         <div style={{ padding: '8px 12px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: '#92400E', fontWeight: 700 }}>
-            DỰ BÁO ĐỈNH TRONG {horizon === '15m' ? '15 PHÚT' : horizon === '30m' ? '30 PHÚT' : '1 GIỜ'}
+            {t('charts.aiForecast.footerPeakPrefix', {
+              horizon:
+                horizon === '15m'
+                  ? t('charts.aiForecast.horizon15mUpper')
+                  : horizon === '30m'
+                  ? t('charts.aiForecast.horizon30mUpper')
+                  : t('charts.aiForecast.horizon60mUpper'),
+            })}
           </div>
           <div style={{ fontSize: '1rem', fontWeight: 800, color: '#B45309' }}>
             {points[points.length - 1].predicted}% ({((points[points.length - 1].predicted / 100) * totalCapacity).toFixed(1)} {unit})
@@ -600,10 +613,10 @@ export const AIPredictionForecastChart = ({
 
         <div style={{ padding: '8px 12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA' }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: '#991B1B', fontWeight: 700 }}>
-            HÀNH ĐỘNG TỰ PHỤC HỒI ĐỀ XUẤT
+            {t('charts.aiForecast.footerActionTitle')}
           </div>
           <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.3 }}>
-            Tự động Scale Replicas +1 hoặc Kích hoạt HITL Drain Node
+            {t('charts.aiForecast.footerActionDesc')}
           </div>
         </div>
       </div>

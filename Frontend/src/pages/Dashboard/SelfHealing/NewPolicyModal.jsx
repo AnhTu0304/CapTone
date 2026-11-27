@@ -1,107 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { selfHealingService } from '../../../services/selfHealingService';
 import {
   X,
   Zap,
-  Sliders,
-  CheckCircle2,
-  AlertTriangle,
-  Layers,
-  Server,
   Activity,
   Cpu,
-  Clock,
   ShieldCheck,
   Sparkles
 } from 'lucide-react';
-
-const STANDARD_METRICS = [
-  { value: 'CPU_USAGE', label: 'Mức sử dụng CPU (CPU Usage)', unit: '%', defaultVal: 80, category: 'Tài nguyên & Cấu hình' },
-  { value: 'MEMORY_USAGE', label: 'Bộ nhớ RAM (Memory / OOM Risk)', unit: '%', defaultVal: 85, category: 'Tài nguyên & Cấu hình' },
-  { value: 'HTTP_5XX_RATE', label: 'Tỷ lệ lỗi HTTP 5xx (500/502/503)', unit: '%', defaultVal: 5, category: 'Lưu lượng & Mạng' },
-  { value: 'POD_RESTART_COUNT', label: 'Số lần Pod Restart (CrashLoopBackOff)', unit: 'lần', defaultVal: 3, category: 'Tiến trình Ứng dụng' },
-  { value: 'LATENCY_P95', label: 'Độ trễ phản hồi P95 (Network Latency)', unit: 'ms', defaultVal: 600, category: 'Lưu lượng & Mạng' },
-  { value: 'DISK_USAGE', label: 'Dung lượng ổ đĩa tạm (/tmp Disk Full)', unit: '%', defaultVal: 90, category: 'Lưu trữ & Dữ liệu' },
-];
-
-const STANDARD_OPERATORS = [
-  { value: '>', label: '> (Vượt quá ngưỡng)' },
-  { value: '>=', label: '>= (Chạm hoặc vượt ngưỡng)' },
-  { value: '<', label: '< (Thấp hơn ngưỡng)' },
-];
-
-const STANDARD_DURATIONS = [
-  { value: '30 giây liên tiếp', label: '30 giây liên tiếp' },
-  { value: '60 giây liên tiếp', label: '1 phút liên tiếp' },
-  { value: '2 phút liên tiếp', label: '2 phút liên tiếp' },
-  { value: '5 phút liên tiếp', label: '5 phút liên tiếp' },
-];
-
-const STANDARD_NAMESPACES = [
-  { value: 'test-lab', label: 'test-lab (Môi trường Lab thực nghiệm)' },
-  { value: 'default', label: 'default (Namespace mặc định K8s)' },
-  { value: 'production', label: 'production (Môi trường vận hành chính)' },
-  { value: 'all', label: 'all (Toàn bộ các namespace trong cụm)' },
-];
-
-const STANDARD_ACTIONS = [
-  {
-    id: 'd0000000-0000-0000-0000-000000000002',
-    code: 'SCALE_REPLICAS',
-    name: 'Scale Replicas (Mở rộng thêm bản sao Pod)',
-    description: 'Tăng bản sao Pod để san sẻ tải trọng CPU/RAM',
-    defaultRisk: 'LOW',
-    defaultHitl: false,
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000001',
-    code: 'RESTART_POD',
-    name: 'Restart Pod (Khởi động lại Pod bị treo liveness probe)',
-    description: 'Gửi tín hiệu khởi động lại Pod đơn lẻ',
-    defaultRisk: 'LOW',
-    defaultHitl: false,
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000008',
-    code: 'REPLACE_POD',
-    name: 'Replace Pod (Hủy Pod lỗi và tạo mới qua ReplicaSet)',
-    description: 'Xóa tận gốc Pod bị rò rỉ RAM hoặc crash lặp lại',
-    defaultRisk: 'MEDIUM',
-    defaultHitl: false,
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000009',
-    code: 'RESTART_DEPLOYMENT',
-    name: 'Restart Deployment (Zero-downtime rolling restart)',
-    description: 'Rolling restart toàn bộ các Pod của Deployment',
-    defaultRisk: 'MEDIUM',
-    defaultHitl: true,
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000003',
-    code: 'ROLLBACK_DEPLOYMENT',
-    name: 'Rollback Deployment (Hoàn nguyên phiên bản trước)',
-    description: 'Trở về bản phát hành trước đó khi dính lỗi 5xx',
-    defaultRisk: 'HIGH',
-    defaultHitl: true,
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000004',
-    code: 'CLEANUP_TEMP_FILES',
-    name: 'Cleanup Temporary Files (Dọn dẹp file rác /tmp)',
-    description: 'Giải phóng bộ nhớ đệm ổ đĩa',
-    defaultRisk: 'LOW',
-    defaultHitl: false,
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000007',
-    code: 'DRAIN_NODE',
-    name: 'Drain Node (Di tản và cô lập Node phần cứng bị hỏng)',
-    description: 'Cách ly máy chủ gặp sự cố vật lý',
-    defaultRisk: 'CRITICAL',
-    defaultHitl: true,
-  },
-];
 
 export const NewPolicyModal = ({
   isOpen,
@@ -110,28 +17,123 @@ export const NewPolicyModal = ({
   currentOrg,
   currentEnv,
 }) => {
-  const [selectedMetric, setSelectedMetric] = useState(STANDARD_METRICS[0].value);
+  const { t } = useTranslation('dashHealing');
+
+  const STANDARD_METRICS = useMemo(() => [
+    { value: 'CPU_USAGE', label: t('newPolicy.metrics.CPU_USAGE'), unit: '%', defaultVal: 80, category: t('newPolicy.metrics.catResource') },
+    { value: 'MEMORY_USAGE', label: t('newPolicy.metrics.MEMORY_USAGE'), unit: '%', defaultVal: 85, category: t('newPolicy.metrics.catResource') },
+    { value: 'HTTP_5XX_RATE', label: t('newPolicy.metrics.HTTP_5XX_RATE'), unit: '%', defaultVal: 5, category: t('newPolicy.metrics.catTraffic') },
+    { value: 'POD_RESTART_COUNT', label: t('newPolicy.metrics.POD_RESTART_COUNT'), unit: t('newPolicy.metrics.unitTimes'), defaultVal: 3, category: t('newPolicy.metrics.catApp') },
+    { value: 'LATENCY_P95', label: t('newPolicy.metrics.LATENCY_P95'), unit: 'ms', defaultVal: 600, category: t('newPolicy.metrics.catTraffic') },
+    { value: 'DISK_USAGE', label: t('newPolicy.metrics.DISK_USAGE'), unit: '%', defaultVal: 90, category: t('newPolicy.metrics.catStorage') },
+  ], [t]);
+
+  const STANDARD_OPERATORS = useMemo(() => [
+    { value: '>', label: t('newPolicy.operators.gt') },
+    { value: '>=', label: t('newPolicy.operators.gte') },
+    { value: '<', label: t('newPolicy.operators.lt') },
+  ], [t]);
+
+  const STANDARD_DURATIONS = useMemo(() => [
+    { value: '30s', label: t('newPolicy.durations.30s') },
+    { value: '1m', label: t('newPolicy.durations.1m') },
+    { value: '2m', label: t('newPolicy.durations.2m') },
+    { value: '5m', label: t('newPolicy.durations.5m') },
+  ], [t]);
+
+  const STANDARD_NAMESPACES = useMemo(() => [
+    { value: 'test-lab', label: t('newPolicy.namespaces.testLab') },
+    { value: 'default', label: t('newPolicy.namespaces.default') },
+    { value: 'production', label: t('newPolicy.namespaces.production') },
+    { value: 'all', label: t('newPolicy.namespaces.all') },
+  ], [t]);
+
+  const STANDARD_ACTIONS = useMemo(() => [
+    {
+      id: 'd0000000-0000-0000-0000-000000000002',
+      code: 'SCALE_REPLICAS',
+      name: t('newPolicy.actions.SCALE_REPLICAS_name'),
+      description: t('newPolicy.actions.SCALE_REPLICAS_desc'),
+      defaultRisk: 'LOW',
+      defaultHitl: false,
+    },
+    {
+      id: 'd0000000-0000-0000-0000-000000000001',
+      code: 'RESTART_POD',
+      name: t('newPolicy.actions.RESTART_POD_name'),
+      description: t('newPolicy.actions.RESTART_POD_desc'),
+      defaultRisk: 'LOW',
+      defaultHitl: false,
+    },
+    {
+      id: 'd0000000-0000-0000-0000-000000000008',
+      code: 'REPLACE_POD',
+      name: t('newPolicy.actions.REPLACE_POD_name'),
+      description: t('newPolicy.actions.REPLACE_POD_desc'),
+      defaultRisk: 'MEDIUM',
+      defaultHitl: false,
+    },
+    {
+      id: 'd0000000-0000-0000-0000-000000000009',
+      code: 'RESTART_DEPLOYMENT',
+      name: t('newPolicy.actions.RESTART_DEPLOYMENT_name'),
+      description: t('newPolicy.actions.RESTART_DEPLOYMENT_desc'),
+      defaultRisk: 'MEDIUM',
+      defaultHitl: true,
+    },
+    {
+      id: 'd0000000-0000-0000-0000-000000000003',
+      code: 'ROLLBACK_DEPLOYMENT',
+      name: t('newPolicy.actions.ROLLBACK_DEPLOYMENT_name'),
+      description: t('newPolicy.actions.ROLLBACK_DEPLOYMENT_desc'),
+      defaultRisk: 'HIGH',
+      defaultHitl: true,
+    },
+    {
+      id: 'd0000000-0000-0000-0000-000000000004',
+      code: 'CLEANUP_TEMP_FILES',
+      name: t('newPolicy.actions.CLEANUP_TEMP_FILES_name'),
+      description: t('newPolicy.actions.CLEANUP_TEMP_FILES_desc'),
+      defaultRisk: 'LOW',
+      defaultHitl: false,
+    },
+    {
+      id: 'd0000000-0000-0000-0000-000000000007',
+      code: 'DRAIN_NODE',
+      name: t('newPolicy.actions.DRAIN_NODE_name'),
+      description: t('newPolicy.actions.DRAIN_NODE_desc'),
+      defaultRisk: 'CRITICAL',
+      defaultHitl: true,
+    },
+  ], [t]);
+
+  const [selectedMetric, setSelectedMetric] = useState('CPU_USAGE');
   const [selectedOperator, setSelectedOperator] = useState('>');
-  const [thresholdValue, setThresholdValue] = useState(STANDARD_METRICS[0].defaultVal);
-  const [selectedDuration, setSelectedDuration] = useState(STANDARD_DURATIONS[1].value);
+  const [thresholdValue, setThresholdValue] = useState(80);
+  const [selectedDuration, setSelectedDuration] = useState('1m');
   const [selectedNamespace, setSelectedNamespace] = useState('test-lab');
-  const [selectedActionId, setSelectedActionId] = useState(STANDARD_ACTIONS[0].id);
+  const [selectedActionId, setSelectedActionId] = useState('d0000000-0000-0000-0000-000000000002');
 
   const [ruleName, setRuleName] = useState('');
   const [isCustomName, setIsCustomName] = useState(false);
-  const [riskLevel, setRiskLevel] = useState(STANDARD_ACTIONS[0].defaultRisk);
-  const [hitlRequired, setHitlRequired] = useState(STANDARD_ACTIONS[0].defaultHitl);
+  const [riskLevel, setRiskLevel] = useState('LOW');
+  const [hitlRequired, setHitlRequired] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Active Metric Object
   const currentMetricObj = useMemo(() => {
     return STANDARD_METRICS.find((m) => m.value === selectedMetric) || STANDARD_METRICS[0];
-  }, [selectedMetric]);
+  }, [STANDARD_METRICS, selectedMetric]);
+
+  // Active Duration Label
+  const currentDurationLabel = useMemo(() => {
+    return STANDARD_DURATIONS.find((d) => d.value === selectedDuration)?.label || selectedDuration;
+  }, [STANDARD_DURATIONS, selectedDuration]);
 
   // Active Action Object
   const currentActionObj = useMemo(() => {
     return STANDARD_ACTIONS.find((a) => a.id === selectedActionId) || STANDARD_ACTIONS[0];
-  }, [selectedActionId]);
+  }, [STANDARD_ACTIONS, selectedActionId]);
 
   // When metric changes, update default threshold
   const handleMetricChange = (val) => {
@@ -154,15 +156,27 @@ export const NewPolicyModal = ({
 
   // Formatted condition string
   const formattedCondition = useMemo(() => {
-    return `${currentMetricObj.label.split(' (')[0]} ${selectedOperator} ${thresholdValue}${currentMetricObj.unit} trong ${selectedDuration}`;
-  }, [currentMetricObj, selectedOperator, thresholdValue, selectedDuration]);
+    return t('newPolicy.conditionFormat', {
+      metric: currentMetricObj.label.split(' (')[0],
+      op: selectedOperator,
+      val: thresholdValue,
+      unit: currentMetricObj.unit,
+      duration: currentDurationLabel,
+    });
+  }, [t, currentMetricObj, selectedOperator, thresholdValue, currentDurationLabel]);
 
   // Auto-generated Rule Name
   const autoGeneratedName = useMemo(() => {
     const actionShort = currentActionObj.name.split(' (')[0];
     const metricShort = currentMetricObj.label.split(' (')[0];
-    return `Tự động ${actionShort} khi ${metricShort} ${selectedOperator} ${thresholdValue}${currentMetricObj.unit}`;
-  }, [currentActionObj, currentMetricObj, selectedOperator, thresholdValue]);
+    return t('newPolicy.autoNameFormat', {
+      action: actionShort,
+      metric: metricShort,
+      op: selectedOperator,
+      val: thresholdValue,
+      unit: currentMetricObj.unit,
+    });
+  }, [t, currentActionObj, currentMetricObj, selectedOperator, thresholdValue]);
 
   // Sync rule name if not manually edited
   useEffect(() => {
@@ -201,7 +215,7 @@ export const NewPolicyModal = ({
       onClose();
     } catch (err) {
       console.error('[NewPolicyModal] Lỗi tạo quy tắc:', err);
-      alert('Không thể lưu quy tắc: ' + (err.message || 'Lỗi không xác định'));
+      alert(t('newPolicy.saveError', { msg: err.message || t('newPolicy.unknownError') }));
     } finally {
       setIsSubmitting(false);
     }
@@ -267,10 +281,10 @@ export const NewPolicyModal = ({
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>
-                Thêm Quy Tắc Tự Phục Hồi Mới
+                {t('newPolicy.title')}
               </h3>
               <div style={{ fontSize: '0.6875rem', color: '#64748B', marginTop: '1px' }}>
-                Bộ chọn thông số chuẩn hóa (Chống hoàn toàn lỗi sai chính tả)
+                {t('newPolicy.subtitle')}
               </div>
             </div>
           </div>
@@ -296,13 +310,13 @@ export const NewPolicyModal = ({
           <div style={{ padding: '14px', borderRadius: '10px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Activity size={14} color="#059669" />
-              1. ĐIỀU KIỆN VIỄN TRẮC KÍCH HOẠT (TRIGGER CONDITION)
+              {t('newPolicy.section1')}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+            <div className="dash-grid-3" style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                  CHỈ SỐ THEO DÕI
+                  {t('newPolicy.metricLabel')}
                 </label>
                 <select
                   value={selectedMetric}
@@ -319,7 +333,7 @@ export const NewPolicyModal = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                  PHÉP SO SÁNH
+                  {t('newPolicy.operatorLabel')}
                 </label>
                 <select
                   value={selectedOperator}
@@ -336,7 +350,7 @@ export const NewPolicyModal = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                  NGƯỠNG ({currentMetricObj.unit})
+                  {t('newPolicy.thresholdLabel', { unit: currentMetricObj.unit })}
                 </label>
                 <input
                   type="number"
@@ -349,10 +363,10 @@ export const NewPolicyModal = ({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <div className="dash-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                  THỜI GIAN DUY TRÌ
+                  {t('newPolicy.durationLabel')}
                 </label>
                 <select
                   value={selectedDuration}
@@ -369,7 +383,7 @@ export const NewPolicyModal = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                  NAMESPACE MỤC TIÊU
+                  {t('newPolicy.namespaceLabel')}
                 </label>
                 <select
                   value={selectedNamespace}
@@ -390,12 +404,12 @@ export const NewPolicyModal = ({
           <div style={{ padding: '14px', borderRadius: '10px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Cpu size={14} color="#0284C7" />
-              2. HÀNH ĐỘNG SỬA LỖI TỰ ĐỘNG (MAPE-K REMEDIATION)
+              {t('newPolicy.section2')}
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                LOẠI HÀNH ĐỘNG KUBERNETES CHUẨN HÓA
+                {t('newPolicy.actionTypeLabel')}
               </label>
               <select
                 value={selectedActionId}
@@ -409,24 +423,24 @@ export const NewPolicyModal = ({
                 ))}
               </select>
               <div style={{ fontSize: '0.6875rem', color: '#64748B', marginTop: '4px' }}>
-                Mô tả: {currentActionObj.description}
+                {t('newPolicy.descPrefix', { desc: currentActionObj.description })}
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px', alignItems: 'center' }}>
+            <div className="dash-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px', alignItems: 'center' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                  MỨC ĐỘ RỦI RO
+                  {t('newPolicy.riskLevelLabel')}
                 </label>
                 <select
                   value={riskLevel}
                   onChange={(e) => setRiskLevel(e.target.value)}
                   style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8125rem', backgroundColor: '#FFFFFF', fontWeight: 700 }}
                 >
-                  <option value="LOW">Thấp (LOW)</option>
-                  <option value="MEDIUM">Vừa (MEDIUM)</option>
-                  <option value="HIGH">Cao (HIGH)</option>
-                  <option value="CRITICAL">Nghiêm trọng (CRITICAL)</option>
+                  <option value="LOW">{t('newPolicy.riskLow')}</option>
+                  <option value="MEDIUM">{t('newPolicy.riskMed')}</option>
+                  <option value="HIGH">{t('newPolicy.riskHigh')}</option>
+                  <option value="CRITICAL">{t('newPolicy.riskCrit')}</option>
                 </select>
               </div>
 
@@ -438,7 +452,7 @@ export const NewPolicyModal = ({
                     onChange={(e) => setHitlRequired(e.target.checked)}
                     style={{ accentColor: '#059669', width: '16px', height: '16px', cursor: 'pointer' }}
                   />
-                  <span>Bắt buộc duyệt HITL trước khi chạy</span>
+                  <span>{t('newPolicy.hitlCheckbox')}</span>
                 </label>
               </div>
             </div>
@@ -448,7 +462,7 @@ export const NewPolicyModal = ({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
               <label style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#475569' }}>
-                TÊN QUY TẮC HIỂN THỊ
+                {t('newPolicy.ruleNameLabel')}
               </label>
               <button
                 type="button"
@@ -468,7 +482,7 @@ export const NewPolicyModal = ({
                   gap: '4px',
                 }}
               >
-                <Sparkles size={11} /> Tự tạo lại tên chuẩn
+                <Sparkles size={11} /> {t('newPolicy.regenerateName')}
               </button>
             </div>
             <input
@@ -493,10 +507,10 @@ export const NewPolicyModal = ({
             }}
           >
             <div style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#047857', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <ShieldCheck size={13} /> TÓM TẮT QUY TẮC TỰ LÀNH ĐÃ CẤU HÌNH:
+              <ShieldCheck size={13} /> {t('newPolicy.previewTitle')}
             </div>
             <div style={{ fontSize: '0.8125rem', color: '#065F46', marginTop: '4px', lineHeight: 1.5, fontWeight: 500 }}>
-              Nếu <strong>{currentMetricObj.label.split(' (')[0]}</strong> {selectedOperator} <strong>{thresholdValue}{currentMetricObj.unit}</strong> (trong {selectedDuration}) tại namespace <strong>{selectedNamespace}</strong> ➔ Hệ thống sẽ thực thi <strong>{currentActionObj.name.split(' (')[0]}</strong> ({hitlRequired ? 'Cần người duyệt HITL' : 'Tự động 100%'}).
+              {t('newPolicy.previewIf')} <strong>{currentMetricObj.label.split(' (')[0]}</strong> {selectedOperator} <strong>{thresholdValue}{currentMetricObj.unit}</strong> {t('newPolicy.previewFor', { duration: currentDurationLabel })} <strong>{selectedNamespace}</strong> {t('newPolicy.previewThen')} <strong>{currentActionObj.name.split(' (')[0]}</strong> ({hitlRequired ? t('newPolicy.previewHitl') : t('newPolicy.previewAuto')}).
             </div>
           </div>
 
@@ -517,7 +531,7 @@ export const NewPolicyModal = ({
                 cursor: 'pointer',
               }}
             >
-              Hủy
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -536,7 +550,7 @@ export const NewPolicyModal = ({
                 gap: '6px',
               }}
             >
-              {isSubmitting ? 'Đang lưu...' : 'Thêm Quy Tắc Chuẩn'}
+              {isSubmitting ? t('newPolicy.saving') : t('newPolicy.submitBtn')}
             </button>
           </div>
         </form>

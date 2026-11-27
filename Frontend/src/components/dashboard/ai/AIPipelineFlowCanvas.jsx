@@ -1,5 +1,8 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18nInstance, { normalizeLanguage } from '../../../i18n';
 import BranchedPipelineSection from './BranchedPipelineSection';
+import AIPipelineMobileVerticalFlow from './AIPipelineMobileVerticalFlow';
 import {
   translateIncidentTitle,
   translateSeverity,
@@ -77,6 +80,7 @@ const translateActionToVi = (rawAction, item = null) => {
   if (!rawAction) return '';
   const trimmed = String(rawAction).trim();
   const normalizedCode = trimmed.toUpperCase().replace(/[\s-]+/g, '_');
+  const isVi = normalizeLanguage(i18nInstance.language) === 'vi';
 
   if (
     normalizedCode === 'BLOCK_IP_TEMP' ||
@@ -87,35 +91,43 @@ const translateActionToVi = (rawAction, item = null) => {
     trimmed.toLowerCase().includes('chặn ip')
   ) {
     const ip = extractBlockedIp(item);
-    return ip ? `Chặn IP (${ip})` : 'Chặn IP tạm thời';
+    return ip
+      ? i18nInstance.t('dashboard:pipeline.actions.BLOCK_IP_SPECIFIC', { ip })
+      : i18nInstance.t('dashboard:pipeline.actions.BLOCK_IP_TEMP');
   }
 
-  if (ACTION_DISPLAY_NAMES_VI[normalizedCode]) {
-    return normalizedCode === 'NO_ACTION'
-      ? `${ACTION_DISPLAY_NAMES_VI[normalizedCode]} (Ngắt mạch)`
-      : ACTION_DISPLAY_NAMES_VI[normalizedCode];
+  if (normalizedCode === 'NO_ACTION') {
+    return i18nInstance.t('dashboard:pipeline.actions.NO_ACTION_circuit');
   }
+
+  if (isVi && ACTION_DISPLAY_NAMES_VI[normalizedCode]) {
+    return ACTION_DISPLAY_NAMES_VI[normalizedCode];
+  }
+
+  const mappedCode = i18nInstance.t(`dashboard:pipeline.actions.${normalizedCode}`, { defaultValue: '' });
+  if (mappedCode) return mappedCode;
+
   const lower = trimmed.toLowerCase();
-  if (lower === 'replace pod') return 'Thay thế Pod';
-  if (lower === 'restart pod') return 'Khởi động lại Pod';
-  if (lower === 'scale replicas' || lower === 'scale pod') return 'Điều chỉnh số lượng bản sao Pod';
-  if (lower === 'scale up') return 'Mở rộng bản sao Pod';
-  if (lower === 'scale down') return 'Thu hẹp bản sao Pod';
-  if (lower === 'restart deployment') return 'Khởi động lại Deployment';
-  if (lower === 'rollback deployment') return 'Khôi phục bản phát hành trước';
-  if (lower === 'drain node') return 'Di dời Pod khỏi Node';
-  if (lower === 'cleanup storage' || lower === 'cleanup temp files') return 'Dọn dẹp lưu trữ';
-  if (lower === 'temporary ip block' || lower === 'block ip temp') return 'Chặn tạm thời IP nguồn';
+  if (lower === 'replace pod') return i18nInstance.t('dashboard:pipeline.actions.REPLACE_POD');
+  if (lower === 'restart pod') return i18nInstance.t('dashboard:pipeline.actions.RESTART_POD');
+  if (lower === 'scale replicas' || lower === 'scale pod') return i18nInstance.t('dashboard:pipeline.actions.SCALE_REPLICAS');
+  if (lower === 'scale up') return i18nInstance.t('dashboard:pipeline.actions.SCALE_UP');
+  if (lower === 'scale down') return i18nInstance.t('dashboard:pipeline.actions.SCALE_DOWN');
+  if (lower === 'restart deployment') return i18nInstance.t('dashboard:pipeline.actions.RESTART_DEPLOYMENT');
+  if (lower === 'rollback deployment') return i18nInstance.t('dashboard:pipeline.actions.ROLLBACK_DEPLOYMENT');
+  if (lower === 'drain node') return i18nInstance.t('dashboard:pipeline.actions.DRAIN_NODE');
+  if (lower === 'cleanup storage' || lower === 'cleanup temp files') return i18nInstance.t('dashboard:pipeline.actions.CLEANUP_STORAGE');
+  if (lower === 'temporary ip block' || lower === 'block ip temp') return i18nInstance.t('dashboard:pipeline.actions.BLOCK_IP_TEMP');
   return trimmed;
 };
 
 const translateExecutionStatusVi = (status) => {
   const s = String(status || '').toUpperCase();
-  if (s === 'SUCCEEDED' || s === 'COMPLETED') return 'Thành công';
-  if (s === 'FAILED') return 'Thất bại';
-  if (s === 'RUNNING') return 'Đang thực thi';
-  if (s === 'PENDING') return 'Đang chờ';
-  if (s === 'CANCELLED') return 'Đã hủy';
+  if (s === 'SUCCEEDED' || s === 'COMPLETED') return i18nInstance.t('dashboard:pipeline.execStatus.SUCCEEDED');
+  if (s === 'FAILED') return i18nInstance.t('dashboard:pipeline.execStatus.FAILED');
+  if (s === 'RUNNING') return i18nInstance.t('dashboard:pipeline.execStatus.RUNNING');
+  if (s === 'PENDING') return i18nInstance.t('dashboard:pipeline.execStatus.PENDING');
+  if (s === 'CANCELLED') return i18nInstance.t('dashboard:pipeline.execStatus.CANCELLED');
   return status || '';
 };
 
@@ -148,6 +160,19 @@ export const AIPipelineFlowCanvas = ({
   podCount = 1,
   onNavigate = null,
 }) => {
+  const { t, i18n } = useTranslation('dashboard');
+  const localizedIncidentTitle = (text) => {
+    if (!text) return '';
+    return normalizeLanguage(i18n.language) === 'en' ? String(text) : translateIncidentTitle(text);
+  };
+  const localizedSeverity = (sev) => {
+    if (!sev) return '';
+    const upper = String(sev).toUpperCase();
+    return normalizeLanguage(i18n.language) === 'en'
+      ? t(`pipeline.severity.${upper}`, { defaultValue: upper })
+      : translateSeverity(sev);
+  };
+
   // State điều khiển Pan & Zoom (theo chuẩn infinite canvas Google Stitch / Figma)
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -176,6 +201,7 @@ export const AIPipelineFlowCanvas = ({
   });
   // Chuyển đổi giữa Sơ đồ 1 (Tổng quan) và Sơ đồ 2 (Rẽ nhánh chi tiết 01→07)
   const [activeDiagram, setActiveDiagram] = useState('diagram1'); // 'diagram1' | 'diagram2'
+  const [preferHorizontalOnMobile, setPreferHorizontalOnMobile] = useState(false);
   // Trạng thái độc lập cho Sơ đồ 2 (không ảnh hưởng Sơ đồ 1)
   const [d2TelemetryExpanded, setD2TelemetryExpanded] = useState(false);
   const [d2RuleExpanded, setD2RuleExpanded] = useState(false);
@@ -359,11 +385,11 @@ export const AIPipelineFlowCanvas = ({
   }, [containerWidth, containerHeight, isFullScreen, baseCanvasW, baseCanvasH, isDiagram2Active, showExtendedPipeline, topSafePadding]);
 
   // Ánh xạ chuẩn 8 chiều dữ liệu viễn trắc của mô hình GRU [12×8]
-  const METRIC_CONFIGS = [
+  const METRIC_CONFIGS = useMemo(() => [
     {
       key: 'cpu',
-      name: 'CPU (%)',
-      label: 'Metric 1: CPU (%)',
+      name: t('pipeline.metrics.cpuName'),
+      label: t('pipeline.metrics.cpuLabel'),
       icon: Cpu,
       color: '#10B981', // Emerald
       bgColor: '#ECFDF5',
@@ -373,8 +399,8 @@ export const AIPipelineFlowCanvas = ({
     },
     {
       key: 'ram',
-      name: 'RAM (%)',
-      label: 'Metric 2: RAM (%)',
+      name: t('pipeline.metrics.ramName'),
+      label: t('pipeline.metrics.ramLabel'),
       icon: Server,
       color: '#3B82F6', // Blue
       bgColor: '#EFF6FF',
@@ -384,8 +410,8 @@ export const AIPipelineFlowCanvas = ({
     },
     {
       key: 'disk',
-      name: 'Disk (%)',
-      label: 'Metric 3: Disk (%)',
+      name: t('pipeline.metrics.diskName'),
+      label: t('pipeline.metrics.diskLabel'),
       icon: HardDrive,
       color: '#F59E0B', // Amber
       bgColor: '#FFFBEB',
@@ -395,8 +421,8 @@ export const AIPipelineFlowCanvas = ({
     },
     {
       key: 'latency',
-      name: 'Latency (ms)',
-      label: 'Metric 4: Latency (ms)',
+      name: t('pipeline.metrics.latencyName'),
+      label: t('pipeline.metrics.latencyLabel'),
       icon: Clock,
       color: '#8B5CF6', // Purple
       bgColor: '#F5F3FF',
@@ -406,8 +432,8 @@ export const AIPipelineFlowCanvas = ({
     },
     {
       key: 'request_rate',
-      name: 'Request Rate (Req/s)',
-      label: 'Metric 5: Request Rate (Req/s)',
+      name: t('pipeline.metrics.reqName'),
+      label: t('pipeline.metrics.reqLabel'),
       icon: TrendingUp,
       color: '#06B6D4', // Cyan
       bgColor: '#ECFEFF',
@@ -417,8 +443,8 @@ export const AIPipelineFlowCanvas = ({
     },
     {
       key: 'http_5xx_rate',
-      name: 'Error 5xx (%)',
-      label: 'Metric 6: Error 5xx (%)',
+      name: t('pipeline.metrics.err5xxName'),
+      label: t('pipeline.metrics.err5xxLabel'),
       icon: AlertTriangle,
       color: '#EF4444', // Red
       bgColor: '#FEF2F2',
@@ -428,73 +454,73 @@ export const AIPipelineFlowCanvas = ({
     },
     {
       key: 'pod_restart_count',
-      name: 'Pod Restarts',
-      label: 'Metric 7: Pod Restarts',
+      name: t('pipeline.metrics.restartName'),
+      label: t('pipeline.metrics.restartLabel'),
       icon: RotateCcw,
       color: '#F97316', // Orange
       bgColor: '#FFF7ED',
       borderColor: '#FFEDD5',
-      unit: 'lần',
+      unit: t('pipeline.metrics.restartUnit'),
       threshold: 1,
     },
     {
       key: 'replica_count',
-      name: 'Replicas (Pod)',
-      label: 'Metric 8: Replicas (Pod)',
+      name: t('pipeline.metrics.replicaName'),
+      label: t('pipeline.metrics.replicaLabel'),
       icon: Layers,
       color: '#6366F1', // Indigo
       bgColor: '#EEF2FF',
       borderColor: '#E0E7FF',
-      unit: 'Pod',
+      unit: t('pipeline.metrics.replicaUnit'),
       threshold: 999,
     },
-  ];
+  ], [t]);
 
   // Ánh xạ 7 đầu ra rủi ro AI đồng bộ 100% với bảng "Hồ Sơ Xác Suất Rủi Ro"
-  const ACTION_OUTCOME_NODES = [
+  const ACTION_OUTCOME_NODES = useMemo(() => [
     {
       id: 'cpu_overload',
-      title: 'Quá Tải CPU (CPU Overload)',
+      title: t('pipeline.riskNodes.cpu_overload'),
       riskKey: 'CPU_OVERLOAD',
       threshold: 0.81,
     },
     {
       id: 'oom_risk',
-      title: 'Nguy Cơ Tràn RAM (OOM Risk)',
+      title: t('pipeline.riskNodes.oom_risk'),
       riskKey: 'OOM',
       threshold: 0.50,
     },
     {
       id: 'high_latency',
-      title: 'Độ Trễ Phản Hồi Cao (High Latency)',
+      title: t('pipeline.riskNodes.high_latency'),
       riskKey: 'HIGH_LATENCY',
       threshold: 0.62,
     },
     {
       id: 'disk_full',
-      title: 'Tràn Bộ Nhớ Đĩa (Disk Full)',
+      title: t('pipeline.riskNodes.disk_full'),
       riskKey: 'DISK_FULL',
       threshold: 0.85,
     },
     {
       id: '5xx_spike',
-      title: 'Đột Biến Lỗi 5xx (5xx Spike)',
+      title: t('pipeline.riskNodes.5xx_spike'),
       riskKey: 'HTTP_5XX_SPIKE',
       threshold: 0.81,
     },
     {
       id: 'traffic_spike',
-      title: 'Quá Tải Lưu Lượng (Traffic Spike)',
+      title: t('pipeline.riskNodes.traffic_spike'),
       riskKey: 'TRAFFIC_OVERLOAD',
       threshold: 0.85,
     },
     {
       id: 'scale_down',
-      title: 'Thu Nhỏ Bản Sao (Scale Down / Tiết Kiệm)',
+      title: t('pipeline.riskNodes.scale_down'),
       riskKey: 'SCALE_DOWN_CANDIDATE',
       threshold: 0.70,
     },
-  ];
+  ], [t]);
 
   // Nạp dữ liệu thực tế từ seriesSummaries & timesteps (khi mất kết nối Agent / Cụm -> toàn bộ hiển thị về 0.00)
   const liveMetrics = useMemo(() => {
@@ -574,7 +600,7 @@ export const AIPipelineFlowCanvas = ({
       };
     }
     return map;
-  }, [seriesSummaries, isAgentConnected, timesteps, podCount, pipelineContext?.replicaCount]);
+  }, [METRIC_CONFIGS, seriesSummaries, isAgentConnected, timesteps, podCount, pipelineContext?.replicaCount]);
 
   // Trích xuất ngữ cảnh sự cố từ pipelineContext để các tầng suy luận sử dụng
   const latestIncident = isAgentConnected ? (pipelineContext?.latestIncident || null) : null;
@@ -670,7 +696,16 @@ export const AIPipelineFlowCanvas = ({
       };
     }
     return map;
-  }, [prediction, isAgentConnected]);
+  }, [
+    ACTION_OUTCOME_NODES,
+    prediction,
+    isAgentConnected,
+    isBenignDbCacheState,
+    liveMetrics.cpu?.latest,
+    liveMetrics.latency?.latest,
+    liveMetrics.replica_count?.latest,
+    podCount,
+  ]);
 
   // Xử lý sự kiện kéo rê (Pan)
   const handleMouseDown = (e) => {
@@ -1243,22 +1278,22 @@ export const AIPipelineFlowCanvas = ({
   const ruleEngineChecks = [
     {
       id: 'R1',
-      name: 'R1: CPU + Latency',
-      cond: 'CPU > 80% & Lat > 200ms',
+      name: t('pipeline.rules.R1Name'),
+      cond: t('pipeline.rules.R1Cond'),
       value: `${liveCpuVal.toFixed(0)}% / ${liveLatVal.toFixed(0)}ms`,
       triggered: isAgentConnected && liveCpuVal > 80 && liveLatVal > 200,
     },
     {
       id: 'R2',
-      name: 'R2: Traffic Surge',
-      cond: 'Req/s > 500 & Pods ≤ 2',
+      name: t('pipeline.rules.R2Name'),
+      cond: t('pipeline.rules.R2Cond'),
       value: `${liveReqVal.toFixed(0)} r/s • ${isAgentConnected ? podCount : 0}p`,
       triggered: isAgentConnected && liveReqVal > 500 && Number(podCount) <= 2,
     },
     {
       id: 'R3',
-      name: isDbCacheService ? 'R3: Buffer Cache / OOM' : 'R3: Memory / OOM',
-      cond: isDbCacheService ? 'RAM Cache (WiredTiger)' : 'RAM > 85% / OOMKilled',
+      name: isDbCacheService ? t('pipeline.rules.R3NameDb') : t('pipeline.rules.R3Name'),
+      cond: isDbCacheService ? t('pipeline.rules.R3CondDb') : t('pipeline.rules.R3Cond'),
       value: `${liveRamVal.toFixed(1)}%`,
       triggered:
         isAgentConnected &&
@@ -1266,20 +1301,20 @@ export const AIPipelineFlowCanvas = ({
     },
     {
       id: 'R4',
-      name: 'R4: Lỗi HTTP 5xx',
-      cond: 'Error 5xx > 5%',
+      name: t('pipeline.rules.R4Name'),
+      cond: t('pipeline.rules.R4Cond'),
       value: `${live5xxVal.toFixed(2)}%`,
       triggered: isAgentConnected && live5xxVal > 5,
     },
     {
       id: 'R5',
-      name: 'R5: Pod Instability',
-      cond: 'Restart ≥ 1 / CrashLoop',
+      name: t('pipeline.rules.R5Name'),
+      cond: t('pipeline.rules.R5Cond'),
       value: !isAgentConnected
-        ? 'Offline'
+        ? t('pipeline.rules.R5Offline')
         : latestIncCauseText.includes('crash') || latestIncCauseText.includes('pod')
-          ? 'Bất ổn'
-          : 'Running',
+          ? t('pipeline.rules.R5Unstable')
+          : t('pipeline.rules.R5Running'),
       triggered:
         isAgentConnected &&
         openServiceIncidentsCount > 0 &&
@@ -1287,8 +1322,8 @@ export const AIPipelineFlowCanvas = ({
     },
     {
       id: 'R6',
-      name: 'R6: Disk Saturation',
-      cond: 'Disk > 85%',
+      name: t('pipeline.rules.R6Name'),
+      cond: t('pipeline.rules.R6Cond'),
       value: `${liveDiskVal.toFixed(1)}%`,
       triggered: isAgentConnected && liveDiskVal > 85,
     },
@@ -1338,82 +1373,82 @@ export const AIPipelineFlowCanvas = ({
       const ruleObj = ruleEngineChecks.find((r) => r.id === ruleId);
       const RULE_DETAILS = {
         R1: {
-          title: 'Luật R1: Quá Tải CPU Kèm Phản Hồi Chậm',
-          summary: `Kiểm tra đồng thời cả CPU và độ trễ của "${selectedService}". Chỉ báo lỗi khi CẢ HAI cùng vượt ngưỡng (CPU > 80% VÀ Độ trễ > 200ms) để tránh báo động giả khi CPU tăng nhẹ nhưng hệ thống vẫn phản hồi nhanh.`,
+          title: t('pipeline.inspector.ruleR1Title'),
+          summary: t('pipeline.inspector.ruleR1Summary', { service: selectedService }),
           rows: [
-            { label: 'CPU hiện tại', value: `${liveCpuVal.toFixed(1)}% (ngưỡng > 80%)`, highlight: liveCpuVal > 80 },
-            { label: 'Độ trễ hiện tại', value: `${liveLatVal.toFixed(0)} ms (ngưỡng > 200 ms)`, highlight: liveLatVal > 200 },
-            { label: 'Mã bất thường', value: 'CPU_LATENCY_SATURATION' },
+            { label: t('pipeline.inspector.ruleR1CpuNow'), value: t('pipeline.inspector.ruleR1CpuVal', { val: liveCpuVal.toFixed(1) }), highlight: liveCpuVal > 80 },
+            { label: t('pipeline.inspector.ruleR1LatNow'), value: t('pipeline.inspector.ruleR1LatVal', { val: liveLatVal.toFixed(0) }), highlight: liveLatVal > 200 },
+            { label: t('pipeline.inspector.anomalyCode'), value: 'CPU_LATENCY_SATURATION' },
           ],
-          nextStep: 'Khi cả 2 điều kiện cùng vượt ngưỡng → Đẩy thẳng vào Multi-Agent RCA (ưu tiên Scale Replicas hoặc Restart Pod).',
+          nextStep: t('pipeline.inspector.ruleR1Next'),
         },
         R2: {
-          title: 'Luật R2: Đột Biến Lưu Lượng Khi Ít Pod',
-          summary: `Phát hiện lưu lượng truy cập đổ vào "${selectedService}" tăng vọt (> 500 req/s) trong khi số bản sao đang chạy quá mỏng (≤ 2 Pods), dễ gây nghẽn cổ chai hoặc sập dịch vụ dây chuyền.`,
+          title: t('pipeline.inspector.ruleR2Title'),
+          summary: t('pipeline.inspector.ruleR2Summary', { service: selectedService }),
           rows: [
-            { label: 'Lưu lượng hiện tại', value: `${liveReqVal.toFixed(1)} req/s (ngưỡng > 500)`, highlight: liveReqVal > 500 },
-            { label: 'Số Pod đang chạy', value: `${podCount} Pods (ngưỡng ≤ 2)`, highlight: Number(podCount) <= 2 },
-            { label: 'Mã bất thường', value: 'TRAFFIC_SURGE' },
+            { label: t('pipeline.inspector.ruleR2ReqNow'), value: t('pipeline.inspector.ruleR2ReqVal', { val: liveReqVal.toFixed(1) }), highlight: liveReqVal > 500 },
+            { label: t('pipeline.inspector.ruleR2PodsNow'), value: t('pipeline.inspector.ruleR2PodsVal', { count: podCount }), highlight: Number(podCount) <= 2 },
+            { label: t('pipeline.inspector.anomalyCode'), value: 'TRAFFIC_SURGE' },
           ],
-          nextStep: 'Khi kích hoạt → Multi-Agent RCA phân tích có phải tấn công DDoS hay tải thật để đề xuất Scale Replicas hoặc chặn IP tạm thời.',
+          nextStep: t('pipeline.inspector.ruleR2Next'),
         },
         R3: {
-          title: isDbCacheService ? 'Luật R3: Bộ Nhớ Đệm Database (Buffer Cache)' : 'Luật R3: Áp Lực Bộ Nhớ RAM / OOMKilled',
+          title: isDbCacheService ? t('pipeline.inspector.ruleR3TitleDb') : t('pipeline.inspector.ruleR3Title'),
           summary: isDbCacheService
-            ? `Dịch vụ "${selectedService}" sử dụng cơ chế đệm trang (WiredTiger Cache). RAM duy trì mức cao là trạng thái tối ưu hoá đọc/ghi đĩa tự nhiên của database, không có nguy cơ OOM do không có sự kiện OOMKilled và Pod không bị restart.`
-            : `Theo dõi sát bộ nhớ RAM của "${selectedService}". Nếu RAM vượt 85% hoặc Kubernetes ghi nhận sự kiện OOMKilled (Container bị hệ điều hành tắt do tràn RAM), luật lập tức kích hoạt ở độ tin cậy 95%.`,
+            ? t('pipeline.inspector.ruleR3SummaryDb', { service: selectedService })
+            : t('pipeline.inspector.ruleR3Summary', { service: selectedService }),
           rows: [
-            { label: 'RAM hiện tại', value: `${liveRamVal.toFixed(1)}% ${isDbCacheService ? '(Bộ đệm WiredTiger)' : '(ngưỡng > 85%)'}`, highlight: !isDbCacheService && liveRamVal > 85 },
-            { label: 'Dấu hiệu OOMKilled', value: latestIncCauseText.includes('oom') ? 'Phát hiện OOM' : 'Không phát hiện (An toàn)', highlight: latestIncCauseText.includes('oom') },
-            { label: 'Trạng thái luật', value: isDbCacheService && !latestIncCauseText.includes('oom') ? 'ĐẠT CHUẨN (BUFFER CACHE)' : 'MEMORY_PRESSURE' },
+            { label: t('pipeline.inspector.ruleR3RamNow'), value: `${liveRamVal.toFixed(1)}% ${isDbCacheService ? t('pipeline.inspector.ruleR3RamDbHint') : t('pipeline.inspector.ruleR3RamThresholdHint')}`, highlight: !isDbCacheService && liveRamVal > 85 },
+            { label: t('pipeline.inspector.ruleR3OomLabel'), value: latestIncCauseText.includes('oom') ? t('pipeline.inspector.ruleR3OomFound') : t('pipeline.inspector.ruleR3OomSafe'), highlight: latestIncCauseText.includes('oom') },
+            { label: t('pipeline.inspector.ruleR3StatusLabel'), value: isDbCacheService && !latestIncCauseText.includes('oom') ? t('pipeline.inspector.ruleR3StatusDbSafe') : 'MEMORY_PRESSURE' },
           ],
           nextStep: isDbCacheService
-            ? 'Cơ chế tự trị tiếp tục bảo vệ, không kích hoạt khởi động lại Pod ngoài ý muốn đối với cơ sở dữ liệu.'
-            : 'Khi kích hoạt → Đẩy vào Multi-Agent RCA chẩn đoán rò rỉ bộ nhớ (Memory Leak) và đề xuất Restart / Replace Pod.',
+            ? t('pipeline.inspector.ruleR3NextDb')
+            : t('pipeline.inspector.ruleR3Next'),
         },
         R4: {
-          title: 'Luật R4: Đột Biến Lỗi Máy Chủ HTTP 5xx',
-          summary: `Canh tỷ lệ phản hồi lỗi máy chủ (500, 502, 503, 504) trên "${selectedService}". Chỉ cần tỷ lệ lỗi vượt 5%, người dùng cuối đang gặp lỗi trực tiếp nên hệ thống lập tức vào quy trình xử lý sự cố.`,
+          title: t('pipeline.inspector.ruleR4Title'),
+          summary: t('pipeline.inspector.ruleR4Summary', { service: selectedService }),
           rows: [
-            { label: 'Tỷ lệ lỗi 5xx', value: `${live5xxVal.toFixed(2)}% (ngưỡng > 5%)`, highlight: live5xxVal > 5 },
-            { label: 'Tác động', value: live5xxVal > 5 ? 'Ảnh hưởng trực tiếp người dùng' : 'Ổn định' },
-            { label: 'Mã bất thường', value: 'HTTP_5XX_SPIKE' },
+            { label: t('pipeline.inspector.ruleR4RateLabel'), value: t('pipeline.inspector.ruleR4RateVal', { val: live5xxVal.toFixed(2) }), highlight: live5xxVal > 5 },
+            { label: t('pipeline.inspector.ruleR4ImpactLabel'), value: live5xxVal > 5 ? t('pipeline.inspector.ruleR4ImpactHigh') : t('pipeline.inspector.ruleR4ImpactStable') },
+            { label: t('pipeline.inspector.anomalyCode'), value: 'HTTP_5XX_SPIKE' },
           ],
-          nextStep: 'Khi kích hoạt → Multi-Agent RCA đọc Container Logs lỗi để chọn Restart Pod, Rollback (qua HITL) hoặc ngắt mạch Circuit Breaker.',
+          nextStep: t('pipeline.inspector.ruleR4Next'),
         },
         R5: {
-          title: 'Luật R5: Pod Bất Ổn / CrashLoopBackOff',
-          summary: `Giám sát trực tiếp sức khỏe Container của "${selectedService}" trên cụm Kubernetes. Kích hoạt khi Pod khởi động lại bất thường (Restart ≥ 1), dính CrashLoopBackOff hoặc lỗi Health Probe (Unhealthy).`,
+          title: t('pipeline.inspector.ruleR5Title'),
+          summary: t('pipeline.inspector.ruleR5Summary', { service: selectedService }),
           rows: [
-            { label: 'Trạng thái Pod', value: ruleObj?.value || 'Running', highlight: Boolean(ruleObj?.triggered) },
-            { label: 'Sự cố đang mở', value: `${openServiceIncidentsCount} sự cố` },
-            { label: 'Mã bất thường', value: 'POD_INSTABILITY' },
+            { label: t('pipeline.inspector.ruleR5PodStatus'), value: ruleObj?.value || t('pipeline.rules.R5Running'), highlight: Boolean(ruleObj?.triggered) },
+            { label: t('pipeline.inspector.ruleR5OpenInc'), value: t('pipeline.inspector.ruleR5OpenIncVal', { count: openServiceIncidentsCount }) },
+            { label: t('pipeline.inspector.anomalyCode'), value: 'POD_INSTABILITY' },
           ],
-          nextStep: 'Khi kích hoạt → Multi-Agent RCA kiểm tra K8s Events & Logs để xác định nguyên nhân crash trước khi Replace Pod hoặc Rollback.',
+          nextStep: t('pipeline.inspector.ruleR5Next'),
         },
         R6: {
-          title: 'Luật R6: Đầy Ổ Đĩa Lưu Trữ (Disk Full)',
-          summary: `Cảnh báo sớm khi dung lượng đĩa của "${selectedService}" vượt ngưỡng 85% (thường do file log hoặc file tạm phình to), tránh tình trạng ứng dụng không thể ghi dữ liệu và bị treo hoàn toàn.`,
+          title: t('pipeline.inspector.ruleR6Title'),
+          summary: t('pipeline.inspector.ruleR6Summary', { service: selectedService }),
           rows: [
-            { label: 'Dung lượng Disk', value: `${liveDiskVal.toFixed(1)}% (ngưỡng > 85%)`, highlight: liveDiskVal > 85 },
-            { label: 'Mã bất thường', value: 'DISK_SATURATION' },
+            { label: t('pipeline.inspector.ruleR6DiskNow'), value: t('pipeline.inspector.ruleR6DiskVal', { val: liveDiskVal.toFixed(1) }), highlight: liveDiskVal > 85 },
+            { label: t('pipeline.inspector.anomalyCode'), value: 'DISK_SATURATION' },
           ],
-          nextStep: 'Khi kích hoạt → Multi-Agent RCA xác minh dung lượng lưu trữ và đề xuất hành động Cleanup Temp Files (dọn file tạm/log).',
+          nextStep: t('pipeline.inspector.ruleR6Next'),
         },
       };
       const detail = RULE_DETAILS[ruleId];
       if (!detail) return null;
       return {
-        badge: `RULE ENGINE • ${ruleId}`,
+        badge: t('pipeline.inspector.ruleBadge', { id: ruleId }),
         accent: ruleObj?.triggered ? '#DC2626' : '#EA580C',
         bg: ruleObj?.triggered ? '#FEF2F2' : '#FFF7ED',
         title: detail.title,
-        statusText: ruleObj?.triggered ? 'VI PHẠM NGƯỠNG' : 'AN TOÀN',
+        statusText: ruleObj?.triggered ? t('pipeline.inspector.ruleTriggered') : t('pipeline.inspector.ruleSafe'),
         isAlert: Boolean(ruleObj?.triggered),
         summary: detail.summary,
         rows: detail.rows,
         nextStep: detail.nextStep,
-        actionLabel: 'Mở trang Sự cố & RCA →',
+        actionLabel: t('pipeline.inspector.openIncidentsBtn'),
         actionPath: '/dashboard/incidents',
       };
     }
@@ -1424,32 +1459,22 @@ export const AIPipelineFlowCanvas = ({
       const cfg = METRIC_CONFIGS.find((m) => m.key === key);
       const live = liveMetrics[key] || { latest: '0.00', avg: '0.00', max: '0.00', isWarning: false };
       if (!cfg) return null;
-      const METRIC_DESC = {
-        cpu: 'Đo mức sử dụng vi xử lý (CPU %) của các Container thuộc dịch vụ trong cửa sổ 60 giây gần nhất.',
-        ram: 'Đo phần trăm bộ nhớ RAM đang tiêu thụ. RAM tăng đều không giảm là dấu hiệu điển hình của Memory Leak dẫn tới OOMKilled.',
-        disk: 'Đo phần trăm dung lượng ổ đĩa đã sử dụng bởi ứng dụng, log hoặc dữ liệu tạm.',
-        latency: 'Đo độ trễ phản hồi (ms) của dịch vụ. Độ trễ tăng vọt báo hiệu nghẽn tài nguyên, quá tải DB hoặc lỗi mạng nội bộ.',
-        request_rate: 'Đo số lượng yêu cầu mỗi giây (Req/s) đổ vào dịch vụ để phát hiện đột biến lưu lượng hoặc tải nhàn rỗi.',
-        http_5xx_rate: 'Đo tỷ lệ phần trăm yêu cầu trả về mã lỗi máy chủ HTTP 5xx (500–504).',
-        pod_restart_count: 'Đo số lần khởi động lại (Pod Restarts) trong cửa sổ giám sát nhằm phát hiện sớm hiện tượng CrashLoopBackOff hoặc OOMKilled tái diễn.',
-        replica_count: 'Đo số lượng bản sao Pod (Replicas) đang khả dụng và sẵn sàng tiếp nhận lưu lượng truy cập của dịch vụ trên Kubernetes.',
-      };
       return {
-        badge: '01 • VIỄN TRẮC ĐẦU VÀO',
+        badge: t('pipeline.inspector.metricBadge'),
         accent: cfg.color,
         bg: cfg.bgColor,
         title: `${cfg.label} — ${selectedService}`,
-        statusText: live.isWarning ? 'CẢNH BÁO CAO' : 'BÌNH THƯỜNG',
+        statusText: live.isWarning ? t('pipeline.inspector.metricHighAlert') : t('pipeline.inspector.metricNormal'),
         isAlert: Boolean(live.isWarning),
-        summary: METRIC_DESC[key] || 'Chỉ số viễn trắc thu thập trực tiếp từ cụm Kubernetes mỗi 5 giây.',
+        summary: t(`pipeline.inspector.metricDesc.${key}`, { defaultValue: t('pipeline.inspector.metricDesc.default') }),
         rows: [
-          { label: 'Giá trị hiện tại', value: `${live.latest} ${cfg.unit}`, highlight: Boolean(live.isWarning) },
-          { label: 'Trung bình (12 bước)', value: `${live.avg} ${cfg.unit}` },
-          { label: 'Đỉnh cao nhất', value: `${live.max} ${cfg.unit}` },
-          { label: 'Ngưỡng cảnh báo', value: `> ${cfg.threshold} ${cfg.unit}` },
+          { label: t('pipeline.inspector.metricCurrentVal'), value: `${live.latest} ${cfg.unit}`, highlight: Boolean(live.isWarning) },
+          { label: t('pipeline.inspector.metricAvg12'), value: `${live.avg} ${cfg.unit}` },
+          { label: t('pipeline.inspector.metricMaxPeak'), value: `${live.max} ${cfg.unit}` },
+          { label: t('pipeline.inspector.metricThreshold'), value: `> ${cfg.threshold} ${cfg.unit}` },
         ],
-        nextStep: 'Dữ liệu này được gửi đồng thời sang 2 nhánh: Rule Engine (kiểm tra luật tức thì) và AI (dự báo chuỗi 12 bước).',
-        actionLabel: 'Xem Chỉ số Tài nguyên →',
+        nextStep: t('pipeline.inspector.metricNext'),
+        actionLabel: t('pipeline.inspector.viewMetricsBtn'),
         actionPath: '/dashboard/monitoring/metrics',
       };
     }
@@ -1461,22 +1486,22 @@ export const AIPipelineFlowCanvas = ({
       if (!node) return null;
       const riskInfo = riskProbabilities[node.riskKey] || { probPercent: '0%', thresholdPercent: 80, isTriggered: false };
       return {
-        badge: '03 • ĐẦU RA MÔ HÌNH AI',
+        badge: t('pipeline.inspector.riskBadge'),
         accent: riskInfo.isTriggered ? '#DC2626' : '#059669',
         bg: riskInfo.isTriggered ? '#FEF2F2' : '#ECFDF5',
         title: node.title,
-        statusText: riskInfo.isTriggered ? 'VƯỢT NGƯỠNG AI' : 'DƯỚI NGƯỠNG',
+        statusText: riskInfo.isTriggered ? t('pipeline.inspector.riskExceeded') : t('pipeline.inspector.riskBelow'),
         isAlert: Boolean(riskInfo.isTriggered),
-        summary: `Đầu ra dự báo xác suất của mô hình AI trên chuỗi 12 bước (60 giây) cho dịch vụ "${selectedService}". Nếu xác suất vượt ngưỡng riêng của đầu rủi ro này, AI sẽ tự động kích hoạt chẩn đoán nguyên nhân gốc (RCA).`,
+        summary: t('pipeline.inspector.riskSummary', { service: selectedService }),
         rows: [
-          { label: 'Xác suất AI dự báo', value: riskInfo.probPercent, highlight: Boolean(riskInfo.isTriggered) },
-          { label: 'Ngưỡng kích hoạt', value: `${riskInfo.thresholdPercent}%` },
-          { label: 'Mã rủi ro AI', value: node.riskKey },
+          { label: t('pipeline.inspector.riskAiProb'), value: riskInfo.probPercent, highlight: Boolean(riskInfo.isTriggered) },
+          { label: t('pipeline.inspector.riskTriggerThreshold'), value: `${riskInfo.thresholdPercent}%` },
+          { label: t('pipeline.inspector.riskCode'), value: node.riskKey },
         ],
         nextStep: riskInfo.isTriggered
-          ? 'Đang vượt ngưỡng → Tín hiệu đỏ đã đẩy sang Multi-Agent RCA để phân tích nguyên nhân gốc.'
-          : 'Đang dưới ngưỡng an toàn → Hệ thống tiếp tục theo dõi chu kỳ 12 bước tiếp theo.',
-        actionLabel: 'Xem Sự cố & RCA →',
+          ? t('pipeline.inspector.riskNextTriggered')
+          : t('pipeline.inspector.riskNextSafe'),
+        actionLabel: t('pipeline.inspector.viewIncidentsBtn'),
         actionPath: '/dashboard/incidents',
       };
     }
@@ -1484,20 +1509,20 @@ export const AIPipelineFlowCanvas = ({
     // 4. Các khối giai đoạn chính (AI, RCA, Policy, AUTO, HITL, Audit, Verify)
     if (id === 'stage:gru') {
       return {
-        badge: '02 • DỰ BÁO CHUỖI THỜI GIAN',
+        badge: t('pipeline.inspector.gruBadge'),
         accent: '#2563EB',
         bg: '#EFF6FF',
-        title: `Mô hình AI Dự Báo — ${selectedService}`,
-        statusText: isRiskDetected ? 'PHÁT HIỆN RỦI RO' : 'ỔN ĐỊNH (HEALTHY)',
+        title: t('pipeline.inspector.gruTitle', { service: selectedService }),
+        statusText: isRiskDetected ? t('pipeline.inspector.gruAlert') : t('pipeline.inspector.gruHealthy'),
         isAlert: isRiskDetected,
-        summary: `Gom đủ lô 12 bước viễn trắc mới tinh (Tumbling Batch: 12 × 5s = 60 giây) rồi đưa toàn bộ ma trận [12×8] vào mô hình AI để dự đoán sớm 7 loại rủi ro trước khi sự cố xảy ra.`,
+        summary: t('pipeline.inspector.gruSummary'),
         rows: [
-          { label: 'Tiến độ gom lô', value: `${Math.min(currentActiveStep || 12, totalSteps)}/${totalSteps} bước` },
-          { label: 'Điểm rủi ro tổng', value: rawRiskScore.toFixed(4), highlight: isRiskDetected },
-          { label: 'Dịch vụ giám sát', value: selectedService },
+          { label: t('pipeline.inspector.gruBatchProgress'), value: t('pipeline.inspector.gruBatchVal', { step: Math.min(currentActiveStep || 12, totalSteps), total: totalSteps }) },
+          { label: t('pipeline.inspector.gruRiskScore'), value: rawRiskScore.toFixed(4), highlight: isRiskDetected },
+          { label: t('pipeline.inspector.gruService'), value: selectedService },
         ],
-        nextStep: 'Kết quả dự báo 7 đầu ra được đẩy ngay qua WebSocket lên Dashboard và kích hoạt Multi-Agent RCA nếu vượt ngưỡng.',
-        actionLabel: 'Xem Sự cố & RCA →',
+        nextStep: t('pipeline.inspector.gruNext'),
+        actionLabel: t('pipeline.inspector.viewIncidentsBtn'),
         actionPath: '/dashboard/incidents',
       };
     }
@@ -1506,12 +1531,12 @@ export const AIPipelineFlowCanvas = ({
       const lastResolved = pipelineContext?.lastResolvedIncident || null;
       const rcaStatusLabel =
         openServiceIncidentsCount > 0
-          ? `${openServiceIncidentsCount} SỰ CỐ OPEN`
+          ? t('pipeline.inspector.rcaOpenStatus', { count: openServiceIncidentsCount })
           : isBenignDbCacheState
-            ? 'BỘ ĐỆM AN TOÀN'
+            ? t('pipeline.inspector.rcaDbSafeStatus')
             : isRcaActive
-              ? 'ĐANG CHẨN ĐOÁN'
-              : 'ỔN ĐỊNH • CHỜ TÍN HIỆU';
+              ? t('pipeline.inspector.rcaDiagnosingStatus')
+              : t('pipeline.inspector.rcaIdleStatus');
 
       const rawRecAction =
         latestRecommendation?.action ||
@@ -1521,37 +1546,37 @@ export const AIPipelineFlowCanvas = ({
       const rcaAgents = pipelineContext?.rcaAgentsSummary || null;
       const evidenceStatusVi =
         rcaAgents?.evidenceStatus === 'INSUFFICIENT_EVIDENCE'
-          ? 'Thiếu bằng chứng'
+          ? t('pipeline.inspector.rcaInsuffEv')
           : rcaAgents?.evidenceStatus === 'SUFFICIENT_EVIDENCE' || rcaAgents?.evidenceStatus === 'CONFIRMED'
-            ? 'Đủ bằng chứng'
+            ? t('pipeline.inspector.rcaSuffEv')
             : null;
       const rcaCauseText = latestIncident
-        ? translateIncidentTitle(latestIncident.cause || latestIncident.root_cause || latestIncident.title)
+        ? localizedIncidentTitle(latestIncident.cause || latestIncident.root_cause || latestIncident.title)
         : '';
-      const rawTitleText = latestIncident?.title ? translateIncidentTitle(latestIncident.title) : '';
+      const rawTitleText = latestIncident?.title ? localizedIncidentTitle(latestIncident.title) : '';
       const rcaRows = latestIncident
         ? [
             {
-              label: 'Sự cố đang mở (OPEN)',
+              label: t('pipeline.inspector.rcaOpenLabel'),
               value: rcaCauseText,
               highlight: true,
             },
             ...(rawTitleText && rawTitleText !== rcaCauseText
               ? [
                   {
-                    label: 'Tín hiệu kích hoạt',
+                    label: t('pipeline.inspector.rcaTriggerSignal'),
                     value: rawTitleText,
                   },
                 ]
               : []),
             {
-              label: 'Mức nghiêm trọng',
-              value: latestIncident.severity ? translateSeverity(latestIncident.severity) : '—',
+              label: t('pipeline.inspector.rcaSeverityLabel'),
+              value: latestIncident.severity ? localizedSeverity(latestIncident.severity) : '—',
             },
             ...(rcaAgents?.rcaConfidencePct !== null && rcaAgents?.rcaConfidencePct !== undefined
               ? [
                   {
-                    label: 'Độ tin cậy RCA',
+                    label: t('pipeline.inspector.rcaConfidenceLabel'),
                     value: evidenceStatusVi
                       ? `${rcaAgents.rcaConfidencePct}% (${evidenceStatusVi})`
                       : `${rcaAgents.rcaConfidencePct}%`,
@@ -1559,47 +1584,49 @@ export const AIPipelineFlowCanvas = ({
                 ]
               : []),
             {
-              label: 'Đề xuất khắc phục',
-              value: rawRecAction ? translateActionToVi(rawRecAction, latestRecommendation) : 'Đang tổng hợp đề xuất',
+              label: t('pipeline.inspector.rcaRecLabel'),
+              value: rawRecAction ? translateActionToVi(rawRecAction, latestRecommendation) : t('pipeline.inspector.rcaRecPending'),
             },
           ]
         : [
             {
-              label: 'Sự cố đang mở (OPEN)',
+              label: t('pipeline.inspector.rcaOpenLabel'),
               value: isBenignDbCacheState
-                ? '0 sự cố (Bộ đệm WiredTiger an toàn)'
-                : `0 sự cố (${isRcaActive ? 'Đang gom 12 bước viễn trắc mới' : 'Hệ thống ổn định'})`,
+                ? t('pipeline.inspector.rcaZeroDb')
+                : t('pipeline.inspector.rcaZeroCount', { detail: isRcaActive ? t('pipeline.inspector.rcaZeroGathering') : t('pipeline.inspector.rcaZeroStable') }),
             },
             ...(lastResolved
               ? [
                   {
-                    label: 'Lần gần nhất đã đóng',
-                    value: `${translateIncidentTitle(
-                      lastResolved.cause || lastResolved.root_cause || lastResolved.title
-                    )} (Đã khắc phục)`,
+                    label: t('pipeline.inspector.rcaLastClosed'),
+                    value: t('pipeline.inspector.rcaLastClosedVal', {
+                      cause: localizedIncidentTitle(
+                        lastResolved.cause || lastResolved.root_cause || lastResolved.title
+                      ),
+                    }),
                   },
                 ]
               : []),
             {
-              label: 'Đề xuất hiện tại',
-              value: 'Chờ tín hiệu bất thường',
+              label: t('pipeline.inspector.rcaCurrentRec'),
+              value: t('pipeline.inspector.rcaWaitAnomaly'),
             },
           ];
 
       return {
-        badge: '04 • ĐA TÁC TỬ RCA & SỰ CỐ',
+        badge: t('pipeline.inspector.rcaBadge'),
         accent: openServiceIncidentsCount > 0 ? '#DC2626' : '#7C3AED',
         bg: openServiceIncidentsCount > 0 ? '#FEF2F2' : '#F5F3FF',
         title: `Multi-Agent RCA — ${selectedService}`,
         statusText: rcaStatusLabel,
         isAlert: openServiceIncidentsCount > 0,
-        summary: `Khi AI hoặc Rule Engine báo bất thường, 4 tác tử chuyên trách (Metrics, Log, K8s Event, History) thu thập toàn bộ bằng chứng của "${selectedService}", sau đó RootCauseAgent kết luận nguyên nhân gốc và RecommendationAgent đề xuất phương án sửa.`,
+        summary: t('pipeline.inspector.rcaSummary', { service: selectedService }),
         rows: rcaRows,
         nextStep:
           openServiceIncidentsCount > 0
-            ? 'Đề xuất khắc phục được chuyển sang Policy Engine (Cột 05) để kiểm tra quyền tự động thực thi hay cần con người duyệt.'
-            : 'Hiện không có sự cố nào đang mở trên dịch vụ này — RCA đang ở trạng thái sẵn sàng.',
-        actionLabel: 'Mở Quản lý Sự cố & RCA →',
+            ? t('pipeline.inspector.rcaNextOpen')
+            : t('pipeline.inspector.rcaNextIdle'),
+        actionLabel: t('pipeline.inspector.openRcaBtn'),
         actionPath: '/dashboard/incidents',
       };
     }
@@ -1611,82 +1638,103 @@ export const AIPipelineFlowCanvas = ({
           ? pMeta.minConfidencePct === pMeta.maxConfidencePct
             ? `≥ ${pMeta.minConfidencePct}%`
             : `${pMeta.minConfidencePct}% – ${pMeta.maxConfidencePct}%`
-          : 'Chưa cấu hình';
+          : t('pipeline.inspector.policyNotConfigured');
       return {
-        badge: '05 • BỘ ĐÁNH GIÁ CHÍNH SÁCH',
+        badge: t('pipeline.inspector.policyBadge'),
         accent: '#D97706',
         bg: '#FFFBEB',
-        title: 'Policy Engine & Rào Chắn An Toàn',
-        statusText: `${pipelineContext?.activePoliciesCount ?? 0} CHÍNH SÁCH BẬT`,
+        title: t('pipeline.inspector.policyTitle'),
+        statusText: t('pipeline.inspector.policyActiveStatus', { count: pipelineContext?.activePoliciesCount ?? 0 }),
         isAlert: false,
-        summary: `Đối chiếu đề xuất từ AI với bộ chính sách tự phục hồi của tổ chức: kiểm tra thời gian chờ chống spam (Cooldown), độ tin cậy tối thiểu (Confidence), và áp dụng rào chắn bắt buộc HITL đối với hành động rủi ro cao (ROLLBACK, DRAIN_NODE, DB chính).`,
+        summary: t('pipeline.inspector.policySummary'),
         rows: [
-          { label: 'Chính sách AUTO đang bật', value: `${pipelineContext?.autoPoliciesCount ?? 0} chính sách` },
-          { label: 'Chính sách HITL đang bật', value: `${pipelineContext?.hitlPoliciesCount ?? 0} chính sách` },
+          { label: t('pipeline.inspector.policyAutoRow'), value: t('pipeline.inspector.policyCountUnit', { count: pipelineContext?.autoPoliciesCount ?? 0 }) },
+          { label: t('pipeline.inspector.policyHitlRow'), value: t('pipeline.inspector.policyCountUnit', { count: pipelineContext?.hitlPoliciesCount ?? 0 }) },
           {
-            label: 'Ngưỡng tin cậy & Cooldown',
+            label: t('pipeline.inspector.policyThresholdRow'),
             value: `${thresholdRangeText}${pMeta.cooldownSec ? ` • ${pMeta.cooldownSec}s` : ''}`,
           },
         ],
-        nextStep: 'Tự động rẽ luồng sang 1 trong 3 nhánh: Thực thi AUTO, Chờ duyệt HITL, hoặc Ngắt mạch Circuit Breaker.',
-        actionLabel: 'Mở Chính sách Tự động →',
+        nextStep: t('pipeline.inspector.policyNext'),
+        actionLabel: t('pipeline.inspector.openPoliciesBtn'),
         actionPath: '/dashboard/self-healing/policies',
       };
     }
 
     if (id === 'stage:auto') {
       return {
-        badge: '06A • TỰ PHỤC HỒI TỰ ĐỘNG',
+        badge: t('pipeline.inspector.autoBadge'),
         accent: '#059669',
         bg: '#ECFDF5',
-        title: `Nhánh AUTO • K8s Agent (${selectedService})`,
-        statusText: autoActionStatus || (isAgentConnected ? 'SẴN SÀNG' : 'OFFLINE'),
+        title: t('pipeline.inspector.autoTitle', { service: selectedService }),
+        statusText: autoActionStatus ? translateExecutionStatusVi(autoActionStatus) : (isAgentConnected ? t('pipeline.inspector.autoReady') : t('pipeline.inspector.autoOffline')),
         isAlert: autoActionStatus === 'FAILED',
-        summary: `Thực thi hoàn toàn tự trị các hành động an toàn (như Scale Replicas, Restart Pod, Cleanup Temp Files) bằng cách đẩy lệnh trực tiếp qua WebSocket xuống Self-Heal Agent cài trên cụm Kubernetes.`,
+        summary: t('pipeline.inspector.autoSummary'),
         rows: [
-          { label: 'Hành động gần nhất', value: latestAutoAction ? (latestAutoAction.display_action_name || latestAutoAction.action_type_name || 'Self-Healing') : 'Chưa có lệnh AUTO' },
-          { label: 'Trạng thái Agent', value: isAgentConnected ? 'Đang trực tuyến (Online)' : 'Ngoại tuyến (Offline)' },
+          {
+            label: t('pipeline.inspector.autoLatestAction'),
+            value: latestAutoAction
+              ? translateActionToVi(
+                  latestAutoAction.display_action_name ||
+                    latestAutoAction.action_type_name ||
+                    latestAutoAction.action_type_code ||
+                    latestAutoAction.action_name,
+                  latestAutoAction
+                ) || t('pipeline.actions.defaultHealing')
+              : t('pipeline.inspector.autoNoAction'),
+          },
+          { label: t('pipeline.inspector.autoAgentStatus'), value: isAgentConnected ? t('pipeline.inspector.autoAgentOnline') : t('pipeline.inspector.autoAgentOffline') },
         ],
-        nextStep: 'Ngay sau khi K8s Agent hoàn tất lệnh, hệ thống tự chuyển sang bước Hậu Kiểm 60s để xác minh dịch vụ đã ổn định.',
-        actionLabel: 'Mở Hành động Tự sửa →',
+        nextStep: t('pipeline.inspector.autoNext'),
+        actionLabel: t('pipeline.inspector.openActionsBtn'),
         actionPath: '/dashboard/self-healing/actions',
       };
     }
 
     if (id === 'stage:hitl') {
       return {
-        badge: '06B • PHÊ DUYỆT CON NGƯỜI (HITL)',
+        badge: t('pipeline.inspector.hitlBadge'),
         accent: '#D97706',
         bg: '#FFFBEB',
-        title: `Cổng Phê Duyệt HITL — ${selectedService}`,
-        statusText: isHitlActive ? `${pendingApprovalsCount} CHỜ DUYỆT` : '0 CHỜ DUYỆT',
+        title: t('pipeline.inspector.hitlTitle', { service: selectedService }),
+        statusText: t('pipeline.inspector.hitlPendingStatus', { count: isHitlActive ? pendingApprovalsCount : 0 }),
         isAlert: isHitlActive,
-        summary: `Rào chắn an toàn Human-in-the-Loop: giữ lại mọi hành động rủi ro cao hoặc độ tin cậy thấp của "${selectedService}", gửi email tới kỹ sư vận hành để xem xét trước khi cho phép tác động lên cụm Kubernetes.`,
+        summary: t('pipeline.inspector.hitlSummary', { service: selectedService }),
         rows: [
-          { label: 'Yêu cầu chờ duyệt', value: `${pendingApprovalsCount} yêu cầu`, highlight: isHitlActive },
-          { label: 'Hành động gần nhất', value: latestHitlApproval ? (latestHitlApproval.display_action_name || latestHitlApproval.action_type_name || 'Chờ duyệt') : 'Không có' },
+          { label: t('pipeline.inspector.hitlPendingRow'), value: t('pipeline.inspector.hitlPendingUnit', { count: pendingApprovalsCount }), highlight: isHitlActive },
+          {
+            label: t('pipeline.inspector.hitlLatestRow'),
+            value: latestHitlApproval
+              ? translateActionToVi(
+                  latestHitlApproval.display_action_name ||
+                    latestHitlApproval.action_type_name ||
+                    latestHitlApproval.action_type_code,
+                  latestHitlApproval
+                ) || t('pipeline.inspector.hitlPendingFallback')
+              : t('pipeline.inspector.hitlNone'),
+          },
         ],
-        nextStep: 'Khi kỹ sư bấm Phê duyệt → Lệnh lập tức gửi xuống K8s Agent thực thi và bước vào Hậu Kiểm 60s.',
-        actionLabel: 'Mở Cổng Phê duyệt HITL →',
+        nextStep: t('pipeline.inspector.hitlNext'),
+        actionLabel: t('pipeline.inspector.openHitlBtn'),
         actionPath: '/dashboard/self-healing/approvals',
       };
     }
 
     if (id === 'stage:audit') {
       return {
-        badge: '06C • NGẮT MẠCH & KIỂM TOÁN',
+        badge: t('pipeline.inspector.auditBadge'),
         accent: isAuditActive ? '#DC2626' : '#475569',
         bg: isAuditActive ? '#FEF2F2' : '#F8FAFC',
-        title: `Circuit Breaker & Audit Log — ${selectedService}`,
-        statusText: isCircuitBreakerTripped ? 'ĐÃ NGẮT MẠCH (NO_ACTION)' : 'AN TOÀN',
+        title: t('pipeline.inspector.auditTitle', { service: selectedService }),
+        statusText: isCircuitBreakerTripped ? t('pipeline.inspector.auditTrippedStatus') : t('pipeline.inspector.auditSafeStatus'),
         isAlert: isAuditActive,
-        summary: `Khi AI trả về NO_ACTION (ngăn vòng lặp sửa lỗi vô tận) hoặc chính sách đang ở chế độ Audit/Tắt, hệ thống KHÔNG can thiệp cụm K8s mà chỉ ghi Nhật ký Kiểm toán và gửi cảnh báo khẩn cho kỹ sư.`,
+        summary: t('pipeline.inspector.auditSummary'),
         rows: [
-          { label: 'Trạng thái ngắt mạch', value: isCircuitBreakerTripped ? 'Đang kích hoạt (NO_ACTION)' : 'Bình thường', highlight: isCircuitBreakerTripped },
-          { label: 'Tác động cụm K8s', value: 'Không can thiệp (Read-Only / Alert)' },
+          { label: t('pipeline.inspector.auditStateRow'), value: isCircuitBreakerTripped ? t('pipeline.inspector.auditTripped') : t('pipeline.inspector.auditNormal'), highlight: isCircuitBreakerTripped },
+          { label: t('pipeline.inspector.auditImpactRow'), value: t('pipeline.inspector.auditImpactVal') },
         ],
-        nextStep: 'Kỹ sư xem Nhật ký Kiểm toán & Sự cố để xử lý chuyên sâu ở tầng mã nguồn hoặc hạ tầng.',
-        actionLabel: 'Mở Nhật ký Kiểm toán →',
+        nextStep: t('pipeline.inspector.auditNext'),
+        actionLabel: t('pipeline.inspector.openAuditBtn'),
         actionPath: '/dashboard/audit-logs',
       };
     }
@@ -1706,7 +1754,7 @@ export const AIPipelineFlowCanvas = ({
                 : '';
               const shortReason = failureReason.length > 95 ? `${failureReason.slice(0, 92)}...` : failureReason;
               return {
-                label: `Bước #${step.stepIndex}: ${step.actionLabelVi}`,
+                label: t('pipeline.inspector.verifyStepLabel', { step: step.stepIndex, action: step.actionLabelVi }),
                 value: step.verdictLabel,
                 subValue: shortReason ? `${step.timeStr} • ${shortReason}` : step.timeStr,
                 highlight: step.isFailedOrUnrecovered,
@@ -1714,31 +1762,31 @@ export const AIPipelineFlowCanvas = ({
               };
             })
           : [
-              { label: 'Số hành động', value: '0 hành động (Hệ thống ổn định)' },
-              { label: 'Trạng thái dịch vụ', value: openServiceIncidentsCount > 0 ? 'Đang có sự cố mở' : 'Ổn định (HEALTHY)' },
+              { label: t('pipeline.inspector.verifyActionsCount'), value: t('pipeline.inspector.verifyZeroActions') },
+              { label: t('pipeline.inspector.verifyServiceStatus'), value: openServiceIncidentsCount > 0 ? t('pipeline.inspector.verifyServiceOpen') : t('pipeline.inspector.verifyServiceHealthy') },
             ];
 
       return {
-        badge: '07 • HẬU KIỂM & LỊCH SỬ THỬ ACTION (24H)',
+        badge: t('pipeline.inspector.verifyBadge'),
         accent: hasUnrecoveredStep ? '#DC2626' : '#0284C7',
         bg: hasUnrecoveredStep ? '#FEF2F2' : '#F0F9FF',
-        title: `Hậu Kiểm 60s & Xác Minh — ${selectedService}`,
+        title: t('pipeline.inspector.verifyTitle', { service: selectedService }),
         statusText:
           recoveryStats.runningCount > 0 || recoveryStats.verifyingCount > 0
-            ? 'ĐANG HẬU KIỂM'
+            ? t('pipeline.inspector.verifyVerifying')
             : hasUnrecoveredStep && openServiceIncidentsCount > 0
-              ? 'CHƯA PHỤC HỒI'
+              ? t('pipeline.inspector.verifyUnrecovered')
               : (recoveryStats.totalActions || actionTimeline.length) > 0
-                ? `${recoveryStats.totalActions || actionTimeline.length} ĐÃ THỬ`
+                ? t('pipeline.inspector.verifyTriedCount', { count: recoveryStats.totalActions || actionTimeline.length })
                 : 'AUTO-RESOLVE',
         isAlert: Boolean(hasUnrecoveredStep && openServiceIncidentsCount > 0),
-        summary: `Đây là nơi kiểm tra kết quả sau mỗi Action (như Hành động #1: Khởi động lại Pod). Sau khi Cột 06 thực thi lệnh trên "${selectedService}", hệ thống chờ lô 12 bước mới (60 giây): nếu Đã phục hồi → tự đóng sự cố (RESOLVED); nếu Chưa phục hồi → quay vòng hồi tiếp để RCA leo thang sang Action #2 hoặc ngắt mạch Circuit Breaker.`,
+        summary: t('pipeline.inspector.verifySummary', { service: selectedService }),
         rows: [
           ...(podCount === 0
             ? [
                 {
-                  label: 'Trạng thái Pod hiện tại',
-                  value: '0 Pod (Dịch vụ chưa chạy/đã dừng)',
+                  label: t('pipeline.inspector.verifyPodStatusRow'),
+                  value: t('pipeline.inspector.verifyPodZero'),
                   highlight: false,
                 },
               ]
@@ -1746,19 +1794,28 @@ export const AIPipelineFlowCanvas = ({
           {
             label:
               (recoveryStats.totalActions || 0) > actionTimeline.length
-                ? `Tổng ${recoveryStats.totalActions} đã thử trong 24h (${actionTimeline.length} gần nhất: ${recoveryStats.succeededCount} phục hồi • ${recoveryStats.failedCount} chưa):`
-                : `Tổng ${actionTimeline.length} đã thử trong 24h: ${recoveryStats.succeededCount} phục hồi • ${recoveryStats.failedCount} chưa phục hồi trên dịch vụ:`,
+                ? t('pipeline.inspector.verifyTotalSubset', {
+                    total: recoveryStats.totalActions,
+                    recent: actionTimeline.length,
+                    succeeded: recoveryStats.succeededCount,
+                    failed: recoveryStats.failedCount,
+                  })
+                : t('pipeline.inspector.verifyTotalAll', {
+                    total: actionTimeline.length,
+                    succeeded: recoveryStats.succeededCount,
+                    failed: recoveryStats.failedCount,
+                  }),
             value: '',
             isFullWidth: true,
           },
           ...timelineRows,
         ],
         nextStep: podCount === 0
-          ? 'Dịch vụ hiện chưa có Pod nào trên cụm. Khi bạn triển khai/khởi động lại Pod, hệ thống sẽ tiếp tục tự động thu thập viễn trắc và giám sát ở Cột 01.'
+          ? t('pipeline.inspector.verifyNextZeroPods')
           : hasUnrecoveredStep && openServiceIncidentsCount > 0
-            ? 'Action trước chưa phục hồi triệt để → Dữ liệu quay vòng hồi tiếp về Cột 01 & Multi-Agent RCA để nâng cấp hành động tiếp theo (hoặc kích hoạt Circuit Breaker NO_ACTION).'
-            : 'Khép kín vòng lặp: dữ liệu mới tiếp tục chảy về Cột 01 để giám sát liên tục 24/7.',
-        actionLabel: 'Mở Lịch sử Phục hồi →',
+            ? t('pipeline.inspector.verifyNextUnrecovered')
+            : t('pipeline.inspector.verifyNextLoop'),
+        actionLabel: t('pipeline.inspector.openHistoryBtn'),
         actionPath: '/dashboard/self-healing/history',
       };
     }
@@ -1767,58 +1824,58 @@ export const AIPipelineFlowCanvas = ({
     if (id === 'closedloop:overview') {
       const activeCooldownSec = pipelineContext?.policyMeta?.cooldownSec || 60;
       return {
-        title: 'Tổng Quan Sơ Đồ Vòng Lặp Tự Trị Khép Kín (MAPE-K)',
-        badge: 'KIẾN TRÚC TỰ TRỊ CAPSTONE',
+        title: t('pipeline.inspector.closedLoop.overviewTitle'),
+        badge: t('pipeline.inspector.closedLoop.overviewBadge'),
         accent: '#0369A1',
         bg: '#F8FAFC',
-        summary: `Chu trình vòng lặp khép kín (Closed-Loop Autonomous Architecture) được thiết kế theo chuẩn MAPE-K (Monitor - Analyze - Plan - Execute - Knowledge) của IBM dành riêng cho hệ thống phân tán Kubernetes. Hệ thống tự động thu thập viễn trắc 60s, chẩn đoán nguyên nhân gốc bằng Multi-Agent, đối soát an toàn qua Policy Engine, thực thi can thiệp và hậu kiểm 60s để tự động đóng sự cố hoặc hồi tiếp leo thang hành động.`,
+        summary: t('pipeline.inspector.closedLoop.overviewSummary'),
         rows: [
-          { label: 'Mô hình kiến trúc', value: 'MAPE-K Autonomous Loop + Feedback Control' },
-          { label: 'Chu kỳ lấy mẫu viễn trắc', value: '5 giây/bước (Sliding Window 12 bước = 60s)' },
-          { label: 'Thời gian phản hồi AI', value: '< 3 giây (GRU + Multi-Agent RCA)' },
-          { label: 'Thời gian hậu kiểm SLA', value: '60 giây (12 bước dữ liệu thực tế sau can thiệp)' },
-          { label: 'Rào chắn an toàn', value: `Policy Engine, Cooldown ${activeCooldownSec}s, HITL Gate, Circuit Breaker` },
+          { label: t('pipeline.inspector.closedLoop.overviewRowArchLabel'), value: t('pipeline.inspector.closedLoop.overviewRowArchVal') },
+          { label: t('pipeline.inspector.closedLoop.overviewRowSampleLabel'), value: t('pipeline.inspector.closedLoop.overviewRowSampleVal') },
+          { label: t('pipeline.inspector.closedLoop.overviewRowAiTimeLabel'), value: t('pipeline.inspector.closedLoop.overviewRowAiTimeVal') },
+          { label: t('pipeline.inspector.closedLoop.overviewRowSlaLabel'), value: t('pipeline.inspector.closedLoop.overviewRowSlaVal') },
+          { label: t('pipeline.inspector.closedLoop.overviewRowGuardLabel'), value: t('pipeline.inspector.closedLoop.overviewRowGuardVal', { cooldown: activeCooldownSec }) },
         ],
-        nextStep: 'Click vào từng khối (Pha 01 đến 04) trong sơ đồ vòng lặp bên dưới để xem chi tiết từng công đoạn vận hành.',
-        actionLabel: 'Mở Quản lý Sự cố →',
+        nextStep: t('pipeline.inspector.closedLoop.overviewNext'),
+        actionLabel: t('pipeline.inspector.closedLoop.overviewBtn'),
         actionPath: '/dashboard/incidents',
       };
     }
 
     if (id === 'closedloop:monitor') {
       return {
-        title: 'Pha 1: Giám Sát Viễn Trắc (Monitor)',
-        badge: 'MAPE-K • PHA 1 (CỘT 01 & 02)',
+        title: t('pipeline.inspector.closedLoop.monitorTitle'),
+        badge: t('pipeline.inspector.closedLoop.monitorBadge'),
         accent: '#059669',
         bg: '#F0FDF4',
-        summary: `Đóng vai trò là "giác quan" của hệ thống tự trị. Thu thập liên tục 8 chỉ số viễn trắc chuẩn (CPU, RAM, Disk, Độ trễ, Tần suất request, Lỗi 5xx, Restarts, Replicas) từ Prometheus và cAdvisor trên từng Pod/Service theo chu kỳ 5 giây, gom thành Sliding Window 12 bước (60 giây). Ma trận [12×8] được chuẩn hóa và đẩy đồng thời vào AI Hub và Rule Engine.`,
+        summary: t('pipeline.inspector.closedLoop.monitorSummary'),
         rows: [
-          { label: 'Dịch vụ đang chọn', value: selectedService },
-          { label: 'Số chiều dữ liệu', value: '8 chỉ số (CPU, RAM, Disk, Latency, Req/s, 5xx, Restarts, Replicas)' },
-          { label: 'Cửa sổ thời gian', value: '12 bước x 5s = 60 giây (Sliding Window)' },
-          { label: 'Tình trạng kết nối viễn trắc', value: isAgentConnected ? 'Trực tuyến (Live Telemetry)' : 'Mất kết nối', highlight: !isAgentConnected },
+          { label: t('pipeline.inspector.closedLoop.monitorRowServiceLabel'), value: selectedService },
+          { label: t('pipeline.inspector.closedLoop.monitorRowDimsLabel'), value: t('pipeline.inspector.closedLoop.monitorRowDimsVal') },
+          { label: t('pipeline.inspector.closedLoop.monitorRowWindowLabel'), value: t('pipeline.inspector.closedLoop.monitorRowWindowVal') },
+          { label: t('pipeline.inspector.closedLoop.monitorRowConnLabel'), value: isAgentConnected ? t('pipeline.inspector.closedLoop.monitorConnLive') : t('pipeline.inspector.closedLoop.monitorConnLost'), highlight: !isAgentConnected },
         ],
-        nextStep: 'Ma trận viễn trắc 12x8 được đẩy sang Pha 2 để mô hình GRU dự báo xu hướng và Multi-Agent chẩn đoán nguyên nhân gốc.',
-        actionLabel: 'Xem Chi tiết Viễn trắc →',
+        nextStep: t('pipeline.inspector.closedLoop.monitorNext'),
+        actionLabel: t('pipeline.inspector.closedLoop.monitorBtn'),
         actionPath: '/dashboard/telemetry',
       };
     }
 
     if (id === 'closedloop:analyze') {
       return {
-        title: 'Pha 2: Phân Tích & Suy Luận AI (Analyze)',
-        badge: 'MAPE-K • PHA 2 (CỘT 03 & 04)',
+        title: t('pipeline.inspector.closedLoop.analyzeTitle'),
+        badge: t('pipeline.inspector.closedLoop.analyzeBadge'),
         accent: '#6366F1',
         bg: '#EEF2FF',
-        summary: `Đóng vai trò là "bộ não" suy luận thông minh. Kết hợp 2 cơ chế: (1) Mô hình học sâu GRU dự báo trước nguy cơ suy thoái trong 60 giây tiếp theo (Proactive); (2) 4 Tác tử Multi-Agent (Metrics Agent, Log Agent, K8s Event Agent, History Agent) cùng Rule Engine R1→R6 hội chẩn đa chiều để chẩn đoán chính xác Pod dính lỗi, nguyên nhân gốc (Root Cause) và độ tin cậy AI (55% - 95%).`,
+        summary: t('pipeline.inspector.closedLoop.analyzeSummary'),
         rows: [
-          { label: 'Mô hình dự báo chuỗi thời gian', value: 'GRU Model (12 bước quá khứ → 12 bước tương lai)' },
-          { label: 'Hội chẩn đa tác tử', value: '4 Tác tử: Metrics, Logs, K8s Events, Lịch sử' },
-          { label: 'Nguyên nhân gốc chẩn đoán', value: latestIncCauseText || 'Dịch vụ ổn định, không có lỗi' },
-          { label: 'Độ tin cậy AI', value: pipelineContext?.rcaAgentsSummary?.rcaConfidencePct ? `${pipelineContext.rcaAgentsSummary.rcaConfidencePct}%` : '85%' },
+          { label: t('pipeline.inspector.closedLoop.analyzeRowModelLabel'), value: t('pipeline.inspector.closedLoop.analyzeRowModelVal') },
+          { label: t('pipeline.inspector.closedLoop.analyzeRowAgentsLabel'), value: t('pipeline.inspector.closedLoop.analyzeRowAgentsVal') },
+          { label: t('pipeline.inspector.closedLoop.analyzeRowCauseLabel'), value: latestIncCauseText || t('pipeline.inspector.closedLoop.analyzeCauseStable') },
+          { label: t('pipeline.inspector.closedLoop.analyzeRowConfLabel'), value: pipelineContext?.rcaAgentsSummary?.rcaConfidencePct ? `${pipelineContext.rcaAgentsSummary.rcaConfidencePct}%` : '85%' },
         ],
-        nextStep: 'Sau khi chẩn đoán xong nguyên nhân gốc, đề xuất hành động khắc phục được chuyển giao cho Pha 3 (Policy Engine & K8s Action).',
-        actionLabel: 'Xem Báo cáo RCA →',
+        nextStep: t('pipeline.inspector.closedLoop.analyzeNext'),
+        actionLabel: t('pipeline.inspector.closedLoop.analyzeBtn'),
         actionPath: '/dashboard/rca',
       };
     }
@@ -1826,38 +1883,38 @@ export const AIPipelineFlowCanvas = ({
     if (id === 'closedloop:plan_execute') {
       const activeCooldownSec = pipelineContext?.policyMeta?.cooldownSec || 60;
       return {
-        title: 'Pha 3: Quyết Định & Thực Thi (Plan & Execute)',
-        badge: 'MAPE-K • PHA 3 (CỘT 05 & 06)',
+        title: t('pipeline.inspector.closedLoop.planTitle'),
+        badge: t('pipeline.inspector.closedLoop.planBadge'),
         accent: '#D97706',
         bg: '#FFFBEB',
-        summary: `Đóng vai trò là "người ra quyết định và cánh tay hành động". Policy Engine đối soát an toàn (thời gian giãn cách Cooldown ${activeCooldownSec}s, hạn mức thử lại của Circuit Breaker, kiểm tra loại tài nguyên). Sau đó điều phối vào 3 nhánh: Tự trị AUTO (cho tác vụ rủi ro thấp với độ tin cậy AI cao), Cổng duyệt HITL (bảo vệ tác vụ rủi ro cao như DaemonSet hay xóa dữ liệu), hoặc Ngắt mạch Circuit Breaker nếu thử lặp quá nhiều lần.`,
+        summary: t('pipeline.inspector.closedLoop.planSummary', { cooldown: activeCooldownSec }),
         rows: [
-          { label: 'Cơ chế bảo vệ', value: `Policy Engine + Cooldown ${activeCooldownSec}s + Circuit Breaker` },
-          { label: 'Điều phối 3 nhánh', value: 'AUTO (Tự trị) | HITL (Phê duyệt) | Ngắt mạch' },
-          { label: 'Các hành động K8s', value: 'Restart Pod, Thay thế Pod, Điều chỉnh bản sao, Rollback' },
-          { label: 'Cơ chế chặn DaemonSet', value: 'Tự động CANCEL / REJECT nếu giảm bản sao DaemonSet (như kube-proxy)' },
+          { label: t('pipeline.inspector.closedLoop.planRowGuardLabel'), value: t('pipeline.inspector.closedLoop.planRowGuardVal', { cooldown: activeCooldownSec }) },
+          { label: t('pipeline.inspector.closedLoop.planRowDispatchLabel'), value: t('pipeline.inspector.closedLoop.planRowDispatchVal') },
+          { label: t('pipeline.inspector.closedLoop.planRowActionsLabel'), value: t('pipeline.inspector.closedLoop.planRowActionsVal') },
+          { label: t('pipeline.inspector.closedLoop.planRowDaemonLabel'), value: t('pipeline.inspector.closedLoop.planRowDaemonVal') },
         ],
-        nextStep: 'Lệnh can thiệp gửi tới K8s API Server. Ngay khi lệnh hoàn tất, hệ thống kích hoạt Pha 4 (Hậu kiểm 60s).',
-        actionLabel: 'Mở Cổng Phê Duyệt HITL →',
+        nextStep: t('pipeline.inspector.closedLoop.planNext'),
+        actionLabel: t('pipeline.inspector.closedLoop.planBtn'),
         actionPath: '/dashboard/self-healing/approvals',
       };
     }
 
     if (id === 'closedloop:verify_feedback') {
       return {
-        title: 'Pha 4: Hậu Kiểm 60s & Khép Vòng Hồi Tiếp (Verify & Feedback)',
-        badge: 'MAPE-K • PHA 4 (CỘT 07)',
+        title: t('pipeline.inspector.closedLoop.verifyTitle'),
+        badge: t('pipeline.inspector.closedLoop.verifyBadge'),
         accent: '#0284C7',
         bg: '#F0F9FF',
-        summary: `Đóng vai trò "xác minh và khép kín vòng lặp tự phục hồi". Sau khi thực thi lệnh trên K8s, hệ thống chờ đúng 60 giây (1 lô 12 bước viễn trắc mới) để đo lường lại SLA thực tế. Nếu các chỉ số đã về ngưỡng an toàn → Tự động đóng sự cố (Auto-Resolve) và hồi tiếp về Pha 01 để tiếp tục giám sát. Nếu sau 60s lỗi vẫn còn → Hồi tiếp dữ liệu ngược về Pha 02 (Multi-Agent RCA) để nâng cấp hành động (hoặc kích hoạt Circuit Breaker nếu quá số lần thử).`,
+        summary: t('pipeline.inspector.closedLoop.verifySummary'),
         rows: [
-          { label: 'Thời gian chờ hậu kiểm', value: '60 giây (12 bước viễn trắc mới từ Kubernetes)' },
-          { label: 'Đánh giá chỉ số SLA', value: 'So sánh CPU, RAM, Latency, 5xx với ngưỡng an toàn' },
-          { label: 'Nhánh Thành công', value: 'Auto-Resolved sự cố ➔ Quay về Pha 01 tiếp tục giám sát 24/7' },
-          { label: 'Nhánh Chưa phục hồi', value: 'Hồi tiếp về Pha 02 ➔ Multi-Agent RCA nâng cấp Action tiếp theo' },
+          { label: t('pipeline.inspector.closedLoop.verifyRowWaitLabel'), value: t('pipeline.inspector.closedLoop.verifyRowWaitVal') },
+          { label: t('pipeline.inspector.closedLoop.verifyRowSlaLabel'), value: t('pipeline.inspector.closedLoop.verifyRowSlaVal') },
+          { label: t('pipeline.inspector.closedLoop.verifyRowSuccessLabel'), value: t('pipeline.inspector.closedLoop.verifyRowSuccessVal') },
+          { label: t('pipeline.inspector.closedLoop.verifyRowFailLabel'), value: t('pipeline.inspector.closedLoop.verifyRowFailVal') },
         ],
-        nextStep: 'Vòng lặp khép kín 100% tự trị, đảm bảo hệ thống tự chữa lành bền vững mà không cần can thiệp thủ công.',
-        actionLabel: 'Xem Lịch Sử Phục Hồi →',
+        nextStep: t('pipeline.inspector.closedLoop.verifyNext'),
+        actionLabel: t('pipeline.inspector.closedLoop.verifyBtn'),
         actionPath: '/dashboard/self-healing/history',
       };
     }
@@ -1921,7 +1978,7 @@ export const AIPipelineFlowCanvas = ({
       }
     }
     return Math.ceil(maxFound * 1.08);
-  }, [scaleMode, effectiveTimesteps]);
+  }, [scaleMode, effectiveTimesteps, METRIC_CONFIGS]);
 
   const yTicks = [0, 25, 50, 75, 100];
 
@@ -1976,15 +2033,92 @@ export const AIPipelineFlowCanvas = ({
     };
   }, [isFullScreen]);
 
+  const isMobileViewport = containerWidth <= 860;
+  const isMobileVerticalMode = isMobileViewport && !preferHorizontalOnMobile;
+
+  if (isMobileVerticalMode) {
+    return (
+      <div
+        ref={containerRef}
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: 'auto',
+          backgroundColor: isFullScreen ? 'transparent' : '#F8FAFC',
+          borderRadius: isFullScreen ? 0 : '12px',
+          border: isFullScreen ? 'none' : '1px solid #E2E8F0',
+        }}
+      >
+        <AIPipelineMobileVerticalFlow
+          showExtendedPipeline={showExtendedPipeline}
+          activeDiagram={activeDiagram}
+          onSwitchDiagram={handleSwitchDiagram}
+          onSwitchToHorizontal={() => setPreferHorizontalOnMobile(true)}
+          selectedService={selectedService}
+          podCount={podCount}
+          isAgentConnected={isAgentConnected}
+          metricConfigs={METRIC_CONFIGS}
+          liveMetrics={liveMetrics}
+          effectiveTimesteps={effectiveTimesteps}
+          chartMaxY={chartMaxY}
+          activeSweepIdx={activeSweepIdx}
+          currentStepLabel={currentStepLabel}
+          prediction={prediction}
+          rawRiskScore={rawRiskScore}
+          isPredictionHealthy={isPredictionHealthy}
+          isRiskDetected={isRiskDetected}
+          isBenignDbCacheState={isBenignDbCacheState}
+          isScaleDownOptimization={isScaleDownOptimization}
+          allRiskEvaluations={allRiskEvaluations}
+          triggeredRisksList={triggeredRisksList}
+          topRiskEval={topRiskEval}
+          ruleEngineChecks={ruleEngineChecks}
+          triggeredRuleCount={triggeredRuleCount}
+          isRuleEngineTriggered={isRuleEngineTriggered}
+          latestIncident={latestIncident}
+          lastResolvedIncident={lastResolvedIncident}
+          openServiceIncidentsCount={openServiceIncidentsCount}
+          latestRecommendation={latestRecommendation}
+          latestAutoAction={latestAutoAction}
+          latestHitlApproval={latestHitlApproval}
+          pendingApprovalsCount={pendingApprovalsCount}
+          isCircuitBreakerTripped={isCircuitBreakerTripped}
+          actionTimeline={actionTimeline}
+          recoveryStats={recoveryStats}
+          pipelineContext={pipelineContext}
+          isRcaActive={isRcaActive}
+          isAutoActionActive={isAutoActionActive}
+          isAutoActionInProgress={isAutoActionInProgress}
+          isHitlActive={isHitlActive}
+          isAuditActive={isAuditActive}
+          isVerifyingInProgress={isVerifyingInProgress}
+          hasUnrecoveredStep={hasUnrecoveredStep}
+          simulatedCauseCode={d2SimulatedCause}
+          onSelectSimulatedCause={(code) => {
+            setD2VerifyOutcome('auto');
+            setD2SimulatedCause((prev) => (prev === code ? null : code));
+          }}
+          onClearSimulation={() => {
+            setD2VerifyOutcome('auto');
+            setD2SimulatedCause(null);
+          }}
+          verifyOutcomeMode={d2VerifyOutcome}
+          onChangeVerifyOutcome={(mode) => setD2VerifyOutcome((prev) => (prev === mode ? 'auto' : mode))}
+          onNavigate={onNavigate}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
       style={{
         position: 'relative',
         width: '100%',
-        height: isFullScreen ? '100%' : `${canvasHeight}px`,
+        height: isMobileViewport && preferHorizontalOnMobile ? '72vh' : isFullScreen ? '100%' : `${canvasHeight}px`,
+        minHeight: isMobileViewport && preferHorizontalOnMobile ? '460px' : 0,
         flex: isFullScreen ? 1 : 'none',
-        minHeight: 0,
         backgroundColor: isFullScreen ? 'transparent' : '#F8FAFC',
         backgroundImage: isFullScreen
           ? 'none'
@@ -2021,6 +2155,29 @@ export const AIPipelineFlowCanvas = ({
           boxShadow: '0 4px 16px rgba(15, 23, 42, 0.08)',
         }}
       >
+        {isMobileViewport && preferHorizontalOnMobile && (
+          <>
+            <button
+              type="button"
+              data-testid="toggle-mobile-layout-mode"
+              onClick={() => setPreferHorizontalOnMobile(false)}
+              style={{
+                padding: '4px 9px',
+                borderRadius: '7px',
+                border: '1px solid #059669',
+                backgroundColor: '#ECFDF5',
+                color: '#047857',
+                fontSize: '0.6875rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {t('pipeline.canvas.verticalModeBtn')}
+            </button>
+            <div style={{ width: '1px', height: '16px', backgroundColor: '#E2E8F0', margin: '0 2px' }} />
+          </>
+        )}
         {showExtendedPipeline && (
           <>
             {/* Bộ chuyển nhanh giữa Sơ đồ 1 (Tổng quan) và Sơ đồ 2 (Rẽ nhánh 01→07) */}
@@ -2036,8 +2193,8 @@ export const AIPipelineFlowCanvas = ({
               }}
             >
               {[
-                { id: 'diagram1', label: 'Sơ đồ 1', testId: 'switch-diagram-1' },
-                { id: 'diagram2', label: 'Sơ đồ 2 (Rẽ nhánh)', testId: 'switch-diagram-2' },
+                { id: 'diagram1', label: t('pipeline.canvas.diagram1'), testId: 'switch-diagram-1' },
+                { id: 'diagram2', label: t('pipeline.canvas.diagram2'), testId: 'switch-diagram-2' },
               ].map((dTab) => {
                 const isDiagSelected = activeDiagram === dTab.id;
                 return (
@@ -2068,14 +2225,14 @@ export const AIPipelineFlowCanvas = ({
             <div style={{ width: '1px', height: '16px', backgroundColor: '#E2E8F0', margin: '0 2px' }} />
             {(activeDiagram === 'diagram2'
               ? [
-                  { id: 'd2_front', label: '00 → 03 & Rule' },
-                  { id: 'd2_branched', label: '4 Agent → 16 RCA → 10 Action' },
-                  { id: 'all', label: 'Toàn Sơ đồ 2' },
+                  { id: 'd2_front', label: t('pipeline.canvas.d2Front') },
+                  { id: 'd2_branched', label: t('pipeline.canvas.d2Branched') },
+                  { id: 'all', label: t('pipeline.canvas.d2All') },
                 ]
               : [
-                  { id: 'gru', label: '1. AI & Rule Engine' },
-                  { id: 'healing', label: '2. RCA & Tự phục hồi' },
-                  { id: 'all', label: 'Toàn luồng' },
+                  { id: 'gru', label: t('pipeline.canvas.d1Gru') },
+                  { id: 'healing', label: t('pipeline.canvas.d1Healing') },
+                  { id: 'all', label: t('pipeline.canvas.d1All') },
                 ]
             ).map((tab) => {
               const isSelected = activeViewMode === tab.id;
@@ -2117,7 +2274,7 @@ export const AIPipelineFlowCanvas = ({
         </span>
         <button
           onClick={handleZoomIn}
-          title="Phóng to (+)"
+          title={t('pipeline.canvas.zoomInTitle')}
           style={{
             background: 'none',
             border: 'none',
@@ -2133,7 +2290,7 @@ export const AIPipelineFlowCanvas = ({
         </button>
         <button
           onClick={handleZoomOut}
-          title="Thu nhỏ (-)"
+          title={t('pipeline.canvas.zoomOutTitle')}
           style={{
             background: 'none',
             border: 'none',
@@ -2149,7 +2306,7 @@ export const AIPipelineFlowCanvas = ({
         </button>
         <button
           onClick={handleReset}
-          title="Đặt lại góc nhìn vừa khung (Reset)"
+          title={t('pipeline.canvas.resetViewTitle')}
           style={{
             background: 'none',
             border: 'none',
@@ -2194,7 +2351,7 @@ export const AIPipelineFlowCanvas = ({
             }}
           />
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1E293B' }}>
-            Luồng Viễn Trắc & Ra Quyết Định AI
+            {t('pipeline.canvas.workflowTitle')}
           </span>
           <span
             style={{
@@ -2234,13 +2391,13 @@ export const AIPipelineFlowCanvas = ({
         {/* Stage Header Pills phía trên các giai đoạn (nhấn vào pill đang mở để thu gọn nhanh) */}
         {showExtendedPipeline &&
           [
-            { x: LEFT_X, w: LEFT_W, top: isTelemetryExpanded ? LEFT_Y_START - 32 : LEFT_COMPACT_Y - 32, step: '01', label: 'VIỄN TRẮC', color: '#059669', bg: '#ECFDF5', border: '#A7F3D0', groupId: 'telemetry', isOpen: isTelemetryExpanded },
-            { x: CENTER_X, w: CENTER_W, top: CENTER_Y - 36, step: '02', label: 'DỰ BÁO CHUỖI THỜI GIAN (AI)', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
-            { x: RIGHT_X, w: RIGHT_W, top: isRisksExpanded ? RIGHT_Y_START - 36 : RIGHT_COMPACT_Y - 32, step: '03', label: '7 ĐẦU RỦI RO AI', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA', groupId: 'risks', isOpen: isRisksExpanded },
-            { x: RCA_X, w: RCA_W, top: Math.max(12, RCA_Y - 36), step: '04', label: 'ĐA TÁC TỬ RCA & SỰ CỐ', color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
-            { x: POLICY_X, w: POLICY_W, top: POLICY_Y - 36, step: '05', label: 'POLICY ENGINE', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
-            { x: BRANCH_X, w: BRANCH_W, top: isBranchesExpanded ? AUTO_Y - 36 : BRANCH_COMPACT_Y - 32, step: '06', label: 'ĐIỀU PHỐI 3 NHÁNH', color: '#0F766E', bg: '#F0FDFA', border: '#99F6E4', groupId: 'branches', isOpen: isBranchesExpanded },
-            { x: VERIFY_X, w: VERIFY_W, top: VERIFY_Y - 36, step: '07', label: 'HẬU KIỂM & TỰ ĐÓNG', color: '#0284C7', bg: '#F0F9FF', border: '#BAE6FD' },
+            { x: LEFT_X, w: LEFT_W, top: isTelemetryExpanded ? LEFT_Y_START - 32 : LEFT_COMPACT_Y - 32, step: '01', label: t('pipeline.canvas.pills.telemetry'), color: '#059669', bg: '#ECFDF5', border: '#A7F3D0', groupId: 'telemetry', isOpen: isTelemetryExpanded },
+            { x: CENTER_X, w: CENTER_W, top: CENTER_Y - 36, step: '02', label: t('pipeline.canvas.pills.aiHub'), color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
+            { x: RIGHT_X, w: RIGHT_W, top: isRisksExpanded ? RIGHT_Y_START - 36 : RIGHT_COMPACT_Y - 32, step: '03', label: t('pipeline.canvas.pills.risks'), color: '#DC2626', bg: '#FEF2F2', border: '#FECACA', groupId: 'risks', isOpen: isRisksExpanded },
+            { x: RCA_X, w: RCA_W, top: Math.max(12, RCA_Y - 36), step: '04', label: t('pipeline.canvas.pills.rca'), color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
+            { x: POLICY_X, w: POLICY_W, top: POLICY_Y - 36, step: '05', label: t('pipeline.canvas.pills.policy'), color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
+            { x: BRANCH_X, w: BRANCH_W, top: isBranchesExpanded ? AUTO_Y - 36 : BRANCH_COMPACT_Y - 32, step: '06', label: t('pipeline.canvas.pills.branches'), color: '#0F766E', bg: '#F0FDFA', border: '#99F6E4', groupId: 'branches', isOpen: isBranchesExpanded },
+            { x: VERIFY_X, w: VERIFY_W, top: VERIFY_Y - 36, step: '07', label: t('pipeline.canvas.pills.verify'), color: '#0284C7', bg: '#F0F9FF', border: '#BAE6FD' },
           ].map((col) => (
             <div
               key={col.step}
@@ -2259,7 +2416,7 @@ export const AIPipelineFlowCanvas = ({
               <span
                 onMouseDown={col.groupId ? (e) => e.stopPropagation() : undefined}
                 onClick={col.groupId ? (e) => toggleExpandGroup(e, col.groupId) : undefined}
-                title={col.groupId ? (col.isOpen ? 'Nhấn để thu gọn nhánh' : 'Nhấn để mở rộng nhánh') : undefined}
+                title={col.groupId ? (col.isOpen ? t('pipeline.canvas.pills.collapseTooltip') : t('pipeline.canvas.pills.expandTooltip')) : undefined}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -2292,7 +2449,7 @@ export const AIPipelineFlowCanvas = ({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {col.isOpen ? '− Gọn' : '+ Mở'}
+                    {col.isOpen ? t('pipeline.canvas.pills.compactBtn') : t('pipeline.canvas.pills.expandBtn')}
                   </span>
                 )}
               </span>
@@ -2690,10 +2847,10 @@ export const AIPipelineFlowCanvas = ({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                 <span style={{ fontSize: '0.625rem', fontWeight: 800, color: '#059669' }}>METRIC INPUT</span>
                 <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '999px', backgroundColor: !isAgentConnected ? '#F1F5F9' : warningMetricsCount > 0 ? '#FEF3C7' : '#ECFDF5', color: !isAgentConnected ? '#64748B' : warningMetricsCount > 0 ? '#B45309' : '#059669' }}>
-                  {!isAgentConnected ? 'Offline' : warningMetricsCount > 0 ? `${warningMetricsCount} cảnh báo` : `${METRIC_CONFIGS.length}/${METRIC_CONFIGS.length} ổn định`}
+                  {!isAgentConnected ? 'Offline' : warningMetricsCount > 0 ? t('pipeline.canvas.compactMetrics.warningCount', { count: warningMetricsCount }) : t('pipeline.canvas.compactMetrics.stableCount', { count: METRIC_CONFIGS.length, total: METRIC_CONFIGS.length })}
                 </span>
               </div>
-              <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0F172A' }}>8 Chỉ số Viễn trắc</div>
+              <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0F172A' }}>{t('pipeline.canvas.compactMetrics.title')}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -2711,12 +2868,12 @@ export const AIPipelineFlowCanvas = ({
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748B' }}>Restarts • Pods</span>
                 <span style={{ fontWeight: 700, color: (parseFloat(liveMetrics.pod_restart_count?.latest) || 0) > 0 ? '#DC2626' : '#6366F1' }}>
-                  {liveMetrics.pod_restart_count?.latest ?? 0} lần • {liveMetrics.replica_count?.latest ?? podCount ?? 1} Pod
+                  {t('pipeline.canvas.compactMetrics.restartsVal', { restarts: liveMetrics.pod_restart_count?.latest ?? 0, pods: liveMetrics.replica_count?.latest ?? podCount ?? 1 })}
                 </span>
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '7px', borderTop: '1px solid #F1F5F9', fontSize: '0.68rem', fontWeight: 800, color: '#059669' }}>
-              <span>Nhấn mở 8 nhánh</span>
+              <span>{t('pipeline.canvas.compactMetrics.clickToExpand')}</span>
               <span style={{ padding: '1px 7px', borderRadius: '999px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0' }}>+8</span>
             </div>
           </div>
@@ -2789,7 +2946,7 @@ export const AIPipelineFlowCanvas = ({
                 fontWeight: 700,
               }}
             >
-              {isAgentConnected ? `${currentActiveStep}/${totalSteps} Bước` : `0/${totalSteps} Bước`}
+              {isAgentConnected ? t('pipeline.canvas.aiHub.stepsProgress', { step: currentActiveStep, total: totalSteps }) : t('pipeline.canvas.aiHub.stepsProgress', { step: 0, total: totalSteps })}
             </span>
           </div>
 
@@ -2948,7 +3105,7 @@ export const AIPipelineFlowCanvas = ({
                     fontFamily="var(--font-mono)"
                     textAnchor={activeSweepIdx >= 10 ? 'end' : activeSweepIdx <= 1 ? 'start' : 'middle'}
                   >
-                    {currentStepLabel} ({activeSweepIdx === 0 ? 'Đủ 12 bước -> AI' : 'Đầu gom mới'})
+                    {currentStepLabel} ({activeSweepIdx === 0 ? t('pipeline.canvas.aiHub.enough12') : t('pipeline.canvas.aiHub.newHead')})
                   </text>
                 </g>
               )}
@@ -2993,7 +3150,7 @@ export const AIPipelineFlowCanvas = ({
                 letterSpacing: '-0.01em',
               }}
             >
-              AI to Analyze {selectedService} & Assess Health
+              {t('pipeline.canvas.aiHub.analyzeFooter', { service: selectedService })}
             </div>
 
             <div
@@ -3011,7 +3168,7 @@ export const AIPipelineFlowCanvas = ({
                 marginTop: '6px',
               }}
             >
-              <span>{isScaleDownOptimization ? 'Chỉ số tối ưu:' : 'Điểm rủi ro tổng:'}</span>
+              <span>{isScaleDownOptimization ? t('pipeline.canvas.aiHub.optScore') : t('pipeline.canvas.aiHub.riskScore')}</span>
               <strong style={{ fontSize: '0.75rem' }}>
                 {rawRiskScore.toFixed(4)} ({isScaleDownOptimization ? 'SCALE_DOWN_OPT' : isPredictionHealthy ? 'HEALTHY' : (prediction?.status || (isAgentConnected ? 'HEALTHY' : 'DISCONNECTED'))})
               </strong>
@@ -3138,7 +3295,7 @@ export const AIPipelineFlowCanvas = ({
                   }}
                 >
                   <span style={{ color: riskInfo.isTriggered ? trigAccent : '#64748B' }}>
-                    Ngưỡng: {riskInfo.thresholdPercent}%
+                    {t('pipeline.canvas.risks.threshold', { pct: riskInfo.thresholdPercent })}
                   </span>
                   <strong
                     style={{
@@ -3202,17 +3359,17 @@ export const AIPipelineFlowCanvas = ({
             <div style={{ position: 'absolute', right: '-6px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: triggeredRisksList.length > 0 ? '#EF4444' : '#94A3B8', border: '2px solid #FFFFFF', zIndex: 15 }} />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '0.625rem', fontWeight: 800, color: triggeredRisksList.length > 0 ? '#DC2626' : '#059669' }}>HỒ SƠ RỦI RO</span>
+                <span style={{ fontSize: '0.625rem', fontWeight: 800, color: triggeredRisksList.length > 0 ? '#DC2626' : '#059669' }}>{t('pipeline.canvas.risks.profileHeader')}</span>
                 <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '999px', backgroundColor: !isAgentConnected ? '#F1F5F9' : triggeredRisksList.length > 0 ? '#FEE2E2' : '#ECFDF5', color: !isAgentConnected ? '#64748B' : triggeredRisksList.length > 0 ? '#DC2626' : '#059669' }}>
-                  {!isAgentConnected ? 'Offline' : triggeredRisksList.length > 0 ? `${triggeredRisksList.length}/7 cảnh báo` : 'An toàn'}
+                  {!isAgentConnected ? 'Offline' : triggeredRisksList.length > 0 ? t('pipeline.canvas.risks.warningCount', { count: triggeredRisksList.length }) : t('pipeline.canvas.risks.safe')}
                 </span>
               </div>
-              <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0F172A' }}>7 Đầu Rủi Ro AI</div>
+              <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0F172A' }}>{t('pipeline.canvas.risks.title')}</div>
             </div>
             <div style={{ padding: '8px 10px', borderRadius: '10px', backgroundColor: triggeredRisksList.length > 0 ? '#FEF2F2' : '#F8FAFC', border: triggeredRisksList.length > 0 ? '1px solid #FECACA' : '1px solid #E2E8F0' }}>
-              <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748B' }}>CAO NHẤT HIỆN TẠI</div>
+              <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748B' }}>{t('pipeline.canvas.risks.highestNow')}</div>
               <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0F172A', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {isAgentConnected ? topRiskEval?.title || 'Ổn định' : 'Chưa kết nối'}
+                {isAgentConnected ? topRiskEval?.title || t('pipeline.canvas.risks.stable') : t('pipeline.canvas.risks.disconnected')}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px' }}>
                 <div style={{ flex: 1, height: '5px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
@@ -3224,7 +3381,7 @@ export const AIPipelineFlowCanvas = ({
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '7px', borderTop: '1px solid #F1F5F9', fontSize: '0.68rem', fontWeight: 800, color: triggeredRisksList.length > 0 ? '#DC2626' : '#059669' }}>
-              <span>Nhấn mở 7 nhánh</span>
+              <span>{t('pipeline.canvas.risks.clickToExpand')}</span>
               <span style={{ padding: '1px 7px', borderRadius: '999px', backgroundColor: triggeredRisksList.length > 0 ? '#FEF2F2' : '#ECFDF5', border: triggeredRisksList.length > 0 ? '1px solid #FECACA' : '1px solid #A7F3D0' }}>+7</span>
             </div>
           </div>
@@ -3380,31 +3537,31 @@ export const AIPipelineFlowCanvas = ({
                   }}
                 >
                   {isScaleDownOptimization
-                    ? '♻️ Đang tối ưu Pod'
+                    ? t('pipeline.canvas.rcaCard.optimizingPods')
                     : openServiceIncidentsCount > 0
-                      ? `${openServiceIncidentsCount} Sự cố OPEN`
+                      ? t('pipeline.canvas.rcaCard.openCount', { count: openServiceIncidentsCount })
                       : isBenignDbCacheState
-                        ? '🟢 Bộ đệm an toàn'
+                        ? t('pipeline.canvas.rcaCard.dbCacheSafe')
                         : isRcaActive
-                          ? `Đang thu thập [${currentActiveStep || 12}/12]`
+                          ? t('pipeline.canvas.rcaCard.collectingBatch', { step: currentActiveStep || 12 })
                           : lastResolvedIncident
-                            ? '🟢 Đã ổn định'
-                            : '🟢 Hoạt động tối ưu'}
+                            ? t('pipeline.canvas.rcaCard.stabilized')
+                            : t('pipeline.canvas.rcaCard.optimal')}
                 </span>
               </div>
 
               {/* Body: 4 Tác tử Gom bằng chứng + Root Cause + Recommendation */}
               <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '9px', flex: 1 }}>
                 <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  4 Tác tử Gom Ngữ Cảnh
+                  {t('pipeline.canvas.rcaCard.fourAgents')}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                   {[
                     {
                       label: 'Metrics Agent',
                       sub: isAgentConnected
-                        ? pipelineContext?.rcaAgentsSummary?.metricsSub || `${timesteps.length || 0} bước thực`
-                        : 'Ngoại tuyến',
+                        ? pipelineContext?.rcaAgentsSummary?.metricsSub || t('pipeline.canvas.rcaCard.stepsActual', { count: timesteps.length || 0 })
+                        : t('pipeline.canvas.rcaCard.offline'),
                       icon: Activity,
                       color: '#2563EB',
                       bg: '#EFF6FF',
@@ -3412,8 +3569,8 @@ export const AIPipelineFlowCanvas = ({
                     {
                       label: 'Log Agent',
                       sub: isAgentConnected
-                        ? pipelineContext?.rcaAgentsSummary?.logSub || 'Đang giám sát'
-                        : 'Ngoại tuyến',
+                        ? pipelineContext?.rcaAgentsSummary?.logSub || t('pipeline.canvas.rcaCard.monitoring')
+                        : t('pipeline.canvas.rcaCard.offline'),
                       icon: FileText,
                       color: '#D97706',
                       bg: '#FFFBEB',
@@ -3421,8 +3578,8 @@ export const AIPipelineFlowCanvas = ({
                     {
                       label: 'K8s Event Agent',
                       sub: isAgentConnected
-                        ? pipelineContext?.rcaAgentsSummary?.k8sEventSub || 'Pod ổn định'
-                        : 'Ngoại tuyến',
+                        ? pipelineContext?.rcaAgentsSummary?.k8sEventSub || t('pipeline.canvas.rcaCard.podStable')
+                        : t('pipeline.canvas.rcaCard.offline'),
                       icon: Server,
                       color: '#059669',
                       bg: '#ECFDF5',
@@ -3430,8 +3587,8 @@ export const AIPipelineFlowCanvas = ({
                     {
                       label: 'History Agent',
                       sub: isAgentConnected
-                        ? pipelineContext?.rcaAgentsSummary?.historySub || `${pipelineContext?.totalServiceIncidentsCount ?? 0} lịch sử DV`
-                        : 'Ngoại tuyến',
+                        ? pipelineContext?.rcaAgentsSummary?.historySub || t('pipeline.canvas.rcaCard.serviceHist', { count: pipelineContext?.totalServiceIncidentsCount ?? 0 })
+                        : t('pipeline.canvas.rcaCard.offline'),
                       icon: History,
                       color: '#7C3AED',
                       bg: '#F5F3FF',
@@ -3492,7 +3649,7 @@ export const AIPipelineFlowCanvas = ({
                           color: '#0369A1',
                         }}
                       >
-                        TỐI ƯU HÓA
+                        {t('pipeline.canvas.rcaCard.optBadge')}
                       </span>
                     ) : latestIncident?.severity && openServiceIncidentsCount > 0 ? (
                       <span
@@ -3505,7 +3662,7 @@ export const AIPipelineFlowCanvas = ({
                           color: ['CRITICAL', 'HIGH'].includes(String(latestIncident.severity).toUpperCase()) ? '#DC2626' : '#0369A1',
                         }}
                       >
-                        {translateSeverity(latestIncident.severity)}
+                        {localizedSeverity(latestIncident.severity)}
                       </span>
                     ) : (
                       <span
@@ -3518,19 +3675,23 @@ export const AIPipelineFlowCanvas = ({
                           color: '#15803D',
                         }}
                       >
-                        {isBenignDbCacheState ? 'AN TOÀN' : lastResolvedIncident ? 'ĐÃ PHỤC HỒI' : 'BÌNH THƯỜNG'}
+                        {isBenignDbCacheState ? t('pipeline.canvas.rcaCard.safeBadge') : lastResolvedIncident ? t('pipeline.canvas.rcaCard.recoveredBadge') : t('pipeline.canvas.rcaCard.normalBadge')}
                       </span>
                     )}
                   </div>
                   <div
                     title={
                       latestIncident && openServiceIncidentsCount > 0
-                        ? translateIncidentTitle(
+                        ? localizedIncidentTitle(
                             latestIncident.cause || latestIncident.root_cause || latestIncident.title
                           )
                         : lastResolvedIncident
-                          ? `Gần nhất: ${translateIncidentTitle(lastResolvedIncident.cause || lastResolvedIncident.root_cause || lastResolvedIncident.title)}`
-                          : 'Dịch vụ vận hành tối ưu'
+                          ? t('pipeline.canvas.rcaCard.latestPrefix', {
+                              text: localizedIncidentTitle(
+                                lastResolvedIncident.cause || lastResolvedIncident.root_cause || lastResolvedIncident.title
+                              ),
+                            })
+                          : t('pipeline.canvas.rcaCard.optimalOp')
                     }
                     style={{
                       fontSize: '0.7rem',
@@ -3544,16 +3705,20 @@ export const AIPipelineFlowCanvas = ({
                     }}
                   >
                     {latestIncident && openServiceIncidentsCount > 0
-                      ? translateIncidentTitle(
+                      ? localizedIncidentTitle(
                           latestIncident.cause || latestIncident.root_cause || latestIncident.title
                         )
                       : isBenignDbCacheState
-                        ? `Bộ nhớ đệm WiredTiger an toàn (0% lỗi, kết nối thông suốt)`
+                        ? t('pipeline.canvas.rcaCard.dbCacheDesc')
                         : isRcaActive
-                          ? `Đang thu thập viễn trắc (${currentActiveStep || 12}/12 bước) để hội chẩn RCA`
+                          ? t('pipeline.canvas.rcaCard.collectingRca', { step: currentActiveStep || 12 })
                           : lastResolvedIncident
-                            ? `Gần nhất: ${translateIncidentTitle(lastResolvedIncident.cause || lastResolvedIncident.root_cause || lastResolvedIncident.title)} (Đã ổn định)`
-                            : `Dịch vụ hoạt động tối ưu — Toàn bộ 8 chỉ số đạt chuẩn SLA`}
+                            ? t('pipeline.canvas.rcaCard.latestStabilized', {
+                                text: localizedIncidentTitle(
+                                  lastResolvedIncident.cause || lastResolvedIncident.root_cause || lastResolvedIncident.title
+                                ),
+                              })
+                            : t('pipeline.canvas.rcaCard.optimalFull')}
                   </div>
                 </div>
 
@@ -3572,7 +3737,7 @@ export const AIPipelineFlowCanvas = ({
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: openServiceIncidentsCount > 0 ? '#6D28D9' : '#15803D', textTransform: 'uppercase' }}>
-                      Đề xuất khắc phục (AI)
+                      {t('pipeline.canvas.rcaCard.aiRecHeader')}
                     </div>
                     <div
                       title={
@@ -3585,10 +3750,10 @@ export const AIPipelineFlowCanvas = ({
                             )
                           : null) ||
                         (isBenignDbCacheState
-                          ? 'Duy trì hoạt động bình thường (Bộ đệm an toàn)'
+                          ? t('pipeline.canvas.rcaCard.normalDbCache')
                           : lastResolvedIncident
-                            ? 'Duy trì hoạt động bình thường (Đã phục hồi)'
-                            : 'Duy trì hoạt động bình thường (Không can thiệp)')
+                            ? t('pipeline.canvas.rcaCard.normalRecovered')
+                            : t('pipeline.canvas.rcaCard.normalNoAction'))
                       }
                       style={{
                         fontSize: '0.6875rem',
@@ -3608,10 +3773,10 @@ export const AIPipelineFlowCanvas = ({
                           )
                         : null) ||
                         (isBenignDbCacheState
-                          ? 'Duy trì hoạt động bình thường (Bộ đệm an toàn)'
+                          ? t('pipeline.canvas.rcaCard.normalDbCache')
                           : lastResolvedIncident
-                            ? 'Duy trì hoạt động bình thường (Đã phục hồi)'
-                            : 'Duy trì hoạt động bình thường (Không can thiệp)')}
+                            ? t('pipeline.canvas.rcaCard.normalRecovered')
+                            : t('pipeline.canvas.rcaCard.normalNoAction'))}
                     </div>
                   </div>
                   <ExternalLink size={12} color={openServiceIncidentsCount > 0 ? '#7C3AED' : '#16A34A'} style={{ flexShrink: 0 }} />
@@ -3630,8 +3795,8 @@ export const AIPipelineFlowCanvas = ({
                   color: '#64748B',
                 }}
               >
-                <span>Sự cố đang mở: <strong>{openServiceIncidentsCount}</strong></span>
-                <span style={{ color: '#7C3AED', fontWeight: 700 }}>Xem Sự cố & RCA →</span>
+                <span>{t('pipeline.canvas.rcaCard.openIncidentsLabel')} <strong>{openServiceIncidentsCount}</strong></span>
+                <span style={{ color: '#7C3AED', fontWeight: 700 }}>{t('pipeline.canvas.rcaCard.viewRcaLink')}</span>
               </div>
             </div>
 
@@ -3742,7 +3907,7 @@ export const AIPipelineFlowCanvas = ({
                     color: '#B45309',
                   }}
                 >
-                  {pipelineContext?.activePoliciesCount ?? 0} bật
+                  {t('pipeline.canvas.policyCard.activeCount', { count: pipelineContext?.activePoliciesCount ?? 0 })}
                 </span>
               </div>
 
@@ -3750,21 +3915,28 @@ export const AIPipelineFlowCanvas = ({
               <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '7px', flex: 1 }}>
                 {[
                   {
-                    title: '1. Khớp Policy & Cooldown',
+                    title: t('pipeline.canvas.policyCard.chk1Title'),
                     desc: `${pipelineContext?.autoPoliciesCount ?? 0} AUTO • ${pipelineContext?.hitlPoliciesCount ?? 0} HITL${pipelineContext?.policyMeta?.cooldownSec ? ` • ${pipelineContext.policyMeta.cooldownSec}s` : ''}`,
                     dot: '#10B981',
                   },
                   {
-                    title: '2. Ngưỡng Tin Cậy AI',
+                    title: t('pipeline.canvas.policyCard.chk2Title'),
                     desc:
                       pipelineContext?.policyMeta?.minConfidencePct && pipelineContext?.policyMeta?.maxConfidencePct
-                        ? `${pipelineContext?.rcaAgentsSummary?.rcaConfidencePct !== null && pipelineContext?.rcaAgentsSummary?.rcaConfidencePct !== undefined ? `RCA ${pipelineContext.rcaAgentsSummary.rcaConfidencePct}% • ` : ''}Ngưỡng ${pipelineContext.policyMeta.minConfidencePct}%–${pipelineContext.policyMeta.maxConfidencePct}%`
-                        : 'Chưa cấu hình ngưỡng',
+                        ? t('pipeline.canvas.policyCard.chk2Desc', {
+                            rcaPrefix: pipelineContext?.rcaAgentsSummary?.rcaConfidencePct !== null && pipelineContext?.rcaAgentsSummary?.rcaConfidencePct !== undefined ? `RCA ${pipelineContext.rcaAgentsSummary.rcaConfidencePct}% • ` : '',
+                            min: pipelineContext.policyMeta.minConfidencePct,
+                            max: pipelineContext.policyMeta.maxConfidencePct,
+                          })
+                        : t('pipeline.canvas.policyCard.chk2Unconfigured'),
                     dot: '#3B82F6',
                   },
                   {
-                    title: '3. Rào Chắn Bắt Buộc HITL',
-                    desc: `${pipelineContext?.hitlPoliciesCount ?? 0} luật duyệt tay • ${pendingApprovalsCount} chờ duyệt`,
+                    title: t('pipeline.canvas.policyCard.chk3Title'),
+                    desc: t('pipeline.canvas.policyCard.chk3Desc', {
+                      hitl: pipelineContext?.hitlPoliciesCount ?? 0,
+                      pending: pendingApprovalsCount,
+                    }),
                     dot: '#F59E0B',
                   },
                 ].map((chk) => (
@@ -3800,8 +3972,8 @@ export const AIPipelineFlowCanvas = ({
                   fontWeight: 700,
                 }}
               >
-                <span>Rẽ 3 nhánh thực thi</span>
-                <span>Chính sách →</span>
+                <span>{t('pipeline.canvas.policyCard.footerLeft')}</span>
+                <span>{t('pipeline.canvas.policyCard.footerRight')}</span>
               </div>
             </div>
 
@@ -3857,7 +4029,7 @@ export const AIPipelineFlowCanvas = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Zap size={14} color="#059669" />
-                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#065F46' }}>Nhánh AUTO • K8s Agent</span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#065F46' }}>{t('pipeline.canvas.branches.autoHeader')}</span>
                 </div>
                 <span
                   style={{
@@ -3872,8 +4044,8 @@ export const AIPipelineFlowCanvas = ({
                   {autoActionStatus
                     ? translateExecutionStatusVi(autoActionStatus)
                     : isAgentConnected
-                      ? 'Sẵn sàng'
-                      : 'Ngoại tuyến'}
+                      ? t('pipeline.canvas.branches.ready')
+                      : t('pipeline.canvas.branches.offline')}
                 </span>
               </div>
 
@@ -3888,18 +4060,18 @@ export const AIPipelineFlowCanvas = ({
                             latestAutoAction.action_name ||
                             latestAutoAction.action_code,
                           latestAutoAction
-                        ) || 'Hành động tự phục hồi'
-                      : 'Tự động Scale / Restart Pod'}
+                        ) || t('pipeline.actions.defaultHealing')
+                      : t('pipeline.canvas.branches.autoDefaultTitle')}
                   </div>
                   <div style={{ fontSize: '0.6rem', color: '#64748B', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {latestAutoAction
-                      ? `Mục tiêu: ${selectedService}`
-                      : `Chưa có lệnh AUTO trên ${selectedService}`}
+                      ? t('pipeline.canvas.branches.targetPrefix', { service: selectedService })
+                      : t('pipeline.canvas.branches.noAutoOnService', { service: selectedService })}
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.58rem', color: '#059669', fontWeight: 700 }}>
-                  <span>Thực thi tự trị (Autonomous)</span>
-                  <span>Hành động →</span>
+                  <span>{t('pipeline.canvas.branches.autoFooterLeft')}</span>
+                  <span>{t('pipeline.canvas.branches.autoFooterRight')}</span>
                 </div>
               </div>
             </div>
@@ -3952,7 +4124,7 @@ export const AIPipelineFlowCanvas = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <CheckCircle2 size={14} color="#D97706" />
-                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#92400E' }}>Cổng Phê Duyệt (HITL)</span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#92400E' }}>{t('pipeline.canvas.branches.hitlHeader')}</span>
                 </div>
                 <span
                   style={{
@@ -3964,7 +4136,7 @@ export const AIPipelineFlowCanvas = ({
                     color: isHitlActive ? '#B45309' : '#64748B',
                   }}
                 >
-                  {isHitlActive ? `${pendingApprovalsCount} chờ duyệt` : '0 chờ duyệt'}
+                  {t('pipeline.canvas.branches.pendingCount', { count: isHitlActive ? pendingApprovalsCount : 0 })}
                 </span>
               </div>
 
@@ -3972,18 +4144,25 @@ export const AIPipelineFlowCanvas = ({
                 <div>
                   <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {latestHitlApproval
-                      ? latestHitlApproval.display_action_name || latestHitlApproval.action_type_name || latestHitlApproval.action_type_code || latestHitlApproval.action_name || latestHitlApproval.action_code || 'Yêu cầu chờ phê duyệt'
-                      : 'Bảo vệ tác vụ rủi ro cao'}
+                      ? translateActionToVi(
+                          latestHitlApproval.display_action_name ||
+                            latestHitlApproval.action_type_name ||
+                            latestHitlApproval.action_type_code ||
+                            latestHitlApproval.action_name ||
+                            latestHitlApproval.action_code,
+                          latestHitlApproval
+                        ) || t('pipeline.canvas.branches.hitlPendingFallback')
+                      : t('pipeline.canvas.branches.hitlDefaultTitle')}
                   </div>
                   <div style={{ fontSize: '0.6rem', color: '#64748B', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {latestHitlApproval
-                      ? `Dịch vụ: ${selectedService} • Gửi Email kỹ sư`
-                      : `Không có yêu cầu chờ duyệt cho ${selectedService}`}
+                      ? t('pipeline.canvas.branches.hitlEmailSub', { service: selectedService })
+                      : t('pipeline.canvas.branches.hitlNoneSub', { service: selectedService })}
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.58rem', color: '#D97706', fontWeight: 700 }}>
-                  <span>Duyệt → Thực thi K8s</span>
-                  <span>Cổng HITL →</span>
+                  <span>{t('pipeline.canvas.branches.hitlFooterLeft')}</span>
+                  <span>{t('pipeline.canvas.branches.hitlFooterRight')}</span>
                 </div>
               </div>
             </div>
@@ -4035,7 +4214,7 @@ export const AIPipelineFlowCanvas = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <ScrollText size={14} color={isAuditActive ? '#DC2626' : '#475569'} />
-                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#1E293B' }}>Circuit Breaker & Audit</span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#1E293B' }}>{t('pipeline.canvas.branches.auditHeader')}</span>
                 </div>
                 <span
                   style={{
@@ -4047,22 +4226,22 @@ export const AIPipelineFlowCanvas = ({
                     color: isAuditActive ? '#DC2626' : '#64748B',
                   }}
                 >
-                  {isCircuitBreakerTripped ? 'NO_ACTION' : 'An toàn'}
+                  {isCircuitBreakerTripped ? 'NO_ACTION' : t('pipeline.canvas.branches.safe')}
                 </span>
               </div>
 
               <div style={{ padding: '8px 10px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ fontSize: '0.67rem', fontWeight: 700, color: '#334155' }}>
-                    Ngắt mạch chống lặp / Audit
+                    {t('pipeline.canvas.branches.auditTitle')}
                   </div>
                   <div style={{ fontSize: '0.6rem', color: '#64748B', marginTop: '2px' }}>
-                    Ghi Nhật ký kiểm toán & Cảnh báo khẩn
+                    {t('pipeline.canvas.branches.auditSub')}
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.58rem', color: '#475569', fontWeight: 700 }}>
-                  <span>Không can thiệp cụm K8s</span>
-                  <span>Audit Log →</span>
+                  <span>{t('pipeline.canvas.branches.auditFooterLeft')}</span>
+                  <span>{t('pipeline.canvas.branches.auditFooterRight')}</span>
                 </div>
               </div>
             </div>
@@ -4098,29 +4277,29 @@ export const AIPipelineFlowCanvas = ({
                 <div style={{ position: 'absolute', right: '-6px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#0891B2', border: '2px solid #FFFFFF', zIndex: 15 }} />
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '0.625rem', fontWeight: 800, color: '#0F766E' }}>ĐIỀU PHỐI THỰC THI</span>
+                    <span style={{ fontSize: '0.625rem', fontWeight: 800, color: '#0F766E' }}>{t('pipeline.canvas.branches.compactHeader')}</span>
                     <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '999px', backgroundColor: !isAgentConnected ? '#F1F5F9' : isHitlActive ? '#FEF3C7' : isAutoActive ? '#ECFDF5' : '#F0FDFA', color: !isAgentConnected ? '#64748B' : isHitlActive ? '#B45309' : isAutoActive ? '#059669' : '#0F766E' }}>
-                      {!isAgentConnected ? 'Offline' : isHitlActive ? `${pendingApprovalsCount} HITL` : isAutoActive ? 'AUTO' : '3 Nhánh'}
+                      {!isAgentConnected ? 'Offline' : isHitlActive ? `${pendingApprovalsCount} HITL` : isAutoActive ? 'AUTO' : t('pipeline.canvas.branches.compactBranchesCount')}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0F172A' }}>AUTO / HITL / Audit</div>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0F172A' }}>{t('pipeline.canvas.branches.compactTitle')}</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.7rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '7px', backgroundColor: isAutoActive ? '#ECFDF5' : '#F8FAFC', border: isAutoActive ? '1px solid #A7F3D0' : '1px solid #E2E8F0' }}>
-                    <span style={{ fontWeight: 700, color: '#065F46' }}>1. Tự trị AUTO</span>
-                    <span style={{ fontWeight: 700, color: isAutoActive ? '#059669' : '#64748B' }}>{isAutoActive ? 'Đang chạy' : 'Sẵn sàng'}</span>
+                    <span style={{ fontWeight: 700, color: '#065F46' }}>{t('pipeline.canvas.branches.compactItem1')}</span>
+                    <span style={{ fontWeight: 700, color: isAutoActive ? '#059669' : '#64748B' }}>{isAutoActive ? t('pipeline.canvas.branches.compactRunning') : t('pipeline.canvas.branches.compactReady')}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '7px', backgroundColor: isHitlActive ? '#FFFBEB' : '#F8FAFC', border: isHitlActive ? '1px solid #FDE68A' : '1px solid #E2E8F0' }}>
-                    <span style={{ fontWeight: 700, color: '#92400E' }}>2. Cổng duyệt HITL</span>
-                    <span style={{ fontWeight: 700, color: isHitlActive ? '#D97706' : '#64748B' }}>{pendingApprovalsCount > 0 ? `${pendingApprovalsCount} chờ` : '0 chờ'}</span>
+                    <span style={{ fontWeight: 700, color: '#92400E' }}>{t('pipeline.canvas.branches.compactItem2')}</span>
+                    <span style={{ fontWeight: 700, color: isHitlActive ? '#D97706' : '#64748B' }}>{t('pipeline.canvas.branches.compactWait', { count: pendingApprovalsCount > 0 ? pendingApprovalsCount : 0 })}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '7px', backgroundColor: isAuditActive ? '#FEF2F2' : '#F8FAFC', border: isAuditActive ? '1px solid #FECACA' : '1px solid #E2E8F0' }}>
-                    <span style={{ fontWeight: 700, color: '#991B1B' }}>3. Circuit Breaker</span>
-                    <span style={{ fontWeight: 700, color: isAuditActive ? '#DC2626' : '#64748B' }}>{isCircuitBreakerTripped ? 'Ngắt mạch' : 'Bình thường'}</span>
+                    <span style={{ fontWeight: 700, color: '#991B1B' }}>{t('pipeline.canvas.branches.compactItem3')}</span>
+                    <span style={{ fontWeight: 700, color: isAuditActive ? '#DC2626' : '#64748B' }}>{isCircuitBreakerTripped ? t('pipeline.canvas.branches.compactTripped') : t('pipeline.canvas.branches.compactNormal')}</span>
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '7px', borderTop: '1px solid #F1F5F9', fontSize: '0.68rem', fontWeight: 800, color: '#0F766E' }}>
-                  <span>Nhấn mở 3 nhánh</span>
+                  <span>{t('pipeline.canvas.branches.compactClickExpand')}</span>
                   <span style={{ padding: '1px 7px', borderRadius: '999px', backgroundColor: '#F0FDFA', border: '1px solid #99F6E4' }}>+3</span>
                 </div>
               </div>
@@ -4190,7 +4369,7 @@ export const AIPipelineFlowCanvas = ({
                   >
                     <ShieldCheck size={14} />
                   </div>
-                  <span style={{ fontSize: '0.71rem', fontWeight: 800, color: '#0C4A6E', whiteSpace: 'nowrap' }}>Hậu Kiểm 60s</span>
+                  <span style={{ fontSize: '0.71rem', fontWeight: 800, color: '#0C4A6E', whiteSpace: 'nowrap' }}>{t('pipeline.canvas.verifyCard.headerTitle')}</span>
                 </div>
                 <span
                   style={{
@@ -4206,9 +4385,9 @@ export const AIPipelineFlowCanvas = ({
                   }}
                 >
                   {(recoveryStats.totalActions || actionTimeline.length) > 0
-                    ? `${recoveryStats.totalActions || actionTimeline.length} đã thử (24h)`
+                    ? t('pipeline.canvas.verifyCard.tried24h', { count: recoveryStats.totalActions || actionTimeline.length })
                     : recoveryStats.runningCount > 0
-                      ? 'Đang kiểm'
+                      ? t('pipeline.canvas.verifyCard.checking')
                       : 'Auto-Resolve'}
                 </span>
               </div>
@@ -4229,10 +4408,10 @@ export const AIPipelineFlowCanvas = ({
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: '0.55rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      Phục hồi ({selectedService})
+                      {t('pipeline.canvas.verifyCard.recoverTitle', { service: selectedService })}
                     </div>
                     <div style={{ fontSize: '0.56rem', color: '#64748B', fontFamily: 'var(--font-mono)', marginTop: '1px' }}>
-                      {recoveryStats.succeededCount} phục hồi • {recoveryStats.failedCount} chưa
+                      {t('pipeline.canvas.verifyCard.recoverSummary', { succeeded: recoveryStats.succeededCount, failed: recoveryStats.failedCount })}
                     </div>
                   </div>
                   <div
@@ -4257,7 +4436,7 @@ export const AIPipelineFlowCanvas = ({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.58rem', fontWeight: 700, color: '#0F172A' }}>
                     <RefreshCw size={10} color="#0891B2" />
-                    <span>Lịch sử thực thi & hậu kiểm</span>
+                    <span>{t('pipeline.canvas.verifyCard.timelineTitle')}</span>
                   </div>
 
                   {actionTimeline.length > 0 ? (
@@ -4339,7 +4518,7 @@ export const AIPipelineFlowCanvas = ({
                     </div>
                   ) : (
                     <div style={{ fontSize: '0.59rem', color: '#64748B', lineHeight: 1.35 }}>
-                      Chưa có hành động phục hồi nào trên {selectedService}
+                      {t('pipeline.canvas.verifyCard.noActionsYet', { service: selectedService })}
                     </div>
                   )}
                 </div>
@@ -4357,8 +4536,8 @@ export const AIPipelineFlowCanvas = ({
                   fontWeight: 700,
                 }}
               >
-                <span>Khép vòng tự trị</span>
-                <span>Lịch sử →</span>
+                <span>{t('pipeline.canvas.verifyCard.footerLeft')}</span>
+                <span>{t('pipeline.canvas.verifyCard.footerRight')}</span>
               </div>
             </div>
 
@@ -4453,7 +4632,7 @@ export const AIPipelineFlowCanvas = ({
                     <Zap size={13} />
                   </div>
                   <span style={{ fontSize: '0.73rem', fontWeight: 800, color: '#9A3412', whiteSpace: 'nowrap' }}>
-                    Rule Engine — 6 Luật Ngưỡng Tĩnh & K8s Reactive
+                    {t('pipeline.canvas.ruleCard.title')}
                   </span>
                 </div>
 
@@ -4471,8 +4650,8 @@ export const AIPipelineFlowCanvas = ({
                     }}
                   >
                     {isRuleEngineTriggered
-                      ? `${triggeredRuleCount}/6 Luật Vi Phạm → Kích hoạt RCA`
-                      : '0/6 Luật Vi Phạm (An toàn)'}
+                      ? t('pipeline.canvas.ruleCard.triggeredCount', { count: triggeredRuleCount })
+                      : t('pipeline.canvas.ruleCard.safeCount')}
                   </span>
                   <span
                     style={{
@@ -4486,7 +4665,7 @@ export const AIPipelineFlowCanvas = ({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {isRuleExpanded ? '− Thu gọn' : '+ Mở 6 luật'}
+                    {isRuleExpanded ? t('pipeline.canvas.ruleCard.collapse') : t('pipeline.canvas.ruleCard.expand')}
                   </span>
                 </div>
               </div>
@@ -4631,7 +4810,7 @@ export const AIPipelineFlowCanvas = ({
                   boxShadow: '0 2px 6px rgba(15, 23, 42, 0.05)',
                 }}
               >
-                Kích hoạt RCA (Reactive)
+                {t('pipeline.canvas.ruleCard.triggerRcaLabel')}
               </span>
             </div>
 
@@ -4663,7 +4842,7 @@ export const AIPipelineFlowCanvas = ({
                 }}
               >
                 <RefreshCw size={11} />
-                Vòng lặp Hậu kiểm & Giám sát Liên tục (60s Closed-Loop Telemetry Feedback)
+                {t('pipeline.canvas.ruleCard.feedbackLoopLabel')}
               </span>
             </div>
               </>
@@ -4817,7 +4996,7 @@ export const AIPipelineFlowCanvas = ({
               cursor: isInspectorPinned ? (isDraggingInspector ? 'grabbing' : 'grab') : 'default',
               userSelect: 'none',
             }}
-            title={isInspectorPinned ? 'Nhấn giữ chuột vào đây để kéo di chuyển bảng tránh che khuất sơ đồ' : undefined}
+            title={isInspectorPinned ? t('pipeline.inspector.dragToMoveTitle') : undefined}
           >
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -4864,7 +5043,7 @@ export const AIPipelineFlowCanvas = ({
                   e.stopPropagation();
                   setPinnedInspector(null);
                 }}
-                title="Đóng cửa sổ (Esc)"
+                title={t('pipeline.inspector.closeWindowTitle')}
                 style={{
                   width: '24px',
                   height: '24px',
@@ -4980,7 +5159,7 @@ export const AIPipelineFlowCanvas = ({
                   lineHeight: 1.45,
                 }}
               >
-                <strong style={{ color: '#1D4ED8' }}>Bước tiếp theo: </strong>
+                <strong style={{ color: '#1D4ED8' }}>{t('pipeline.inspector.nextStepLabel')}</strong>
                 {activeInspectorData.nextStep}
               </div>
             )}
@@ -5000,7 +5179,7 @@ export const AIPipelineFlowCanvas = ({
             }}
           >
             <span style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 600 }}>
-              {isInspectorPinned ? 'Đã ghim • Click ra ngoài để đóng' : 'Click vào khối để giữ cố định'}
+              {isInspectorPinned ? t('pipeline.inspector.pinnedHint') : t('pipeline.inspector.unpinnedHint')}
             </span>
             {isInspectorPinned && activeInspectorData.actionPath && onNavigate && (
               <button
@@ -5023,7 +5202,7 @@ export const AIPipelineFlowCanvas = ({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {activeInspectorData.actionLabel || 'Xem chi tiết →'}
+                {activeInspectorData.actionLabel || t('pipeline.inspector.viewDetailsBtn')}
               </button>
             )}
           </div>

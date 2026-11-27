@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   History,
   Search,
@@ -28,6 +29,7 @@ export const formatActivityDescription = (desc, fallbackTitle) => {
 };
 
 export const PersonalActivityPage = () => {
+  const { t } = useTranslation('portal');
   const [activities, setActivities] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -80,7 +82,7 @@ export const PersonalActivityPage = () => {
   });
 
   const handleExportCSV = () => {
-    const headers = 'ID,Hành động,Mô tả,Công ty,Cụm K8s,Thời gian,IP,Danh mục,Trạng thái\n';
+    const headers = t('activity.csvHeader');
     const rows = filtered
       .map(
         (a) =>
@@ -100,15 +102,15 @@ export const PersonalActivityPage = () => {
   const getCategoryBadge = (cat) => {
     switch (cat) {
       case 'AUTH':
-        return { label: 'Đăng nhập / Đăng xuất', bg: '#EFF6FF', text: '#2563EB', icon: History };
+        return { label: t('activity.categories.auth'), bg: '#EFF6FF', text: '#2563EB', icon: History };
       case 'PROFILE':
-        return { label: 'Cập nhật hồ sơ', bg: '#F5F3FF', text: '#7C3AED', icon: UserCheck };
+        return { label: t('activity.categories.profile'), bg: '#F5F3FF', text: '#7C3AED', icon: UserCheck };
       case 'COMPANY':
-        return { label: 'Tổ chức & Hạ tầng', bg: '#ECFDF5', text: '#059669', icon: Building2 };
+        return { label: t('activity.categories.companyBadge'), bg: '#ECFDF5', text: '#059669', icon: Building2 };
       case 'SECURITY':
-        return { label: 'Bảo mật & Token', bg: '#FEF3C7', text: '#D97706', icon: ShieldCheck };
+        return { label: t('activity.categories.securityBadge'), bg: '#FEF3C7', text: '#D97706', icon: ShieldCheck };
       default:
-        return { label: 'Chung', bg: '#F1F5F9', text: '#475569', icon: Activity };
+        return { label: t('activity.categories.generalBadge'), bg: '#F1F5F9', text: '#475569', icon: Activity };
     }
   };
 
@@ -125,10 +127,10 @@ export const PersonalActivityPage = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-            Lịch Sử Hoạt Động Cá Nhân
+            {t('activity.title')}
           </h2>
           <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
-            Nhật ký kiểm toán toàn diện ghi nhận các thao tác đăng nhập, đổi bảo mật, xoay vòng Token và cụm K8s của bạn.
+            {t('activity.subtitle')}
           </p>
         </div>
 
@@ -137,7 +139,7 @@ export const PersonalActivityPage = () => {
             type="button"
             onClick={() => loadActivities(categoryFilter, searchTerm)}
             disabled={isLoading}
-            title="Làm mới dữ liệu"
+            title={t('activity.refreshTitle')}
             style={{
               padding: '8px 14px',
               borderRadius: '8px',
@@ -158,7 +160,7 @@ export const PersonalActivityPage = () => {
                 animation: isLoading ? 'spinSlow 1s linear infinite' : 'none',
               }}
             />
-            <span>Làm mới</span>
+            <span>{t('activity.refresh')}</span>
           </button>
 
           <button
@@ -179,7 +181,7 @@ export const PersonalActivityPage = () => {
             }}
           >
             <Download size={15} />
-            <span>Xuất Báo Cáo CSV</span>
+            <span>{t('activity.exportCsv')}</span>
           </button>
         </div>
       </div>
@@ -206,7 +208,7 @@ export const PersonalActivityPage = () => {
           />
           <input
             type="text"
-            placeholder="Tìm theo hành động, IP, chi tiết sự kiện..."
+            placeholder={t('activity.searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             style={{
@@ -234,11 +236,11 @@ export const PersonalActivityPage = () => {
             maxWidth: '100%',
           }}
         >
-          <option value="ALL">Tất cả hành động ({totalItems || activities.length})</option>
-          <option value="AUTH">Đăng nhập / Đăng xuất</option>
-          <option value="PROFILE">Cập nhật hồ sơ</option>
-          <option value="COMPANY">Tổ chức & Cụm K8s</option>
-          <option value="SECURITY">Bảo mật & Token Agent</option>
+          <option value="ALL">{t('activity.categories.all', { count: totalItems || activities.length })}</option>
+          <option value="AUTH">{t('activity.categories.auth')}</option>
+          <option value="PROFILE">{t('activity.categories.profile')}</option>
+          <option value="COMPANY">{t('activity.categories.company')}</option>
+          <option value="SECURITY">{t('activity.categories.security')}</option>
         </select>
       </div>
 
@@ -256,11 +258,11 @@ export const PersonalActivityPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#64748B' }}>
-                <th style={{ padding: '12px 16px', fontWeight: 700 }}>Hành Động & Chi Tiết</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700 }}>Phân Loại</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700 }}>Địa Chỉ IP</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700 }}>Thời Gian Thực Thi</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, textAlign: 'right' }}>Trạng Thái</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700 }}>{t('activity.table.colAction')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700 }}>{t('activity.table.colCategory')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700 }}>{t('activity.table.colIp')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700 }}>{t('activity.table.colTime')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, textAlign: 'right' }}>{t('activity.table.colStatus')}</th>
               </tr>
             </thead>
             <tbody>
@@ -285,7 +287,7 @@ export const PersonalActivityPage = () => {
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#7C3AED', fontWeight: 600 }}>
                             <span style={{ color: '#CBD5E1' }}>•</span>
                             <Server size={11} style={{ flexShrink: 0 }} />
-                            <span>Cụm: {act.clusterName}</span>
+                            <span>{t('activity.table.clusterPrefix', { name: act.clusterName })}</span>
                           </span>
                         )}
                       </div>
@@ -332,7 +334,7 @@ export const PersonalActivityPage = () => {
                           }}
                         >
                           <AlertTriangle size={12} />
-                          <span>Thất bại</span>
+                          <span>{t('activity.table.statusFailed')}</span>
                         </span>
                       ) : (
                         <span
@@ -349,7 +351,7 @@ export const PersonalActivityPage = () => {
                           }}
                         >
                           <CheckCircle2 size={12} />
-                          <span>Hoàn thành</span>
+                          <span>{t('activity.table.statusCompleted')}</span>
                         </span>
                       )}
                     </td>
@@ -374,7 +376,7 @@ export const PersonalActivityPage = () => {
               setPageSize(newSize);
               setCurrentPage(1);
             }}
-            itemLabel="hoạt động"
+            itemLabel={t('activity.table.itemLabel')}
             pageSizeOptions={[5, 10, 25, 50]}
             isLoading={isLoading}
           />
@@ -408,9 +410,9 @@ export const PersonalActivityPage = () => {
             }}
           >
             <History size={36} color="#94A3B8" style={{ margin: '0 auto 12px auto' }} />
-            <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>Không có hoạt động nào</div>
+            <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>{t('activity.empty.title')}</div>
             <p style={{ fontSize: '0.8125rem', margin: '4px 0 0 0' }}>
-              Không có sự kiện phù hợp với từ khóa hoặc bộ lọc đã chọn.
+              {t('activity.empty.desc')}
             </p>
           </div>
         )}

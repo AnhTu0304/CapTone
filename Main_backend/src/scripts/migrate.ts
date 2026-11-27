@@ -42,6 +42,54 @@ export function isNonTransactionalMigration(sql: string): boolean {
   return /\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b/i.test(withoutComments);
 }
 
+/**
+ * Tách các câu lệnh SQL theo dấu `;` (bỏ comment `--`) để từng câu lệnh
+ * trong file `non-transactional` chạy riêng lẻ, tránh PostgreSQL gom thành implicit transaction block.
+ */
+export function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inSingleQuote = false;
+  let inLineComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    const next = sql[i + 1];
+
+    if (inLineComment) {
+      if (ch === '\n') {
+        inLineComment = false;
+        current += ch;
+      }
+      continue;
+    }
+    if (!inSingleQuote && ch === '-' && next === '-') {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === "'") {
+      if (inSingleQuote && next === "'") {
+        current += "''";
+        i++;
+        continue;
+      }
+      inSingleQuote = !inSingleQuote;
+    }
+    if (!inSingleQuote && ch === ';') {
+      const trimmed = current.trim();
+      if (trimmed) statements.push(trimmed);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+
+  const tail = current.trim();
+  if (tail) statements.push(tail);
+  return statements;
+}
+
 async function ensureSchemaMigrationsTable(client: PoolClient): Promise<void> {
   await client.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -162,7 +210,10 @@ export async function runMigrations(
 
       if (nonTx) {
         try {
-          await lockClient.query(sqlContent);
+          const statements = splitSqlStatements(sqlContent);
+          for (const stmt of statements) {
+            await lockClient.query(stmt);
+          }
           const duration = Date.now() - startMs;
           await lockClient.query(
             `INSERT INTO schema_migrations (filename, checksum_sha256, status, applied_at, execution_ms)

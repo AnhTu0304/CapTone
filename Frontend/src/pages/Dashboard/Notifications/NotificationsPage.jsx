@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../context/DashboardContext';
 import {
   Bell,
@@ -17,9 +18,8 @@ import { NOTIFICATION_TYPES, NOTIFICATION_SEVERITIES } from '../../../mocks/noti
 const EMPTY_NOTIFICATIONS = [];
 
 export const NotificationsPage = () => {
+  const { t } = useTranslation('dashAdmin');
   const dashboard = useDashboard();
-  const currentOrg = dashboard?.currentOrg || { name: 'Acme Corporation' };
-  const currentEnv = dashboard?.currentEnv || { name: 'production-us-east-1' };
   const isRefreshing = dashboard?.isRefreshing || false;
   const triggerRefresh = dashboard?.triggerRefresh || (() => {});
   const onNavigate = dashboard?.onNavigate;
@@ -64,16 +64,16 @@ export const NotificationsPage = () => {
   const getSeverityBadge = (severity) => {
     switch (severity) {
       case NOTIFICATION_SEVERITIES.CRITICAL:
-        return { bg: '#FEF2F2', text: '#DC2626', border: '#FECACA', label: 'Khẩn Cấp' };
+        return { bg: '#FEF2F2', text: '#DC2626', border: '#FECACA', label: t('notifications.severity.CRITICAL') };
       case NOTIFICATION_SEVERITIES.HIGH:
-        return { bg: '#FFFBEB', text: '#D97706', border: '#FDE68A', label: 'Cảnh Báo Cao' };
+        return { bg: '#FFFBEB', text: '#D97706', border: '#FDE68A', label: t('notifications.severity.HIGH') };
       case NOTIFICATION_SEVERITIES.MEDIUM:
-        return { bg: '#EFF6FF', text: '#2563EB', border: '#BFDBFE', label: 'Trung Bình' };
+        return { bg: '#EFF6FF', text: '#2563EB', border: '#BFDBFE', label: t('notifications.severity.MEDIUM') };
       case NOTIFICATION_SEVERITIES.LOW:
-        return { bg: '#ECFDF5', text: '#059669', border: '#A7F3D0', label: 'Thấp' };
+        return { bg: '#ECFDF5', text: '#059669', border: '#A7F3D0', label: t('notifications.severity.LOW') };
       case NOTIFICATION_SEVERITIES.INFO:
       default:
-        return { bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0', label: 'Thông Tin' };
+        return { bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0', label: t('notifications.severity.INFO') };
     }
   };
 
@@ -115,7 +115,7 @@ export const NotificationsPage = () => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-                Trung Tâm Thông Báo
+                {t('notifications.title')}
               </h1>
               {unreadCount > 0 && (
                 <span
@@ -130,12 +130,12 @@ export const NotificationsPage = () => {
                     border: '1px solid #FECACA',
                   }}
                 >
-                  {unreadCount} chưa đọc
+                  {t('notifications.unreadBadge', { count: unreadCount })}
                 </span>
               )}
             </div>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Quản trị thông báo vận hành, cảnh báo sự cố khẩn cấp &amp; yêu cầu phê duyệt HITL
+              {t('notifications.subtitle')}
             </p>
           </div>
         </div>
@@ -161,7 +161,7 @@ export const NotificationsPage = () => {
             }}
           >
             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-            <span>Làm mới thông báo</span>
+            <span>{t('notifications.refreshBtn')}</span>
           </button>
 
           <button
@@ -186,45 +186,51 @@ export const NotificationsPage = () => {
             }}
           >
             <Check size={14} />
-            <span>Đánh Dấu Tất Cả Đã Đọc</span>
+            <span>{t('notifications.markAllReadBtn')}</span>
           </button>
         </div>
       </div>
 
       {/* Hàng 3 Thẻ KPI Tóm Tắt Thông Báo */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #059669', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG THÔNG BÁO</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('notifications.kpis.totalLabel')}
+            </span>
             <Bell size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{notifications.length}</span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Tất cả sự kiện</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('notifications.kpis.totalSub')}</span>
           </div>
         </div>
 
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: `2.5px solid ${unreadCount > 0 ? '#EF4444' : '#10B981'}`, borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>CHƯA ĐỌC</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('notifications.kpis.unreadLabel')}
+            </span>
             <Inbox size={14} color={unreadCount > 0 ? '#EF4444' : '#10B981'} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: unreadCount > 0 ? '#DC2626' : '#059669' }}>{unreadCount}</span>
             <span style={{ fontSize: '0.7rem', color: unreadCount > 0 ? '#DC2626' : '#059669', fontWeight: 600 }}>
-              {unreadCount > 0 ? 'Cần xem ngay' : 'Đã xem hết'}
+              {unreadCount > 0 ? t('notifications.kpis.unreadNeedAction') : t('notifications.kpis.unreadAllRead')}
             </span>
           </div>
         </div>
 
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #3B82F6', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐÃ ĐỌC</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('notifications.kpis.readLabel')}
+            </span>
             <Check size={14} color="#3B82F6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{Math.max(0, notifications.length - unreadCount)}</span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Đã xác nhận</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('notifications.kpis.readSub')}</span>
           </div>
         </div>
       </div>
@@ -248,13 +254,13 @@ export const NotificationsPage = () => {
         {/* Status Tabs: All, Unread, Read */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-            Trạng thái:
+            {t('notifications.filters.statusLabel')}
           </span>
           <div style={{ display: 'inline-flex', gap: '3px', padding: '3px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
             {[
-              { key: 'ALL', label: 'Tất Cả' },
-              { key: 'UNREAD', label: `Chưa Đọc (${unreadCount})` },
-              { key: 'READ', label: 'Đã Đọc' },
+              { key: 'ALL', label: t('notifications.filters.statusAll') },
+              { key: 'UNREAD', label: t('notifications.filters.statusUnread', { count: unreadCount }) },
+              { key: 'READ', label: t('notifications.filters.statusRead') },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -284,14 +290,14 @@ export const NotificationsPage = () => {
         {/* Type Category Filter Chips */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-            Phân loại:
+            {t('notifications.filters.typeLabel')}
           </span>
           {[
-            { key: 'ALL', label: 'Tất Cả Loại' },
-            { key: NOTIFICATION_TYPES.INFRASTRUCTURE, label: 'Hạ Tầng' },
-            { key: NOTIFICATION_TYPES.SELF_HEALING, label: 'Tự Phục Hồi' },
-            { key: NOTIFICATION_TYPES.SECURITY, label: 'Bảo Mật' },
-            { key: NOTIFICATION_TYPES.SYSTEM, label: 'Hệ Thống' },
+            { key: 'ALL', label: t('notifications.filters.typeAll') },
+            { key: NOTIFICATION_TYPES.INFRASTRUCTURE, label: t('notifications.filters.typeInfra') },
+            { key: NOTIFICATION_TYPES.SELF_HEALING, label: t('notifications.filters.typeHealing') },
+            { key: NOTIFICATION_TYPES.SECURITY, label: t('notifications.filters.typeSecurity') },
+            { key: NOTIFICATION_TYPES.SYSTEM, label: t('notifications.filters.typeSystem') },
           ].map((typeChip) => (
             <button
               key={typeChip.key}
@@ -343,12 +349,12 @@ export const NotificationsPage = () => {
             >
               <Inbox size={40} strokeWidth={1.5} color="var(--dash-text-muted)" />
               <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--dash-text-secondary)' }}>
-                Không tìm thấy thông báo nào trong phân mục này
+                {t('notifications.empty.title')}
               </div>
               <p style={{ fontSize: '0.8125rem', margin: 0, maxWidth: '360px' }}>
                 {statusFilter === 'UNREAD'
-                  ? 'Tuyệt vời! Bạn đã xem hết tất cả thông báo quan trọng.'
-                  : 'Hãy thử đổi bộ lọc trạng thái hoặc loại thông báo để xem các cảnh báo khác.'}
+                  ? t('notifications.empty.unreadDesc')
+                  : t('notifications.empty.defaultDesc')}
               </p>
             </div>
           ) : (
@@ -441,7 +447,7 @@ export const NotificationsPage = () => {
                               backgroundColor: 'var(--dash-primary)',
                               display: 'inline-block',
                             }}
-                            title="Thông báo mới chưa đọc"
+                            title={t('notifications.item.unreadDotTitle')}
                           />
                         )}
                       </div>
@@ -468,17 +474,17 @@ export const NotificationsPage = () => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           {n.metadata.cluster && (
                             <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)', backgroundColor: 'var(--dash-bg-canvas)', padding: '2px 6px', borderRadius: '4px' }}>
-                              Cụm: {n.metadata.cluster}
+                              {t('notifications.item.clusterMeta', { cluster: n.metadata.cluster })}
                             </span>
                           )}
                           {n.metadata.resource && (
                             <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontFamily: 'var(--font-mono)', backgroundColor: 'var(--dash-bg-canvas)', padding: '2px 6px', borderRadius: '4px' }}>
-                              Tài nguyên: {n.metadata.resource}
+                              {t('notifications.item.resourceMeta', { resource: n.metadata.resource })}
                             </span>
                           )}
                           {n.metadata.mttr && (
                             <span style={{ fontSize: '0.6875rem', color: '#059669', fontWeight: 600, backgroundColor: '#ECFDF5', padding: '2px 6px', borderRadius: '4px' }}>
-                              MTTR: {n.metadata.mttr}
+                              {t('notifications.item.mttrMeta', { mttr: n.metadata.mttr })}
                             </span>
                           )}
                         </div>
@@ -509,7 +515,7 @@ export const NotificationsPage = () => {
                           cursor: 'pointer',
                         }}
                       >
-                        <span>{n.actionText || 'Chi Tiết'}</span>
+                        <span>{n.actionText || t('notifications.item.detailsBtn')}</span>
                         <ArrowRight size={12} />
                       </button>
                     )}
@@ -518,8 +524,16 @@ export const NotificationsPage = () => {
                       type="button"
                       data-testid={`btn-toggle-read-${n.id}`}
                       onClick={() => toggleNotificationRead(n.id)}
-                      title={isRead ? 'Đánh dấu chưa đọc' : 'Đánh dấu đã đọc'}
-                      aria-label={isRead ? 'Đánh dấu chưa đọc' : 'Đánh dấu đã đọc'}
+                      title={
+                        isRead
+                          ? t('notifications.item.markUnreadTitle')
+                          : t('notifications.item.markReadTitle')
+                      }
+                      aria-label={
+                        isRead
+                          ? t('notifications.item.markUnreadTitle')
+                          : t('notifications.item.markReadTitle')
+                      }
                       style={{
                         padding: '6px',
                         background: 'none',
@@ -559,7 +573,7 @@ export const NotificationsPage = () => {
                 transition: 'all 0.15s ease',
               }}
             >
-              Xem thêm thông báo cũ hơn ({filteredNotifications.length - pageSize} thông báo còn lại)
+              {t('notifications.loadMore', { count: filteredNotifications.length - pageSize })}
             </button>
           </div>
         )}

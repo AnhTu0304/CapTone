@@ -1,25 +1,7 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../i18n';
 import { Grid, ShieldCheck } from 'lucide-react';
-
-const INCIDENT_TYPE_LABELS = {
-  CPU_OVERLOAD: 'Quá tải CPU',
-  OOM: 'Tràn RAM (OOM)',
-  HIGH_LATENCY: 'Độ trễ cao',
-  HTTP_5XX_SPIKE: 'Lỗi HTTP 5XX',
-  DISK_FULL: 'Đầy ổ đĩa (Disk)',
-  TRAFFIC_OVERLOAD: 'Quá tải lưu lượng',
-};
-
-const ACTION_CODE_LABELS = {
-  RESTART_POD: 'Khởi động lại Pod',
-  REPLACE_POD: 'Thay thế Pod',
-  SCALE_REPLICAS: 'Mở rộng Replicas',
-  ROLLBACK_DEPLOYMENT: 'Rollback Phiên bản',
-  CLEANUP_TEMP_FILES: 'Dọn File Tạm',
-  BLOCK_IP_TEMP: 'Chặn IP Tạm Thời',
-  DRAIN_NODE: 'Cô lập Node',
-  NO_ACTION: 'Theo dõi (No Action)',
-};
 
 /**
  * Biểu đồ 5: ErrorActionMatrixChart
@@ -31,6 +13,9 @@ export const ErrorActionMatrixChart = ({
   onSelectCell = null,
   className = '',
 }) => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
+
   const { incidentTypes, actionCodes, lookup } = useMemo(() => {
     const incTotals = new Map();
     const actTotals = new Map();
@@ -39,9 +24,9 @@ export const ErrorActionMatrixChart = ({
     (matrix || []).forEach((item) => {
       const inc = item.incidentType || 'OTHER';
       const act = item.actionCode || 'UNKNOWN';
-      const t = Number(item.total) || 0;
-      incTotals.set(inc, (incTotals.get(inc) || 0) + t);
-      actTotals.set(act, (actTotals.get(act) || 0) + t);
+      const totalVal = Number(item.total) || 0;
+      incTotals.set(inc, (incTotals.get(inc) || 0) + totalVal);
+      actTotals.set(act, (actTotals.get(act) || 0) + totalVal);
       cellMap.set(`${inc}::${act}`, item);
     });
 
@@ -112,24 +97,30 @@ export const ErrorActionMatrixChart = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Grid size={19} color="#7C3AED" />
             <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: '#0F172A' }}>
-              Ma Trận Đối Chiếu Loại Sự Cố × Hành Động Khắc Phục
+              {t('charts.errorMatrix.title')}
             </h3>
           </div>
           <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '4px 0 0 0' }}>
-            Hiển thị sự cố nào được gắn với loại Action nào và tỷ lệ thực thi thành công của từng cặp (Nhấp vào ô để lọc bảng chi tiết)
+            {t('charts.errorMatrix.subtitle')}
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.6875rem', fontWeight: 700 }}>
-          <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}>≥85% Đạt</span>
-          <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#FFFBEB', color: '#B45309', border: '1px solid #FDE68A' }}>45–84%</span>
-          <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }}>&lt;45% (Lỗi / Hủy nhiều)</span>
+          <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}>
+            {t('charts.errorMatrix.legendHigh')}
+          </span>
+          <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#FFFBEB', color: '#B45309', border: '1px solid #FDE68A' }}>
+            {t('charts.errorMatrix.legendMid')}
+          </span>
+          <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: '#FEF2F2', color: '#B91C1C', border: '1px solid #FECACA' }}>
+            {t('charts.errorMatrix.legendLow')}
+          </span>
         </div>
       </div>
 
       {incidentTypes.length === 0 || actionCodes.length === 0 ? (
         <div style={{ padding: '28px 16px', textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '10px', color: '#64748B', fontSize: '0.8125rem' }}>
-          Chưa có dữ liệu ma trận Sự cố × Action trong chu kỳ hiện tại.
+          {t('charts.errorMatrix.empty')}
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
@@ -137,7 +128,7 @@ export const ErrorActionMatrixChart = ({
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '8px 10px', color: '#475569', fontWeight: 800, minWidth: '150px' }}>
-                  Loại Lỗi \ Hành Động
+                  {t('charts.errorMatrix.cornerHeader')}
                 </th>
                 {actionCodes.map((act) => (
                   <th
@@ -155,7 +146,7 @@ export const ErrorActionMatrixChart = ({
                   >
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}>{act}</div>
                     <div style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 500, marginTop: '2px' }}>
-                      {ACTION_CODE_LABELS[act] || act}
+                      {t(`charts.errorMatrix.actionCodes.${act}`, { defaultValue: act })}
                     </div>
                   </th>
                 ))}
@@ -176,7 +167,7 @@ export const ErrorActionMatrixChart = ({
                   >
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>{inc}</div>
                     <div style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 500 }}>
-                      {INCIDENT_TYPE_LABELS[inc] || inc}
+                      {t(`charts.errorMatrix.incidentTypes.${inc}`, { defaultValue: inc })}
                     </div>
                   </td>
 
@@ -201,8 +192,14 @@ export const ErrorActionMatrixChart = ({
                           }}
                           title={
                             cell
-                              ? `${inc} -> ${act}: ${cell.succeeded} thành công, ${cell.failed} thất bại, ${cell.cancelled} hủy`
-                              : 'Không phát sinh'
+                              ? t('charts.errorMatrix.cellTooltip', {
+                                  inc,
+                                  act,
+                                  ok: cell.succeeded,
+                                  failed: cell.failed,
+                                  cancelled: cell.cancelled,
+                                })
+                              : t('charts.errorMatrix.cellEmptyTooltip')
                           }
                           style={{
                             width: '100%',
@@ -226,7 +223,7 @@ export const ErrorActionMatrixChart = ({
                             <>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                 <span style={{ fontWeight: 800, fontSize: '0.875rem', color: st.text, fontFamily: 'var(--font-mono)' }}>
-                                  {cell.total.toLocaleString('vi-VN')}
+                                  {cell.total.toLocaleString(intlLocale)}
                                 </span>
                                 <span
                                   style={{
@@ -261,7 +258,7 @@ export const ErrorActionMatrixChart = ({
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem', color: '#64748B' }}>
         <ShieldCheck size={13} color="#059669" />
-        <span>Ký hiệu trong mỗi ô: Số tổng action · Tỷ lệ đạt (%) · Thành công (✓) / Thất bại (✕) / Bị hủy hoặc chờ HITL (⊘).</span>
+        <span>{t('charts.errorMatrix.footerLegend')}</span>
       </div>
     </div>
   );

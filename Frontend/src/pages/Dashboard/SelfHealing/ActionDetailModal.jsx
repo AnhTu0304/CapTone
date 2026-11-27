@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../../i18n';
 import { selfHealingService } from '../../../services/selfHealingService';
-import { translateIncidentTitle } from '../Incidents/incidentUtils';
+import { translateIncidentTitle, translateActionMessageToVi } from '../Incidents/incidentUtils';
 import {
   X,
   CheckCircle2,
   AlertCircle,
-  XCircle,
   Clock,
   Activity,
   ShieldCheck,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 
 export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
+  const { t, i18n: i18nInstance } = useTranslation('dashHealing');
   const [detail, setDetail] = useState(initialItem || null);
   const [isLoading, setIsLoading] = useState(!initialItem);
 
@@ -49,7 +51,8 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
   const isWaitingApproval = !isSucceeded && !isFailed && !isCancelled && (
     detail?.approval_status === 'PENDING' ||
     detail?.execution_status === 'PENDING' ||
-    (detail?.title || '').toLowerCase().includes('chờ phê duyệt')
+    (detail?.title || '').toLowerCase().includes('chờ phê duyệt') ||
+    (detail?.title || '').toLowerCase().includes('awaiting hitl')
   );
   const isRunning = !isWaitingApproval && !isSucceeded && !isFailed && !isCancelled && (
     detail?.execution_status === 'RUNNING'
@@ -58,43 +61,43 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
   let statusBg = '#DCFCE7';
   let statusColor = '#15803D';
   let statusBorder = '#86EFAC';
-  let statusLabel = 'Thành công';
+  let statusLabel = t('actionDetail.status.succeeded');
 
   if (isWaitingApproval) {
     statusBg = '#FEF3C7';
     statusColor = '#B45309';
     statusBorder = '#FDE68A';
-    statusLabel = 'Chờ duyệt HITL';
+    statusLabel = t('actionDetail.status.pending');
   } else if (isFailed) {
     statusBg = '#FEE2E2';
     statusColor = '#B91C1C';
     statusBorder = '#FCA5A5';
-    statusLabel = 'Thất bại';
+    statusLabel = t('actionDetail.status.failed');
   } else if (isCancelled) {
     statusBg = '#F1F5F9';
     statusColor = '#475569';
     statusBorder = '#CBD5E1';
-    statusLabel = 'Đã hủy';
+    statusLabel = t('actionDetail.status.cancelled');
   } else if (isRunning) {
     statusBg = '#E0F2FE';
     statusColor = '#0369A1';
     statusBorder = '#7DD3FC';
-    statusLabel = 'Đang thực thi';
+    statusLabel = t('actionDetail.status.running');
   }
 
   const cleanTargetName = (val) => {
-    if (!val) return 'Chưa xác định';
+    if (!val) return t('common.unknown');
     return String(val).replace(/^[A-Za-z0-9_-]+\//i, '').trim();
   };
 
   const formatProbeLabel = (val, isFail, isWaiting, isRun) => {
-    if (val === 'K8S_POST_HEALING_PROBE') return 'K8s Health Probe';
-    if (val === 'SLO_HEALTH_CHECK') return 'SLO Health Check';
+    if (val === 'K8S_POST_HEALING_PROBE') return t('actionDetail.probes.k8s');
+    if (val === 'SLO_HEALTH_CHECK') return t('actionDetail.probes.slo');
     if (val) return val;
-    if (isFail) return 'Không kích hoạt (Lệnh thất bại)';
-    if (isWaiting) return 'Chờ kích hoạt probe';
-    if (isRun) return 'Đang thực thi lệnh';
-    return 'Chưa kích hoạt';
+    if (isFail) return t('actionDetail.probes.failed');
+    if (isWaiting) return t('actionDetail.probes.waiting');
+    if (isRun) return t('actionDetail.probes.running');
+    return t('actionDetail.probes.notTriggered');
   };
 
   const shortId = actionId ? `ACT-${actionId.slice(0, 8).toUpperCase()}` : 'ACT-UNKNOWN';
@@ -123,51 +126,26 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
   const translateRcaText = (str) => {
     if (!str) return '';
     let res = String(str);
-    res = res.replace(/\bPROBABLE\b/g, 'Khả năng cao');
-    res = res.replace(/\bCONFIRMED\b/g, 'Đã xác nhận');
-    res = res.replace(/\bSUSPECTED\b/g, 'Nghi vấn');
-    res = res.replace(/\bCRITICAL\b/g, 'Khẩn cấp');
-    res = res.replace(/\bHIGH\b/g, 'Cao');
-    res = res.replace(/\bMEDIUM\b/g, 'Trung bình');
-    res = res.replace(/\bLOW\b/g, 'Thấp');
-    res = res.replace(/\bRESOLVED\b/g, 'Đã giải quyết');
-    res = res.replace(/\bVerification\b/g, 'Hậu kiểm');
-    res = res.replace(/\bverification\b/g, 'hậu kiểm');
+    res = res.replace(/\bPROBABLE\b/g, t('actionDetail.rcaTerms.probable'));
+    res = res.replace(/\bCONFIRMED\b/g, t('actionDetail.rcaTerms.confirmed'));
+    res = res.replace(/\bSUSPECTED\b/g, t('actionDetail.rcaTerms.suspected'));
+    res = res.replace(/\bCRITICAL\b/g, t('actionDetail.rcaTerms.critical'));
+    res = res.replace(/\bHIGH\b/g, t('actionDetail.rcaTerms.high'));
+    res = res.replace(/\bMEDIUM\b/g, t('actionDetail.rcaTerms.medium'));
+    res = res.replace(/\bLOW\b/g, t('actionDetail.rcaTerms.low'));
+    res = res.replace(/\bRESOLVED\b/g, t('actionDetail.rcaTerms.resolved'));
+    res = res.replace(/\bVerification\b/g, t('actionDetail.rcaTerms.verificationCap'));
+    res = res.replace(/\bverification\b/g, t('actionDetail.rcaTerms.verificationLow'));
     return res;
   };
 
   const formatActionMessageVi = (rawMsg) => {
+    const actionLabel = detail?.action_type_name || t('actionDetail.summary.actionFallback');
+    const targetClean = cleanTargetName(detail?.target_name);
     if (!rawMsg) {
-      return `Đã thực thi thành công ${detail?.action_type_name || 'hành động'} trên dịch vụ "${cleanTargetName(detail?.target_name)}"`;
+      return t('actionDetail.summary.successFallback', { action: actionLabel, target: targetClean });
     }
-    let text = String(rawMsg).trim();
-
-    if (text.includes('Safety Guard Blocked') || text.includes('protected Kubernetes system namespace')) {
-      const nsMatch = text.match(/Namespace '([^']+)'/i);
-      const ns = nsMatch ? nsMatch[1] : detectedNamespace;
-      return `Thực thi ${detail?.action_type_name || 'hành động'} trên dịch vụ "${cleanTargetName(detail?.target_name)}" thất bại: Rào chắn an toàn đã chặn do Namespace "${ns}" là hạ tầng hệ thống cốt lõi của Kubernetes, không được phép can thiệp tự động.`;
-    }
-
-    if (text.includes('User') && (text.includes('cannot') || text.includes('Forbidden') || text.includes('(403)'))) {
-      return `Thực thi ${detail?.action_type_name || 'hành động'} trên dịch vụ "${cleanTargetName(detail?.target_name)}" thất bại [Lỗi 403 Forbidden]: ServiceAccount thiếu quyền can thiệp RBAC trong Kubernetes.`;
-    }
-
-    const scaleMatch = text.match(
-      /(?:[a-z0-9_-]+\/)?([a-z0-9_-]+)\s+scaled\s+\((scale_up|scale_down)\)\s+successfully\s+from\s+(\w+)\s+to\s+(\d+)\s+replicas(?:\s+in\s+'([^']+)')?/i
-    );
-    if (scaleMatch) {
-      const sTarget = scaleMatch[1] || cleanTargetName(detail?.target_name);
-      const sDir = scaleMatch[2].toLowerCase() === 'scale_up' ? 'mở rộng' : 'thu hẹp';
-      const sFrom = scaleMatch[3] === 'unknown' ? 'số lượng hiện tại' : scaleMatch[3];
-      const sTo = scaleMatch[4];
-      const sNs = scaleMatch[5] || detectedNamespace;
-      return `Đã điều chỉnh quy mô (${sDir}) thành công cho Deployment "${sTarget}" từ ${sFrom} lên ${sTo} bản sao trong namespace "${sNs}".`;
-    }
-
-    text = text.replace(/\s*\(Post-Action Verification Failed\):?/gi, ':');
-    text = text.replace(/Post-Action Verification Failed:?\s*/gi, '');
-
-    return text;
+    return translateActionMessageToVi(rawMsg, targetClean, actionLabel, detectedNamespace);
   };
 
   return (
@@ -276,6 +254,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
 
         {/* Quick Highlights Bar */}
         <div
+          className="dash-grid-4"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(4, 1fr)',
@@ -287,18 +266,18 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
         >
           <div style={{ padding: '5px 8px', borderRadius: '6px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
             <div style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Clock size={12} /> THỜI LƯỢNG THỰC THI
+              <Clock size={12} /> {t('actionDetail.highlights.duration')}
             </div>
             <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: isFailed ? '#DC2626' : '#059669', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
               {durationMs > 0
                 ? `${durationMs}ms (${(durationMs / 1000).toFixed(1)}s)`
-                : (isRunning ? 'Đang chạy' : (isWaitingApproval ? 'Chờ duyệt' : '-'))}
+                : (isRunning ? t('actionDetail.highlights.running') : (isWaitingApproval ? t('actionDetail.highlights.pending') : '-'))}
             </div>
           </div>
 
           <div style={{ padding: '5px 8px', borderRadius: '6px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
             <div style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <ShieldCheck size={12} /> HẬU KIỂM TRA (SLO)
+              <ShieldCheck size={12} /> {t('actionDetail.highlights.sloCheck')}
             </div>
             <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: isFailed ? '#64748B' : '#0284C7', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
               {formatProbeLabel(verifications[0]?.verification_type, isFailed, isWaitingApproval, isRunning)}
@@ -307,16 +286,16 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
 
           <div style={{ padding: '5px 8px', borderRadius: '6px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
             <div style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Server size={12} /> ĐỐI TƯỢNG (TARGET)
+              <Server size={12} /> {t('actionDetail.highlights.target')}
             </div>
             <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {cleanTargetName(detail?.target_name || resultObj?.details?.target || detail?.target_id || 'Chưa xác định')}
+              {cleanTargetName(detail?.target_name || resultObj?.details?.target || detail?.target_id || t('common.unknown'))}
             </div>
           </div>
 
           <div style={{ padding: '5px 8px', borderRadius: '6px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
             <div style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Cpu size={12} /> AGENT THỰC THI
+              <Cpu size={12} /> {t('actionDetail.highlights.agent')}
             </div>
             <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#4338CA', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
               {resultObj?.executed_by_agent || attempts[0]?.request_payload?.agent || detail?.agent_name || (detail?.cluster_name ? `${detail.cluster_name}-agent` : 'In-Cluster Agent')}
@@ -339,7 +318,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
             }}
           >
             <FileText size={14} />
-            <span>Tổng Quan & Sự Cố</span>
+            <span>{t('actionDetail.tabTitle')}</span>
           </div>
         </div>
 
@@ -376,12 +355,12 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                   )}
                   <span>
                     {isWaitingApproval
-                      ? 'Yêu Cầu Tự Lành Đang Chờ Phê Duyệt An Toàn (HITL)'
+                      ? t('actionDetail.summary.pendingTitle')
                       : isRunning
-                      ? 'Tiến Trình Tự Phục Hồi Đang Diễn Ra'
+                      ? t('actionDetail.summary.runningTitle')
                       : isFailed
-                      ? 'Thực Thi Tự Phục Hồi Thất Bại'
-                      : 'Kết Quả Tự Lành Được Xác Thực'}
+                      ? t('actionDetail.summary.failedTitle')
+                      : t('actionDetail.summary.successTitle')}
                   </span>
                 </div>
                 <div
@@ -393,10 +372,13 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                   }}
                 >
                   {isSucceeded
-                    ? (resultObj?.message && !resultObj.message.toLowerCase().includes('chờ phê duyệt')
+                    ? (resultObj?.message && !resultObj.message.toLowerCase().includes('chờ phê duyệt') && !resultObj.message.toLowerCase().includes('awaiting hitl')
                         ? formatActionMessageVi(resultObj.message)
-                        : `Đã thực thi thành công ${detail?.action_type_name || 'hành động'} trên dịch vụ "${detail?.target_name || ''}"`)
-                    : formatActionMessageVi(resultObj?.message || detail?.title || `Thực thi ${detail?.action_type_name || 'hành động'}`)}
+                        : t('actionDetail.summary.successFallback', {
+                            action: detail?.action_type_name || t('actionDetail.summary.actionFallback'),
+                            target: detail?.target_name || '',
+                          }))
+                    : formatActionMessageVi(resultObj?.message || detail?.title || t('actionDetail.summary.defaultTitle', { action: detail?.action_type_name || t('actionDetail.summary.actionFallback') }))}
                 </div>
               </div>
 
@@ -405,7 +387,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                 <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Activity size={15} color="#059669" />
-                    SỰ CỐ GỐC KÍCH HOẠT (INCIDENT CONTEXT)
+                    {t('actionDetail.incidentContext.title')}
                   </span>
                   {detail?.incident_severity && (
                     <span
@@ -418,34 +400,48 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
                         color: detail.incident_severity === 'CRITICAL' ? '#DC2626' : '#D97706',
                       }}
                     >
-                      MỨC ĐỘ: {detail.incident_severity === 'CRITICAL' ? 'Khẩn cấp' : detail.incident_severity === 'HIGH' ? 'Cao' : detail.incident_severity === 'MEDIUM' ? 'Trung bình' : 'Thấp'}
+                      {t('actionDetail.incidentContext.severityBadge', {
+                        level: detail.incident_severity === 'CRITICAL'
+                          ? t('actionDetail.incidentContext.sevCritical')
+                          : detail.incident_severity === 'HIGH'
+                          ? t('actionDetail.incidentContext.sevHigh')
+                          : detail.incident_severity === 'MEDIUM'
+                          ? t('actionDetail.incidentContext.sevMedium')
+                          : t('actionDetail.incidentContext.sevLow'),
+                      })}
                     </span>
                   )}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="dash-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Tiêu đề sự cố:</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('actionDetail.incidentContext.titleLabel')}</div>
                     <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
-                      {translateIncidentTitle(detail?.incident_title) || 'Chưa liên kết sự cố'}
+                      {translateIncidentTitle(detail?.incident_title) || t('actionDetail.incidentContext.unlinked')}
                     </div>
                   </div>
 
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Trạng thái sự cố:</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('actionDetail.incidentContext.statusLabel')}</div>
                     <div style={{
                       fontSize: '0.875rem',
                       fontWeight: 700,
                       color: detail?.incident_status === 'RESOLVED' ? '#059669' : (detail?.incident_status === 'INVESTIGATING' ? '#D97706' : '#DC2626'),
                       marginTop: '2px'
                     }}>
-                      {detail?.incident_status === 'RESOLVED' ? 'Đã giải quyết' : detail?.incident_status === 'INVESTIGATING' ? 'Đang điều tra' : (detail?.incident_status === 'OPEN' ? 'Đang mở' : (detail?.incident_status || (isSucceeded ? 'Đã giải quyết' : 'Đang mở')))}
+                      {detail?.incident_status === 'RESOLVED'
+                        ? t('actionDetail.incidentContext.statusResolved')
+                        : detail?.incident_status === 'INVESTIGATING'
+                        ? t('actionDetail.incidentContext.statusInvestigating')
+                        : (detail?.incident_status === 'OPEN'
+                          ? t('actionDetail.incidentContext.statusOpen')
+                          : (detail?.incident_status || (isSucceeded ? t('actionDetail.incidentContext.statusResolved') : t('actionDetail.incidentContext.statusOpen'))))}
                     </div>
                   </div>
 
                   {detail?.incident_description && (
                     <div style={{ gridColumn: 'span 2' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Phân tích nguyên nhân gốc (RCA):</div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('actionDetail.incidentContext.rcaLabel')}</div>
                       <div style={{ fontSize: '0.8125rem', color: '#334155', marginTop: '2px', backgroundColor: '#F8FAFC', padding: '8px 12px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
                         {translateRcaText(detail.incident_description)}
                       </div>
@@ -454,7 +450,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
 
                   {detail?.recommendation_reasoning && (
                     <div style={{ gridColumn: 'span 2' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Lập luận khuyến nghị của AI:</div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{t('actionDetail.incidentContext.aiReasonLabel')}</div>
                       <div style={{ fontSize: '0.8125rem', color: '#334155', marginTop: '2px', backgroundColor: '#F0FDF4', padding: '8px 12px', borderRadius: '6px', border: '1px solid #DCFCE7' }}>
                         {translateRcaText(detail.recommendation_reasoning)}
                       </div>
@@ -466,54 +462,54 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
               {/* Technical Specifications */}
               <div style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
                 <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
-                  THÔNG SỐ KỸ THUẬT VÀ PHẠM VI (SCOPE & METADATA)
+                  {t('actionDetail.specs.title')}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', fontSize: '0.8125rem' }}>
+                <div className="dash-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', fontSize: '0.8125rem' }}>
                   <div>
-                    <span style={{ color: '#64748B' }}>Dịch vụ mục tiêu:</span>
+                    <span style={{ color: '#64748B' }}>{t('actionDetail.specs.targetLabel')}</span>
                     <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
-                      {cleanTargetName(detail?.target_name || resultObj?.details?.target || 'Chưa xác định')}
+                      {cleanTargetName(detail?.target_name || resultObj?.details?.target || t('common.unknown'))}
                     </div>
                   </div>
 
                   <div>
-                    <span style={{ color: '#64748B' }}>Không gian tên (Namespace):</span>
+                    <span style={{ color: '#64748B' }}>{t('actionDetail.specs.namespaceLabel')}</span>
                     <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
                       {detectedNamespace}
                     </div>
                   </div>
 
                   <div>
-                    <span style={{ color: '#64748B' }}>Cụm Kubernetes:</span>
+                    <span style={{ color: '#64748B' }}>{t('actionDetail.specs.clusterLabel')}</span>
                     <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
-                      {detail?.cluster_name || detail?.cluster_id || 'Chưa liên kết cụm'}
+                      {detail?.cluster_name || detail?.cluster_id || t('actionDetail.specs.unlinkedCluster')}
                     </div>
                   </div>
 
                   <div>
-                    <span style={{ color: '#64748B' }}>Loại hành động:</span>
+                    <span style={{ color: '#64748B' }}>{t('actionDetail.specs.actionTypeLabel')}</span>
                     <div style={{ fontWeight: 700, color: '#0F172A' }}>
-                      {detail?.action_type_name || detail?.action_type_code || resultObj?.details?.action_type || 'Tự phục hồi'}
+                      {detail?.action_type_name || detail?.action_type_code || resultObj?.details?.action_type || t('incidentUtils.actions.DEFAULT')}
                     </div>
                   </div>
 
                   <div>
-                    <span style={{ color: '#64748B' }}>Chính sách tự lành:</span>
+                    <span style={{ color: '#64748B' }}>{t('actionDetail.specs.policyLabel')}</span>
                     <div style={{ fontWeight: 700, color: '#2563EB', fontFamily: 'var(--font-mono)' }}>
-                      {detail?.policy_name || resultObj?.policy_name || (detail?.execution_mode === 'AUTO' ? 'Tự động kích hoạt (Chính sách mặc định)' : 'Can thiệp theo khuyến nghị AI')}
+                      {detail?.policy_name || resultObj?.policy_name || (detail?.execution_mode === 'AUTO' ? t('actionDetail.specs.policyAuto') : t('actionDetail.specs.policyAi'))}
                     </div>
                   </div>
 
                   <div>
-                    <span style={{ color: '#64748B' }}>Trạng thái phê duyệt:</span>
+                    <span style={{ color: '#64748B' }}>{t('actionDetail.specs.approvalLabel')}</span>
                     <div style={{ fontWeight: 700, color: isWaitingApproval ? '#D97706' : (detail?.approval_status === 'REJECTED' ? '#DC2626' : '#059669') }}>
                       {detail?.execution_mode === 'AUTO'
-                        ? 'Tự động (Không cần duyệt)'
+                        ? t('actionDetail.specs.approvalAuto')
                         : (detail?.approval_status === 'APPROVED'
-                            ? 'Đã phê duyệt (HITL)'
+                            ? t('actionDetail.specs.approvalApproved')
                             : (detail?.approval_status === 'REJECTED'
-                                ? 'Đã từ chối'
-                                : (isWaitingApproval ? 'Chờ duyệt HITL' : (detail?.approval_status || 'Chưa xác định'))))}
+                                ? t('actionDetail.specs.approvalRejected')
+                                : (isWaitingApproval ? t('actionDetail.specs.approvalPending') : (detail?.approval_status || t('common.unknown')))))}
                     </div>
                   </div>
                 </div>
@@ -532,7 +528,15 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
           }}
         >
           <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-            Thời điểm ghi nhận: <strong>{detail?.completed_at || detail?.created_at || 'Vừa xong'}</strong>
+            {t('actionDetail.footer.recordedAt')}{' '}
+            <strong>
+              {(() => {
+                const rawTs = detail?.completed_at || detail?.created_at;
+                if (!rawTs) return t('common.justNow');
+                const d = new Date(rawTs);
+                return isNaN(d.getTime()) ? String(rawTs) : d.toLocaleString(getIntlLocale(i18nInstance.language));
+              })()}
+            </strong>
           </div>
           <button
             type="button"
@@ -548,7 +552,7 @@ export const ActionDetailModal = ({ actionId, initialItem, onClose }) => {
               cursor: 'pointer',
             }}
           >
-            Đóng cửa sổ
+            {t('common.closeWindow')}
           </button>
         </div>
       </div>

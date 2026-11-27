@@ -57,8 +57,8 @@ export const HeroSection = ({ onNavigate }) => {
 
               <div className="hero-sublink-wrapper">
                 <a
-                  href="/guide"
-                  onClick={(e) => handleLinkClick(e, '/guide')}
+                  href="/features"
+                  onClick={(e) => handleLinkClick(e, '/features')}
                   className="hero-sublink"
                 >
                   {t('hero.sublink')}

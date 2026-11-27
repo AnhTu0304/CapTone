@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../context/DashboardContext';
 import { podService } from '../../../services/podService';
 import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 
 export const WorkloadsPage = () => {
+  const { t } = useTranslation('dashMonitoring');
   const { currentEnv, isRefreshing, triggerRefresh, onNavigate } = useDashboard();
   const { can } = usePermissions();
   const [pods, setPods] = useState([]);
@@ -141,13 +143,13 @@ export const WorkloadsPage = () => {
         podsReady: `${readyPods} / ${totalPods}`,
         isReady: readyPods === totalPods,
         status: isWarning ? 'WARNING' : 'HEALTHY',
-        statusLabel: isWarning ? 'Cảnh báo rủi ro' : 'Khỏe mạnh',
+        statusLabel: isWarning ? t('workloads.status.warning') : t('workloads.status.healthy'),
         cpuUsage: `${Math.round(totalPods * 150)}m / ${Math.round(totalPods * 500)}m`,
         memUsage: `${Math.round(totalPods * 128)} MB / ${Math.round(totalPods * 512)} MB`,
-        age: 'Hoạt động liên tục',
+        age: t('workloads.status.activeAge'),
       };
     });
-  }, [pods]);
+  }, [pods, t]);
 
   // 3. Danh sách Namespaces thật xuất hiện trong Cụm
   const dynamicNamespaces = useMemo(() => {
@@ -203,7 +205,7 @@ export const WorkloadsPage = () => {
     } catch (err) {
       console.warn('[WorkloadsPage] Lỗi khởi động lại Pod:', err);
       setRestartStatus(null);
-      alert('Không thể khởi động lại Pod: ' + err.message);
+      alert(t('workloads.restartErrorAlert', { message: err.message }));
     }
   };
 
@@ -230,10 +232,10 @@ export const WorkloadsPage = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Khối Lượng Công Việc
+              {t('workloads.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Giám sát vòng đời ứng dụng, số lần restart &amp; phân bổ Pods theo Namespace trên cụm{' '}
+              {t('workloads.subtitlePrefix')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{currentEnv?.cluster || currentEnv?.name || 'K8s'}</strong>
             </p>
           </div>
@@ -265,7 +267,7 @@ export const WorkloadsPage = () => {
                 cursor: 'pointer',
               }}
             >
-              Khối Công Việc
+              {t('workloads.views.workloads')}
             </button>
             <button
               type="button"
@@ -281,7 +283,7 @@ export const WorkloadsPage = () => {
                 cursor: 'pointer',
               }}
             >
-              Từng Pod Riêng Lẻ
+              {t('workloads.views.pods')}
             </button>
           </div>
 
@@ -305,32 +307,32 @@ export const WorkloadsPage = () => {
             }}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
+            <span>{t('common.refresh')}</span>
           </button>
         </div>
       </div>
 
       {/* 2. Top Summary KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #059669' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG WORKLOADS</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('workloads.kpi.totalWorkloads')}</span>
             <Layers size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {isLoading ? '...' : distinctWorkloadsCount}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Khối công việc</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('workloads.kpi.workloadsUnit')}</span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            {deploymentsCount} Deployments · {daemonSetsCount} Daemon · {corePodsCount} Core
+            {t('workloads.kpi.workloadsBreakdown', { deployments: deploymentsCount, daemons: daemonSetsCount, core: corePodsCount })}
           </div>
         </div>
 
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #10B981' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>PODS SẴN SÀNG</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('workloads.kpi.readyPods')}</span>
             <Box size={14} color="#10B981" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -338,17 +340,17 @@ export const WorkloadsPage = () => {
               {isLoading ? '...' : `${runningPodsCount}/${totalPodsCount}`}
             </span>
             <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#059669' }}>
-              {totalPodsCount > 0 ? `${Math.round((runningPodsCount / totalPodsCount) * 100)}% Running` : '—'}
+              {totalPodsCount > 0 ? t('workloads.kpi.runningPercent', { percent: Math.round((runningPodsCount / totalPodsCount) * 100) }) : '—'}
             </span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            {totalPodsCount - runningPodsCount === 0 ? 'Không có Pod lỗi' : 'Đang xử lý container'}
+            {totalPodsCount - runningPodsCount === 0 ? t('workloads.kpi.noFailedPods') : t('workloads.kpi.processingContainers')}
           </div>
         </div>
 
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: `2.5px solid ${totalRestartsCount === 0 ? '#10B981' : '#F59E0B'}` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>LƯỢT RESTART</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('workloads.kpi.restarts')}</span>
             <RotateCcw size={14} color={totalRestartsCount === 0 ? '#10B981' : '#F59E0B'} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -356,27 +358,27 @@ export const WorkloadsPage = () => {
               {isLoading ? '...' : totalRestartsCount}
             </span>
             <span style={{ fontSize: '0.7rem', fontWeight: 600, color: totalRestartsCount === 0 ? '#059669' : '#D97706' }}>
-              {totalRestartsCount === 0 ? 'Ổn định' : 'Đã tự ổn định'}
+              {totalRestartsCount === 0 ? t('workloads.kpi.stable') : t('workloads.kpi.selfStabilized')}
             </span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            Giám sát qua cảm biến eBPF
+            {t('workloads.kpi.monitoredByEbpf')}
           </div>
         </div>
 
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #3B82F6' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>NAMESPACES</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('workloads.kpi.namespaces')}</span>
             <CheckCircle2 size={14} color="#3B82F6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {isLoading ? '...' : Math.max(1, dynamicNamespaces.length - 1)}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Không gian</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('workloads.kpi.namespacesUnit')}</span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            Phân lập tài nguyên chuẩn K8s
+            {t('workloads.kpi.namespacesDesc')}
           </div>
         </div>
       </div>
@@ -410,10 +412,10 @@ export const WorkloadsPage = () => {
             <AlertTriangle size={24} />
           </div>
           <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-            Chưa có Pods nào được phát hiện trong cụm này
+            {t('workloads.empty.title')}
           </h3>
           <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--dash-text-secondary)', maxWidth: '560px', lineHeight: '1.5' }}>
-            Cụm <strong style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name}</strong> hiện chưa gửi số liệu Pods về máy chủ. Vui lòng kiểm tra trạng thái tác tử eBPF Agent hoặc cài đặt Agent vào cụm để bắt đầu đồng bộ.
+            {t('workloads.empty.descPrefix')} <strong style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name}</strong> {t('workloads.empty.descSuffix')}
           </p>
           <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
             <button
@@ -433,7 +435,7 @@ export const WorkloadsPage = () => {
               }}
             >
               <Terminal size={14} />
-              <span>Kiểm Tra Agent</span>
+              <span>{t('workloads.empty.checkAgent')}</span>
             </button>
             <button
               onClick={handleRefresh}
@@ -448,7 +450,7 @@ export const WorkloadsPage = () => {
                 cursor: 'pointer',
               }}
             >
-              Thử lại
+              {t('common.retry')}
             </button>
           </div>
         </div>
@@ -459,10 +461,10 @@ export const WorkloadsPage = () => {
         <div className="dash-card" style={{ padding: '16px 18px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           {/* Search & Filter Toolbar */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
-            <div style={{ position: 'relative', width: '290px', maxWidth: '100%' }}>
+            <div className="dash-search-box" style={{ position: 'relative', width: '290px', maxWidth: '100%' }}>
               <input
                 type="text"
-                placeholder={activeView === 'WORKLOADS' ? "Tìm theo tên workload hoặc namespace..." : "Tìm theo tên Pod hoặc Node..."}
+                placeholder={activeView === 'WORKLOADS' ? t('workloads.filters.searchWorkloads') : t('workloads.filters.searchPods')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
@@ -500,7 +502,7 @@ export const WorkloadsPage = () => {
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    {ns === 'ALL' ? 'Mọi Namespace' : ns}
+                    {ns === 'ALL' ? t('workloads.filters.allNamespaces') : ns}
                   </button>
                 ))}
               </div>
@@ -509,29 +511,29 @@ export const WorkloadsPage = () => {
               {activeView === 'WORKLOADS' && (
                 <div style={{ display: 'inline-flex', gap: '3px', padding: '3px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
                   {[
-                    { id: 'ALL', label: 'Mọi loại' },
-                    { id: 'Deployment', label: 'Deployments' },
-                    { id: 'DaemonSet', label: 'DaemonSets' },
-                    { id: 'Static Pod', label: 'Core / Static' },
-                  ].map((t) => (
+                    { id: 'ALL', label: t('workloads.filters.allTypes') },
+                    { id: 'Deployment', label: t('workloads.filters.deployments') },
+                    { id: 'DaemonSet', label: t('workloads.filters.daemonSets') },
+                    { id: 'Static Pod', label: t('workloads.filters.coreStatic') },
+                  ].map((item) => (
                     <button
-                      key={t.id}
-                      onClick={() => setSelectedType(t.id)}
+                      key={item.id}
+                      onClick={() => setSelectedType(item.id)}
                       style={{
                         height: '28px',
                         padding: '0 10px',
                         fontSize: '0.74rem',
-                        fontWeight: selectedType === t.id ? 700 : 600,
-                        backgroundColor: selectedType === t.id ? '#FFFFFF' : 'transparent',
-                        color: selectedType === t.id ? '#0F172A' : '#64748B',
+                        fontWeight: selectedType === item.id ? 700 : 600,
+                        backgroundColor: selectedType === item.id ? '#FFFFFF' : 'transparent',
+                        color: selectedType === item.id ? '#0F172A' : '#64748B',
                         borderRadius: '7px',
                         border: 'none',
-                        boxShadow: selectedType === t.id ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
+                        boxShadow: selectedType === item.id ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      {t.label}
+                      {item.label}
                     </button>
                   ))}
                 </div>
@@ -545,27 +547,27 @@ export const WorkloadsPage = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#64748B', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Tên Khối Công Việc</th>
-                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Loại</th>
-                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Namespace</th>
-                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Pods Sẵn Sàng</th>
-                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Trạng Thái</th>
-                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>CPU / RAM Ước Tính</th>
-                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>Khởi Động Lại</th>
-                    <th style={{ padding: '11px 14px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('workloads.tableWorkloads.colName')}</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('workloads.tableWorkloads.colType')}</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('workloads.tableWorkloads.colNamespace')}</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('workloads.tableWorkloads.colPodsReady')}</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('workloads.tableWorkloads.colStatus')}</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('workloads.tableWorkloads.colResources')}</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('workloads.tableWorkloads.colRestarts')}</th>
+                    <th style={{ padding: '11px 14px', fontWeight: 700, textAlign: 'right' }}>{t('workloads.tableWorkloads.colAction')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
                       <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
-                        Đang tải danh sách Workloads từ cụm Kubernetes...
+                        {t('workloads.tableWorkloads.loading')}
                       </td>
                     </tr>
                   ) : filteredWorkloads.length === 0 ? (
                     <tr>
                       <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
-                        Không tìm thấy khối công việc nào khớp với bộ lọc.
+                        {t('workloads.tableWorkloads.empty')}
                       </td>
                     </tr>
                   ) : (
@@ -585,7 +587,7 @@ export const WorkloadsPage = () => {
                             <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{wl.name}</span>
                           </div>
                           <div style={{ fontSize: '0.68rem', color: '#64748B', marginLeft: '22px' }}>
-                            {wl.pods.length} containers • {wl.age}
+                            {t('workloads.tableWorkloads.containersInfo', { count: wl.pods.length, age: wl.age })}
                           </div>
                         </td>
                         <td style={{ padding: '12px 14px' }}>
@@ -650,7 +652,7 @@ export const WorkloadsPage = () => {
                               cursor: 'pointer',
                             }}
                           >
-                            Xem Chi Tiết
+                            {t('common.viewDetails')}
                           </button>
                         </td>
                       </tr>
@@ -667,26 +669,26 @@ export const WorkloadsPage = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--dash-border)', color: 'var(--dash-text-muted)', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Tên Pod Container</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Namespace</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Node Máy Chủ</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Trạng Thái</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Container Image</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Restarts</th>
-                    <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>{t('workloads.tablePods.colName')}</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>{t('workloads.tablePods.colNamespace')}</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>{t('workloads.tablePods.colNode')}</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>{t('workloads.tablePods.colStatus')}</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>{t('workloads.tablePods.colImage')}</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>{t('workloads.tablePods.colRestarts')}</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'right' }}>{t('workloads.tablePods.colAction')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
                       <td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
-                        Đang tải danh sách Pods...
+                        {t('workloads.tablePods.loading')}
                       </td>
                     </tr>
                   ) : filteredPods.length === 0 ? (
                     <tr>
                       <td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
-                        Không tìm thấy Pod nào.
+                        {t('workloads.tablePods.empty')}
                       </td>
                     </tr>
                   ) : (
@@ -750,7 +752,7 @@ export const WorkloadsPage = () => {
                               cursor: 'pointer',
                             }}
                           >
-                            {can(PERMISSIONS.ENV_MANAGE) ? 'Khởi động lại (Restart)' : 'Xem Chi Tiết'}
+                            {can(PERMISSIONS.ENV_MANAGE) ? t('workloads.tablePods.restartBtn') : t('common.viewDetails')}
                           </button>
                         </td>
                       </tr>
@@ -806,7 +808,9 @@ export const WorkloadsPage = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Box size={18} color="var(--dash-primary)" />
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                  {selectedItem.type === 'WORKLOAD' ? `Khối Công Việc: ${selectedItem.data.name}` : `Pod: ${selectedItem.data.name}`}
+                  {selectedItem.type === 'WORKLOAD'
+                    ? t('workloads.modal.workloadTitle', { name: selectedItem.data.name })
+                    : t('workloads.modal.podTitle', { name: selectedItem.data.name })}
                 </h3>
               </div>
               <button
@@ -819,27 +823,27 @@ export const WorkloadsPage = () => {
 
             {/* Body */}
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="dash-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ padding: '10px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Namespace</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{t('workloads.modal.namespace')}</div>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
                     {selectedItem.data.namespace}
                   </div>
                 </div>
                 <div style={{ padding: '10px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Loại / Kiến Trúc</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{t('workloads.modal.archType')}</div>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-primary)', marginTop: '2px' }}>
-                    {selectedItem.type === 'WORKLOAD' ? selectedItem.data.type : 'Kubernetes Pod'}
+                    {selectedItem.type === 'WORKLOAD' ? selectedItem.data.type : t('workloads.modal.k8sPod')}
                   </div>
                 </div>
                 <div style={{ padding: '10px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Số Lượng Khởi Động Lại (Restarts)</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{t('workloads.modal.restarts')}</div>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: selectedItem.data.restarts > 0 || selectedItem.data.restart_count > 0 ? 'var(--dash-warning-text)' : 'var(--dash-success)', marginTop: '2px' }}>
-                    {selectedItem.data.restarts !== undefined ? selectedItem.data.restarts : selectedItem.data.restart_count || 0} lần
+                    {t('workloads.modal.restartsValue', { count: selectedItem.data.restarts !== undefined ? selectedItem.data.restarts : selectedItem.data.restart_count || 0 })}
                   </div>
                 </div>
                 <div style={{ padding: '10px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Trạng Thái Vận Hành</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{t('workloads.modal.opStatus')}</div>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-success)', marginTop: '2px' }}>
                     {selectedItem.type === 'WORKLOAD' ? selectedItem.data.statusLabel : selectedItem.data.status || 'Running'}
                   </div>
@@ -850,7 +854,7 @@ export const WorkloadsPage = () => {
               {selectedItem.type === 'WORKLOAD' && (
                 <div>
                   <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', marginBottom: '6px' }}>
-                    Các Pods thuộc khối công việc này ({selectedItem.data.pods.length}):
+                    {t('workloads.modal.childPodsTitle', { count: selectedItem.data.pods.length })}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto' }}>
                     {selectedItem.data.pods.map((p) => (
@@ -871,7 +875,7 @@ export const WorkloadsPage = () => {
                           {p.name}
                         </span>
                         <span style={{ color: 'var(--dash-text-muted)' }}>
-                          Restarts: {p.restart_count || 0}
+                          {t('workloads.modal.childPodRestarts', { count: p.restart_count || 0 })}
                         </span>
                       </div>
                     ))}
@@ -882,7 +886,7 @@ export const WorkloadsPage = () => {
               {/* Image Info nếu là Pod */}
               {selectedItem.type === 'POD' && (
                 <div>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginBottom: '4px' }}>Container Image:</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', marginBottom: '4px' }}>{t('workloads.modal.imageTitle')}</div>
                   <div style={{ padding: '8px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-primary)', wordBreak: 'break-all' }}>
                     {selectedItem.data.image || 'k8s-runtime'}
                   </div>
@@ -904,7 +908,7 @@ export const WorkloadsPage = () => {
               >
                 <Info size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
                 <span>
-                  <strong>Hệ Thống Tự Chữa Lành MAPE-K:</strong> Khi bạn thực hiện Khởi động lại (Restart), hệ thống sẽ gửi lệnh điều phối đến cụm Kubernetes và ghi nhận vào nhật ký kiểm toán (Audit Trail) để đối chiếu hiệu năng.
+                  <strong>{t('workloads.modal.mapeKLabel')}</strong> {t('workloads.modal.mapeKDesc')}
                 </span>
               </div>
             </div>
@@ -933,7 +937,7 @@ export const WorkloadsPage = () => {
                   color: 'var(--dash-text-secondary)',
                 }}
               >
-                Đóng
+                {t('common.close')}
               </button>
               {can(PERMISSIONS.ENV_MANAGE) && (
               <button
@@ -959,15 +963,15 @@ export const WorkloadsPage = () => {
                 {restartStatus === 'RESTARTING' ? (
                   <>
                     <RefreshCw size={14} className="animate-spin" />
-                    <span>Đang gửi lệnh MAPE-K...</span>
+                    <span>{t('workloads.modal.restarting')}</span>
                   </>
                 ) : restartStatus === 'SUCCESS' ? (
                   <>
                     <CheckCircle2 size={14} />
-                    <span>Đã gửi lệnh thành công!</span>
+                    <span>{t('workloads.modal.restartSuccess')}</span>
                   </>
                 ) : (
-                  <span>Khởi Động Lại (Restart)</span>
+                  <span>{t('workloads.modal.restartAction')}</span>
                 )}
               </button>
               )}

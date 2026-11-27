@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import logoPng from '../../assets/Logo-transparent.png';
 import { useDashboard } from '../../pages/Dashboard/context/DashboardContext';
 import { useAuth } from '../../context/AuthContext';
@@ -14,12 +15,24 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  Radio,
+  Server,
+  Layers,
+  Box,
+  Building2,
+  Users,
+  ScrollText,
+  BarChart3,
+  ShieldAlert,
+  Settings,
 } from 'lucide-react';
 
-export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
+export const Sidebar = ({ currentPath = '/dashboard', isFloating = true, isMobileDrawer = false }) => {
+  const { t } = useTranslation('dashboard');
   const {
     isSidebarCollapsed,
     setIsSidebarCollapsed,
+    setIsMobileNavOpen,
     pendingApprovalsCount,
     activeIncidentsCount,
     newHealingHistoryCount,
@@ -28,6 +41,8 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
     currentOrg,
     currentUserRole,
   } = useDashboard();
+
+  const effectiveCollapsed = isMobileDrawer ? false : isSidebarCollapsed;
 
   // Tự động xóa số thông báo mới khi người dùng đang mở trang Lịch sử phục hồi
   React.useEffect(() => {
@@ -54,60 +69,99 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
   const isDevOpsUser = effectiveRole === 'DEVOPS';
   const isViewerUser = effectiveRole === 'VIEWER';
 
-  const navGroups = [
-    {
-      group: 'TỔNG QUAN',
-      items: [
-        { name: 'Bảng điều khiển', path: '/dashboard', icon: LayoutDashboard },
-      ],
-    },
-    {
-      group: 'GIÁM SÁT',
-      items: [
-        { name: 'Chỉ số tài nguyên', path: '/dashboard/monitoring/metrics', icon: LineChart },
-        { name: 'Nhật ký container', path: '/dashboard/monitoring/logs', icon: FileText },
-        { name: 'Sự kiện K8s', path: '/dashboard/monitoring/events', icon: Activity },
-      ],
-    },
-    {
-      group: 'AI & SỰ CỐ',
-      items: [
-        {
-          name: 'Quản lý sự cố & RCA',
-          path: '/dashboard/incidents',
-          icon: AlertTriangle,
-          badge: activeIncidentsCount > 0 ? `${activeIncidentsCount}` : null,
-          badgeType: 'danger',
-        },
-      ],
-    },
-    {
-      group: 'TỰ PHỤC HỒI',
-      items: [
-        { name: 'Hành động tự sửa', path: '/dashboard/self-healing/actions', icon: Zap },
-        {
-          name: 'Lịch sử phục hồi',
-          path: '/dashboard/self-healing/history',
-          icon: History,
-          badge: newHealingHistoryCount > 0 ? `${newHealingHistoryCount}` : null,
-          badgeType: 'mint',
-        },
-        {
-          name: 'Cổng phê duyệt (HITL)',
-          path: '/dashboard/self-healing/approvals',
-          icon: CheckCircle2,
-          badge: pendingApprovalsCount > 0 ? `${pendingApprovalsCount}` : null,
-          badgeType: 'warning',
-        },
-      ],
-    },
-  ];
+  const navGroups = React.useMemo(
+    () => [
+      {
+        key: 'overview',
+        group: t('sidebar.groups.overview'),
+        items: [
+          { name: t('sidebar.items.dashboard'), path: '/dashboard', icon: LayoutDashboard },
+        ],
+      },
+      {
+        key: 'monitoring',
+        group: t('sidebar.groups.monitoring'),
+        items: [
+          { name: t('sidebar.items.metrics'), path: '/dashboard/monitoring/metrics', icon: LineChart },
+          { name: t('sidebar.items.logs'), path: '/dashboard/monitoring/logs', icon: FileText },
+          { name: t('sidebar.items.events'), path: '/dashboard/monitoring/events', icon: Activity },
+        ],
+      },
+      {
+        key: 'ai',
+        group: t('sidebar.groups.ai'),
+        items: [
+          {
+            name: t('sidebar.items.incidents'),
+            path: '/dashboard/incidents',
+            icon: AlertTriangle,
+            badge: activeIncidentsCount > 0 ? `${activeIncidentsCount}` : null,
+            badgeType: 'danger',
+          },
+        ],
+      },
+      {
+        key: 'selfHealing',
+        group: t('sidebar.groups.selfHealing'),
+        items: [
+          { name: t('sidebar.items.actions'), path: '/dashboard/self-healing/actions', icon: Zap },
+          {
+            name: t('sidebar.items.history'),
+            path: '/dashboard/self-healing/history',
+            icon: History,
+            badge: newHealingHistoryCount > 0 ? `${newHealingHistoryCount}` : null,
+            badgeType: 'mint',
+          },
+          {
+            name: t('sidebar.items.approvalGate'),
+            path: '/dashboard/self-healing/approvals',
+            icon: CheckCircle2,
+            badge: pendingApprovalsCount > 0 ? `${pendingApprovalsCount}` : null,
+            badgeType: 'warning',
+          },
+        ],
+      },
+      ...(isMobileDrawer
+        ? [
+            {
+              key: 'infra',
+              group: t('sidebar.groups.infraShort'),
+              items: [
+                { name: t('sidebar.items.agents'), path: '/dashboard/agents', icon: Radio },
+                { name: t('sidebar.items.clustersShort'), path: '/dashboard/clusters', icon: Server },
+                { name: t('sidebar.items.infraHosts'), path: '/dashboard/infrastructure', icon: Layers },
+                { name: t('sidebar.items.workloadsFull'), path: '/dashboard/workloads', icon: Box },
+              ],
+            },
+            {
+              key: 'org',
+              group: t('sidebar.groups.orgGroup'),
+              items: [
+                { name: t('sidebar.items.organizationTitle'), path: '/dashboard/organization', icon: Building2 },
+                { name: t('sidebar.items.membersFull'), path: '/dashboard/organization/members', icon: Users },
+              ],
+            },
+            {
+              key: 'system',
+              group: t('sidebar.groups.systemGroup'),
+              items: [
+                { name: t('sidebar.items.policies'), path: '/dashboard/self-healing/policies', icon: ShieldAlert },
+                { name: t('sidebar.items.auditLogs'), path: '/dashboard/audit-logs', icon: ScrollText },
+                { name: t('sidebar.items.slaReports'), path: '/dashboard/reports', icon: BarChart3 },
+                { name: t('sidebar.items.systemSettings'), path: '/dashboard/settings', icon: Settings },
+              ],
+            },
+          ]
+        : []),
+    ],
+    [t, activeIncidentsCount, newHealingHistoryCount, pendingApprovalsCount, isMobileDrawer]
+  );
 
   const filteredNavGroups = React.useMemo(() => {
     // 1. Viewer: Xóa Cổng phê duyệt, Cài đặt hệ thống, Tổ chức, Chính sách tự động, Cụm K8s
     if (isViewerUser) {
       return navGroups
-        .filter((group) => group.group !== 'TỔ CHỨC')
+        .filter((group) => group.key !== 'org')
         .map((group) => {
           const filteredItems = group.items.filter((item) => {
             if (item.path === '/dashboard/clusters') return false;
@@ -127,9 +181,9 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
     // 2. DevOps: Thấy toàn bộ hạ tầng, giám sát, AI, tự phục hồi nhưng ẩn Tổ chức và Cài đặt hệ thống
     if (isDevOpsUser) {
       return navGroups
-        .filter((group) => group.group !== 'TỔ CHỨC')
+        .filter((group) => group.key !== 'org')
         .map((group) => {
-          if (group.group === 'HỆ THỐNG') {
+          if (group.key === 'system') {
             return {
               ...group,
               items: group.items.filter((item) => item.path !== '/dashboard/settings'),
@@ -185,6 +239,9 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
     if (path === '/dashboard/self-healing/history') {
       clearNewHealingHistoryCount?.();
     }
+    if (isMobileDrawer) {
+      setIsMobileNavOpen?.(false);
+    }
     if (onNavigate) {
       onNavigate(path);
     }
@@ -194,8 +251,8 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
     <aside
       className="dashboard-sidebar"
       style={{
-        width: isSidebarCollapsed ? '68px' : '256px',
-        minWidth: isSidebarCollapsed ? '68px' : '256px',
+        width: isMobileDrawer ? '100%' : effectiveCollapsed ? '68px' : '256px',
+        minWidth: isMobileDrawer ? 0 : effectiveCollapsed ? '68px' : '256px',
         background: isFloating
           ? 'linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.80) 100%)'
           : '#FFFFFF',
@@ -255,8 +312,8 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
         <button
           type="button"
           onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          title={isSidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
-          aria-label={isSidebarCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+          title={isSidebarCollapsed ? t('sidebar.expandAria') : t('sidebar.collapseAria')}
+          aria-label={isSidebarCollapsed ? t('sidebar.expandAria') : t('sidebar.collapseAria')}
           style={{
             position: 'absolute',
             right: '-13px',
@@ -292,11 +349,11 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
       {/* Brand Header inside Floating Sidebar Card */}
       <div
         style={{
-          padding: isSidebarCollapsed ? '14px 10px' : '14px 16px',
+          padding: effectiveCollapsed ? '14px 10px' : '14px 16px',
           borderBottom: '1px solid rgba(203, 213, 225, 0.55)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: isSidebarCollapsed ? 'center' : 'flex-start',
+          justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
           minHeight: '58px',
           flexShrink: 0,
           position: 'relative',
@@ -304,8 +361,8 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
         }}
       >
         <div
-          onClick={() => (isSidebarCollapsed ? setIsSidebarCollapsed(false) : handleItemClick('/dashboard'))}
-          title={isSidebarCollapsed ? 'Nhấp để mở rộng thanh điều hướng' : 'Trang chủ Dashboard'}
+          onClick={() => (effectiveCollapsed ? setIsSidebarCollapsed(false) : handleItemClick('/dashboard'))}
+          title={effectiveCollapsed ? t('sidebar.expandHint') : t('sidebar.homeTitle')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -326,13 +383,13 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
               flexShrink: 0,
             }}
           />
-          {!isSidebarCollapsed && (
+          {!effectiveCollapsed && (
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 800, fontSize: '0.9375rem', color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
                 SelfHeal
               </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                Bảng Vận Hành Hệ Thống
+                {t('sidebar.brandSubtitle')}
               </div>
             </div>
           )}
@@ -343,7 +400,7 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
       <div
         className="dashboard-sidebar-nav"
         style={{
-          padding: isSidebarCollapsed ? '12px 8px' : '16px 12px',
+          padding: effectiveCollapsed ? '12px 8px' : '16px 12px',
           display: 'flex',
           flexDirection: 'column',
           gap: '20px',
@@ -358,7 +415,7 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
       >
         {filteredNavGroups.map((group, gIdx) => (
           <div key={gIdx}>
-            {!isSidebarCollapsed && (
+            {!effectiveCollapsed && (
               <div
                 style={{
                   fontSize: '0.6875rem',
@@ -381,12 +438,12 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
                   <button
                     key={iIdx}
                     onClick={() => handleItemClick(item.path)}
-                    title={isSidebarCollapsed ? item.name : undefined}
+                    title={effectiveCollapsed ? item.name : undefined}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
-                      padding: isSidebarCollapsed ? '10px 0' : '8px 12px',
+                      justifyContent: effectiveCollapsed ? 'center' : 'space-between',
+                      padding: effectiveCollapsed ? '10px 0' : '8px 12px',
                       borderRadius: 'var(--dash-radius-md)',
                       backgroundColor: isActive ? 'var(--dash-primary-light)' : 'transparent',
                       color: isActive ? 'var(--dash-primary)' : 'var(--dash-text-secondary)',
@@ -412,16 +469,18 @@ export const Sidebar = ({ currentPath = '/dashboard', isFloating = true }) => {
                       }
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                       <Icon
                         size={17}
                         strokeWidth={isActive ? 2.2 : 1.8}
                         style={{ color: isActive ? 'var(--dash-primary)' : 'var(--dash-text-secondary)', flexShrink: 0 }}
                       />
-                      {!isSidebarCollapsed && <span>{item.name}</span>}
+                      {!effectiveCollapsed && (
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                      )}
                     </div>
 
-                    {!isSidebarCollapsed && item.badge && (
+                    {!effectiveCollapsed && item.badge && (
                       <span
                         style={{
                           fontSize: '0.6875rem',

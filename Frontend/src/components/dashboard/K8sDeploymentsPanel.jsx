@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Layers, Search, CheckCircle2, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
 import K8sFreshnessBadge from './K8sFreshnessBadge';
 
@@ -14,6 +15,7 @@ export const K8sDeploymentsPanel = ({
   isLoading = false,
   onSelectDeployment,
 }) => {
+  const { t } = useTranslation('dashMonitoring');
   const [search, setSearch] = useState('');
   const [selectedNs, setSelectedNs] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
@@ -42,7 +44,7 @@ export const K8sDeploymentsPanel = ({
     if (effective === 'Unverified') {
       return (
         <span
-          title="Dữ liệu quan sát đã cũ hoặc Agent mất kết nối, chưa thể xác minh trạng thái hiện tại"
+          title={t('k8sComponents.deployments.badges.unverifiedTitle')}
           style={{
             fontSize: '0.6875rem',
             padding: '3px 8px',
@@ -55,7 +57,7 @@ export const K8sDeploymentsPanel = ({
             gap: '4px',
           }}
         >
-          <AlertTriangle size={12} /> Chưa xác minh
+          <AlertTriangle size={12} /> {t('k8sComponents.deployments.badges.unverified')}
         </span>
       );
     }
@@ -76,13 +78,13 @@ export const K8sDeploymentsPanel = ({
               gap: '4px',
             }}
           >
-            <CheckCircle2 size={12} /> Khỏe mạnh
+            <CheckCircle2 size={12} /> {t('k8sComponents.deployments.badges.healthy')}
           </span>
         );
       case 'ScaledToZero':
         return (
           <span
-            title="Deployment chủ động scale về 0 replicas (không phải lỗi)"
+            title={t('k8sComponents.deployments.badges.scaledToZeroTitle')}
             style={{
               fontSize: '0.6875rem',
               padding: '3px 8px',
@@ -95,7 +97,7 @@ export const K8sDeploymentsPanel = ({
               gap: '4px',
             }}
           >
-            <Clock size={12} /> Scaled To Zero (0/0)
+            <Clock size={12} /> {t('k8sComponents.deployments.badges.scaledToZero')}
           </span>
         );
       case 'Progressing':
@@ -113,7 +115,7 @@ export const K8sDeploymentsPanel = ({
               gap: '4px',
             }}
           >
-            <RefreshCw size={12} className="spin-slow" /> Đang Rollout
+            <RefreshCw size={12} className="spin-slow" /> {t('k8sComponents.deployments.badges.progressing')}
           </span>
         );
       case 'Degraded':
@@ -131,7 +133,7 @@ export const K8sDeploymentsPanel = ({
               gap: '4px',
             }}
           >
-            <AlertTriangle size={12} /> Thiếu Replica (Degraded)
+            <AlertTriangle size={12} /> {t('k8sComponents.deployments.badges.degraded')}
           </span>
         );
       case 'ProgressDeadlineExceeded':
@@ -149,7 +151,7 @@ export const K8sDeploymentsPanel = ({
               gap: '4px',
             }}
           >
-            <AlertTriangle size={12} /> Quá hạn Rollout (Timeout)
+            <AlertTriangle size={12} /> {t('k8sComponents.deployments.badges.timeout')}
           </span>
         );
       case 'ReplicaFailure':
@@ -167,7 +169,7 @@ export const K8sDeploymentsPanel = ({
               gap: '4px',
             }}
           >
-            <AlertTriangle size={12} /> Lỗi tạo Replica
+            <AlertTriangle size={12} /> {t('k8sComponents.deployments.badges.replicaFailure')}
           </span>
         );
       case 'InsufficientData':
@@ -183,7 +185,7 @@ export const K8sDeploymentsPanel = ({
               border: '1px solid #CBD5E1',
             }}
           >
-            Thiếu dữ liệu
+            {t('k8sComponents.deployments.badges.insufficientData')}
           </span>
         );
       default:
@@ -211,7 +213,7 @@ export const K8sDeploymentsPanel = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Layers size={18} color="var(--dash-primary)" />
           <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>
-            Danh Sách Deployments & Quản Lý Replicas ({filteredDeployments.length}/{deployments.length} Deployments)
+            {t('k8sComponents.deployments.title', { filtered: filteredDeployments.length, total: deployments.length })}
           </h3>
         </div>
 
@@ -220,7 +222,7 @@ export const K8sDeploymentsPanel = ({
             <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: '10px', top: '10px' }} />
             <input
               type="text"
-              placeholder="Tìm Deployment..."
+              placeholder={t('k8sComponents.deployments.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ padding: '7px 12px 7px 30px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem', width: '200px' }}
@@ -232,12 +234,12 @@ export const K8sDeploymentsPanel = ({
             onChange={(e) => setSelectedNs(e.target.value)}
             style={{ padding: '7px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
           >
-            <option value="ALL">Tất cả Namespace ({namespaces.length})</option>
+            <option value="ALL">{t('k8sComponents.deployments.allNamespaces', { count: namespaces.length })}</option>
             {namespaces.map((ns) => {
               const nsName = ns.name || ns;
               return (
                 <option key={nsName} value={nsName}>
-                  Namespace: {nsName}
+                  {t('k8sComponents.deployments.namespacePrefix', { name: nsName })}
                 </option>
               );
             })}
@@ -248,13 +250,13 @@ export const K8sDeploymentsPanel = ({
             onChange={(e) => setSelectedStatus(e.target.value)}
             style={{ padding: '7px 12px', border: '1px solid var(--dash-border)', borderRadius: '6px', fontSize: '0.8125rem' }}
           >
-            <option value="ALL">Tất cả Trạng thái</option>
-            <option value="Healthy">Khỏe mạnh (Healthy)</option>
-            <option value="Progressing">Đang Rollout</option>
-            <option value="Degraded">Thiếu Replica (Degraded)</option>
-            <option value="ScaledToZero">Scaled to Zero</option>
-            <option value="ProgressDeadlineExceeded">Quá hạn Rollout</option>
-            <option value="Unverified">Chưa xác minh</option>
+            <option value="ALL">{t('k8sComponents.deployments.allStatuses')}</option>
+            <option value="Healthy">{t('k8sComponents.deployments.statusOptions.healthy')}</option>
+            <option value="Progressing">{t('k8sComponents.deployments.statusOptions.progressing')}</option>
+            <option value="Degraded">{t('k8sComponents.deployments.statusOptions.degraded')}</option>
+            <option value="ScaledToZero">{t('k8sComponents.deployments.statusOptions.scaledToZero')}</option>
+            <option value="ProgressDeadlineExceeded">{t('k8sComponents.deployments.statusOptions.timeout')}</option>
+            <option value="Unverified">{t('k8sComponents.deployments.statusOptions.unverified')}</option>
           </select>
         </div>
       </div>
@@ -265,28 +267,28 @@ export const K8sDeploymentsPanel = ({
           <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
             <Layers size={24} />
           </div>
-          <h4 style={{ margin: '0 0 6px 0', fontSize: '1rem', fontWeight: 700, color: '#1E293B' }}>Chưa có Deployment nào</h4>
+          <h4 style={{ margin: '0 0 6px 0', fontSize: '1rem', fontWeight: 700, color: '#1E293B' }}>{t('k8sComponents.deployments.emptyTitle')}</h4>
           <p style={{ margin: 0, fontSize: '0.8125rem' }}>
-            Khi các Deployments được khởi chạy trên cụm K8s, Agent sẽ quét và đồng bộ trạng thái Replica về bảng này.
+            {t('k8sComponents.deployments.emptyDesc')}
           </p>
         </div>
       ) : filteredDeployments.length === 0 ? (
         <div style={{ padding: '36px 20px', textAlign: 'center', color: '#64748B', fontSize: '0.875rem' }}>
-          Không tìm thấy Deployment nào khớp với bộ lọc hiện tại.
+          {t('k8sComponents.deployments.emptyFilter')}
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--dash-border)', backgroundColor: '#FAFAFA', color: 'var(--dash-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
-                <th style={{ padding: '12px 18px' }}>Tên Deployment</th>
-                <th style={{ padding: '12px 18px' }}>Namespace</th>
-                <th style={{ padding: '12px 18px' }}>Trạng Thái Rollout</th>
-                <th style={{ padding: '12px 18px' }}>Replicas (Sẵn Sàng / Mong Muốn)</th>
-                <th style={{ padding: '12px 18px' }}>Replicas Khả Dụng / Cập Nhật</th>
-                <th style={{ padding: '12px 18px' }}>Generation (Obs / Des)</th>
-                <th style={{ padding: '12px 18px' }}>Độ Tươi (Freshness)</th>
-                <th style={{ padding: '12px 18px', textAlign: 'right' }}>Thao Tác</th>
+                <th style={{ padding: '12px 18px' }}>{t('k8sComponents.deployments.colName')}</th>
+                <th style={{ padding: '12px 18px' }}>{t('k8sComponents.deployments.colNamespace')}</th>
+                <th style={{ padding: '12px 18px' }}>{t('k8sComponents.deployments.colRolloutStatus')}</th>
+                <th style={{ padding: '12px 18px' }}>{t('k8sComponents.deployments.colReplicas')}</th>
+                <th style={{ padding: '12px 18px' }}>{t('k8sComponents.deployments.colAvailUpdated')}</th>
+                <th style={{ padding: '12px 18px' }}>{t('k8sComponents.deployments.colGeneration')}</th>
+                <th style={{ padding: '12px 18px' }}>{t('k8sComponents.deployments.colFreshness')}</th>
+                <th style={{ padding: '12px 18px', textAlign: 'right' }}>{t('k8sComponents.deployments.colAction')}</th>
               </tr>
             </thead>
             <tbody>
@@ -336,13 +338,13 @@ export const K8sDeploymentsPanel = ({
                       </span>
                       {isDegraded && (
                         <span style={{ fontSize: '0.6875rem', color: '#DC2626', marginLeft: '6px' }}>
-                          (Thiếu {desired - (ready ?? 0)})
+                          {t('k8sComponents.deployments.missingReplicas', { count: desired - (ready ?? 0) })}
                         </span>
                       )}
                     </td>
                     <td style={{ padding: '14px 18px' }}>
                       <span style={{ color: '#475569' }}>
-                        Khả dụng: <strong>{available !== null ? available : '—'}</strong> &bull; Đã cập nhật:{' '}
+                        {t('k8sComponents.deployments.availableLabel')} <strong>{available !== null ? available : '—'}</strong> &bull; {t('k8sComponents.deployments.updatedLabel')}{' '}
                         <strong>{updated !== null ? updated : '—'}</strong>
                       </span>
                     </td>
@@ -367,7 +369,7 @@ export const K8sDeploymentsPanel = ({
                           cursor: 'pointer',
                         }}
                       >
-                        Chi Tiết
+                        {t('k8sComponents.deployments.detailsBtn')}
                       </button>
                     </td>
                   </tr>

@@ -1,5 +1,7 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CheckCircle2, HelpCircle } from 'lucide-react';
+import i18n from '../../i18n';
 
 /**
  * Normalizes and categorizes raw Kubernetes event type into canonical severity
@@ -29,8 +31,8 @@ export function getK8sSeverityConfig(rawType, options = {}) {
     case 'Warning':
       return {
         canonical,
-        label: showFullLabel ? 'Cảnh báo (Warning)' : 'Warning',
-        ariaLabel: 'Mức độ Cảnh báo (Warning)',
+        label: showFullLabel ? i18n.t('dashMonitoring:events.severity.warningFull') : i18n.t('dashMonitoring:events.severity.warningShort'),
+        ariaLabel: i18n.t('dashMonitoring:events.severity.warningAria'),
         bg: '#FFF1F2',
         color: '#E11D48',
         border: '1px solid #FDA4AF',
@@ -39,8 +41,8 @@ export function getK8sSeverityConfig(rawType, options = {}) {
     case 'Normal':
       return {
         canonical,
-        label: showFullLabel ? 'Bình thường (Normal)' : 'Normal',
-        ariaLabel: 'Mức độ Bình thường (Normal)',
+        label: showFullLabel ? i18n.t('dashMonitoring:events.severity.normalFull') : i18n.t('dashMonitoring:events.severity.normalShort'),
+        ariaLabel: i18n.t('dashMonitoring:events.severity.normalAria'),
         bg: 'rgba(5, 150, 105, 0.1)',
         color: '#059669',
         border: '1px solid #34D399',
@@ -51,8 +53,8 @@ export function getK8sSeverityConfig(rawType, options = {}) {
       const displayRaw = typeof rawType === 'string' && rawType.trim() ? rawType.trim() : 'N/A';
       return {
         canonical,
-        label: showFullLabel ? `Không xác định (${displayRaw})` : displayRaw,
-        ariaLabel: `Mức độ Không xác định: ${displayRaw}`,
+        label: showFullLabel ? i18n.t('dashMonitoring:events.severity.unknownFull', { raw: displayRaw }) : displayRaw,
+        ariaLabel: i18n.t('dashMonitoring:events.severity.unknownAria', { raw: displayRaw }),
         bg: '#F1F5F9',
         color: '#475569',
         border: '1px solid #CBD5E1',
@@ -73,6 +75,7 @@ export const K8sEventSeverityBadge = ({
   className = '',
   style = {},
 }) => {
+  useTranslation('dashMonitoring');
   const config = getK8sSeverityConfig(type, { showFullLabel });
   const { Icon, label, bg, color, border, ariaLabel } = config;
   const iconSize = size === 'sm' ? 11 : 13;

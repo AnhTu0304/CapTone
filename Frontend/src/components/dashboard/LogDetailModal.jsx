@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   X,
   Terminal,
@@ -11,6 +12,7 @@ import {
   Code,
   ShieldAlert,
 } from 'lucide-react';
+import i18n, { getIntlLocale } from '../../i18n';
 
 /**
  * Mask sensitive credentials or secrets in text
@@ -31,7 +33,7 @@ export function formatLogTimestamp(timestamp) {
     const d = new Date(timestamp);
     if (isNaN(d.getTime())) return { local: String(timestamp), utc: String(timestamp) };
     return {
-      local: d.toLocaleString('vi-VN', {
+      local: d.toLocaleString(getIntlLocale(i18n.language), {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -70,6 +72,7 @@ export function getLogLevelBadgeStyle(level) {
 }
 
 export const LogDetailModal = ({ log, onClose }) => {
+  const { t } = useTranslation('dashMonitoring');
   const [copiedMsg, setCopiedMsg] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
 
@@ -163,7 +166,7 @@ export const LogDetailModal = ({ log, onClose }) => {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h3 style={{ fontSize: '1.0625rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Chi tiết Bản ghi Nhật ký
+                  {t('logs.modal.title')}
                 </h3>
                 <span
                   style={{
@@ -180,7 +183,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                 </span>
               </div>
               <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                Mã định danh ID: <code style={{ fontFamily: 'var(--font-mono)' }}>#{log.id || 'N/A'}</code>
+                {t('logs.modal.idLabel')} <code style={{ fontFamily: 'var(--font-mono)' }}>#{log.id || 'N/A'}</code>
               </p>
             </div>
           </div>
@@ -189,7 +192,7 @@ export const LogDetailModal = ({ log, onClose }) => {
             type="button"
             data-testid="log-detail-close-btn"
             onClick={onClose}
-            aria-label="Đóng modal"
+            aria-label={t('logs.modal.closeAria')}
             style={{
               background: 'none',
               border: 'none',
@@ -222,7 +225,7 @@ export const LogDetailModal = ({ log, onClose }) => {
           >
             <div>
               <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Clock size={12} /> Thời gian (GMT+7):
+                <Clock size={12} /> {t('logs.modal.timestampLabel')}
               </span>
               <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
                 {timeFormatted.local}
@@ -231,7 +234,7 @@ export const LogDetailModal = ({ log, onClose }) => {
 
             <div>
               <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Layers size={12} /> Namespace:
+                <Layers size={12} /> {t('logs.modal.namespaceLabel')}
               </span>
               <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#7C3AED', fontFamily: 'var(--font-mono)' }}>
                 {log.namespace || log.metadata?.namespace || 'default'}
@@ -240,25 +243,25 @@ export const LogDetailModal = ({ log, onClose }) => {
 
             <div>
               <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Server size={12} /> Dịch vụ (Service):
+                <Server size={12} /> {t('logs.modal.serviceLabel')}
               </span>
               <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0284C7' }}>
-                {log.service_name || log.service_id || 'Chưa định danh'}
+                {log.service_name || log.service_id || t('logs.modal.serviceUnknown')}
               </span>
             </div>
 
             <div>
               <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Box size={12} /> Pod ID / Container:
+                <Box size={12} /> {t('logs.modal.podLabel')}
               </span>
               <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155', fontFamily: 'var(--font-mono)' }}>
-                {log.pod_name || log.pod_id || log.pod || 'Chưa gán'}
+                {log.pod_name || log.pod_id || log.pod || t('logs.modal.podUnassigned')}
               </span>
             </div>
 
             <div>
               <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Layers size={12} /> Nguồn thu thập (Source):
+                <Layers size={12} /> {t('logs.modal.sourceLabel')}
               </span>
               <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#059669' }}>
                 {log.source || 'k8s-agent'}
@@ -267,7 +270,7 @@ export const LogDetailModal = ({ log, onClose }) => {
 
             {log.cluster_id && (
               <div style={{ gridColumn: '1 / -1' }}>
-                <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B' }}>Cluster UID:</span>
+                <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B' }}>{t('logs.modal.clusterUidLabel')}</span>
                 <span style={{ fontSize: '0.75rem', color: '#475569', marginLeft: '6px', fontFamily: 'var(--font-mono)' }}>
                   {log.cluster_id}
                 </span>
@@ -279,7 +282,7 @@ export const LogDetailModal = ({ log, onClose }) => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
-                Thông điệp chi tiết (Message)
+                {t('logs.modal.messageTitle')}
               </span>
               <button
                 type="button"
@@ -299,7 +302,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                 }}
               >
                 {copiedMsg ? <Check size={12} color="#059669" /> : <Copy size={12} />}
-                <span>{copiedMsg ? 'Đã sao chép' : 'Sao chép'}</span>
+                <span>{copiedMsg ? t('common.copied') : t('common.copy')}</span>
               </button>
             </div>
             <div
@@ -318,7 +321,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                 border: '1px solid #334155',
               }}
             >
-              {maskedMessage || 'Không có nội dung thông điệp'}
+              {maskedMessage || t('logs.modal.emptyMessage')}
             </div>
           </div>
 
@@ -327,7 +330,7 @@ export const LogDetailModal = ({ log, onClose }) => {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Code size={14} color="#0284C7" /> Dữ liệu cấu trúc đính kèm (Metadata)
+                  <Code size={14} color="#0284C7" /> {t('logs.modal.metadataTitle')}
                 </span>
                 <button
                   type="button"
@@ -347,7 +350,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                   }}
                 >
                   {copiedJson ? <Check size={12} color="#059669" /> : <Copy size={12} />}
-                  <span>{copiedJson ? 'Đã sao chép JSON' : 'Sao chép JSON'}</span>
+                  <span>{copiedJson ? t('common.copiedJson') : t('common.copyJson')}</span>
                 </button>
               </div>
               <pre
@@ -384,7 +387,7 @@ export const LogDetailModal = ({ log, onClose }) => {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748B', fontSize: '0.75rem' }}>
             <ShieldAlert size={14} color="#059669" />
-            <span>Mã hóa bảo vệ tự động các trường nhạy cảm</span>
+            <span>{t('logs.modal.securityNotice')}</span>
           </div>
 
           <button
@@ -402,7 +405,7 @@ export const LogDetailModal = ({ log, onClose }) => {
               cursor: 'pointer',
             }}
           >
-            Đóng
+            {t('common.close')}
           </button>
         </div>
       </div>

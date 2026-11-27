@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n, { getIntlLocale } from '../../../i18n';
 import { aiService } from '../../../services/aiService';
 import { translateIncidentTitle, ACTION_DISPLAY_NAMES_VI, translateActionMessageToVi } from './incidentUtils';
 import {
@@ -35,48 +37,54 @@ const ACTION_DISPLAY_NAMES = ACTION_DISPLAY_NAMES_VI;
 const getTimelineShortReason = (reason, code, isVerifiedSuccess = false, replicaCount = null) => {
   if (isVerifiedSuccess) {
     if (code === 'SCALE_REPLICAS' || code === 'SCALE_UP' || code === 'SCALE_DOWN') {
-      return replicaCount ? `Đã điều chỉnh lên ${replicaCount} Pods ổn định.` : 'Đã tăng số lượng Pod ổn định.';
+      return replicaCount
+        ? i18n.t('dashHealing:rootCause.shortReasons.scaleVerifiedCount', { count: replicaCount })
+        : i18n.t('dashHealing:rootCause.shortReasons.scaleVerified');
     }
-    if (code === 'RESTART_POD' || code === 'RESTART_DEPLOYMENT') return 'Đã khởi động lại và ổn định.';
-    if (code === 'REPLACE_POD') return 'Đã thay thế Pod mới và ổn định.';
-    return 'Dịch vụ đã phục hồi ổn định.';
+    if (code === 'RESTART_POD' || code === 'RESTART_DEPLOYMENT') return i18n.t('dashHealing:rootCause.shortReasons.restartVerified');
+    if (code === 'REPLACE_POD') return i18n.t('dashHealing:rootCause.shortReasons.replaceVerified');
+    return i18n.t('dashHealing:rootCause.shortReasons.defaultVerified');
   }
-  if (!reason) return 'Thao tác không thành công.';
+  if (!reason) return i18n.t('dashHealing:rootCause.shortReasons.defaultFailed');
   const r = String(reason).toLowerCase();
-  if (r.includes('daemonset') || r.includes('cannot scale')) return 'Không thể scale DaemonSet.';
-  if (r.includes('agent không phản hồi') || r.includes('agent chưa phản hồi') || r.includes('quá thời gian chờ') || r.includes('timeout')) return 'Agent không phản hồi.';
-  if (r.includes('hậu kiểm thất bại') || r.includes('chưa giải quyết triệt để') || r.includes('vẫn lỗi') || r.includes('sau hành động') || r.includes('vẫn còn bất thường')) return 'Kiểm tra sau hành động vẫn lỗi.';
-  if (r.includes('hậu kiểm thành công') || r.includes('ổn định hoàn toàn') || r.includes('đã phục hồi')) {
-    return replicaCount ? `Phục hồi ổn định (${replicaCount} Pods).` : 'Phục hồi ổn định hoàn toàn.';
+  if (r.includes('daemonset') || r.includes('cannot scale')) return i18n.t('dashHealing:rootCause.shortReasons.daemonset');
+  if (r.includes('agent không phản hồi') || r.includes('agent chưa phản hồi') || r.includes('quá thời gian chờ') || r.includes('timeout') || r.includes('did not respond')) return i18n.t('dashHealing:rootCause.shortReasons.timeout');
+  if (r.includes('hậu kiểm thất bại') || r.includes('chưa giải quyết triệt để') || r.includes('vẫn lỗi') || r.includes('sau hành động') || r.includes('vẫn còn bất thường') || r.includes('not yet resolved')) return i18n.t('dashHealing:rootCause.shortReasons.postCheckFailed');
+  if (r.includes('hậu kiểm thành công') || r.includes('ổn định hoàn toàn') || r.includes('đã phục hồi') || r.includes('fully recovered')) {
+    return replicaCount
+      ? i18n.t('dashHealing:rootCause.shortReasons.postCheckOkCount', { count: replicaCount })
+      : i18n.t('dashHealing:rootCause.shortReasons.postCheckOk');
   }
-  if (r.includes('1 node') || r.includes('chỉ có 1 node') || r.includes('không có node dự phòng') || r.includes('single-node')) return 'Cụm chỉ có 1 Node.';
-  if (r.includes('oom') || r.includes('cạn kiệt') || r.includes('ram')) return 'Container bị tràn RAM (OOM).';
-  if (r.includes('crashloop') || r.includes('sập')) return 'Pod bị CrashLoopBackOff.';
+  if (r.includes('1 node') || r.includes('chỉ có 1 node') || r.includes('không có node dự phòng') || r.includes('single-node')) return i18n.t('dashHealing:rootCause.shortReasons.singleNode');
+  if (r.includes('oom') || r.includes('cạn kiệt') || r.includes('ram')) return i18n.t('dashHealing:rootCause.shortReasons.oom');
+  if (r.includes('crashloop') || r.includes('sập')) return i18n.t('dashHealing:rootCause.shortReasons.crashLoop');
   if (r.includes('scaled') || r.includes('quy mô') || r.includes('mở rộng') || r.includes('thu hẹp') || r.includes('scale')) {
-    return replicaCount ? `Đã điều chỉnh lên ${replicaCount} Pods.` : 'Đã điều chỉnh số lượng bản sao Pod.';
+    return replicaCount
+      ? i18n.t('dashHealing:rootCause.shortReasons.scaledCount', { count: replicaCount })
+      : i18n.t('dashHealing:rootCause.shortReasons.scaled');
   }
-  if (r.includes('restart') || r.includes('khởi động lại')) return 'Đã khởi động lại Pod.';
-  if (r.includes('replace') || r.includes('thay thế')) return 'Đã thay thế Pod mới.';
-  if (r.includes('drain') || r.includes('di tản') || r.includes('di dời')) return 'Đã di dời Pod khỏi Node.';
+  if (r.includes('restart') || r.includes('khởi động lại')) return i18n.t('dashHealing:rootCause.shortReasons.restarted');
+  if (r.includes('replace') || r.includes('thay thế')) return i18n.t('dashHealing:rootCause.shortReasons.replaced');
+  if (r.includes('drain') || r.includes('di tản') || r.includes('di dời') || r.includes('evict')) return i18n.t('dashHealing:rootCause.shortReasons.drained');
   return reason.length > 50 ? `${reason.substring(0, 48)}...` : reason;
 };
 
 const getTimelineStatusBadge = (st) => {
   const code = String(st.code || '').toUpperCase();
   const reason = String(st.reason || '').toLowerCase();
-  if (code === 'DRAIN_NODE' || reason.includes('bị chặn') || reason.includes('không có node') || reason.includes('1 node')) {
-    return { label: 'Bị chặn', bg: '#FEF3C7', color: '#D97706', border: '#FDE68A' };
+  if (code === 'DRAIN_NODE' || reason.includes('bị chặn') || reason.includes('không có node') || reason.includes('1 node') || reason.includes('blocked')) {
+    return { label: i18n.t('dashHealing:rootCause.timeline.badgeBlocked'), bg: '#FEF3C7', color: '#D97706', border: '#FDE68A' };
   }
   if (st.isVerifiedSuccess) {
-    return { label: 'Thành công', bg: '#DCFCE7', color: '#16A34A', border: '#86EFAC' };
+    return { label: i18n.t('dashHealing:rootCause.timeline.badgeSuccess'), bg: '#DCFCE7', color: '#16A34A', border: '#86EFAC' };
   }
   if (st.isVerifying) {
-    return { label: 'Đang kiểm tra', bg: '#DBEAFE', color: '#2563EB', border: '#BFDBFE' };
+    return { label: i18n.t('dashHealing:rootCause.timeline.badgeVerifying'), bg: '#DBEAFE', color: '#2563EB', border: '#BFDBFE' };
   }
-  if (reason.includes('chưa giải quyết triệt để') || reason.includes('vẫn lỗi') || reason.includes('chưa phục hồi') || st.metrics) {
-    return { label: 'Chưa phục hồi', bg: '#FEE2E2', color: '#DC2626', border: '#FECACA' };
+  if (reason.includes('chưa giải quyết triệt để') || reason.includes('vẫn lỗi') || reason.includes('chưa phục hồi') || reason.includes('not yet resolved') || st.metrics) {
+    return { label: i18n.t('dashHealing:rootCause.timeline.badgeUnrecovered'), bg: '#FEE2E2', color: '#DC2626', border: '#FECACA' };
   }
-  return { label: 'Thất bại', bg: '#FEE2E2', color: '#DC2626', border: '#FECACA' };
+  return { label: i18n.t('dashHealing:rootCause.timeline.badgeFailed'), bg: '#FEE2E2', color: '#DC2626', border: '#FECACA' };
 };
 
 // Chuẩn hóa confidence: không tự gán mặc định, giữ nguyên giá trị 0, trả về null nếu không hợp lệ
@@ -91,15 +99,19 @@ const parseConfidence = (val) => {
   return Math.round(num <= 1 ? num * 100 : num);
 };
 
-// Tên tiếng Việt thân thiện, chuẩn SRE cho 7 Heads mô hình học sâu GRU
-const HEAD_NAMES_VI = {
-  CPU_OVERLOAD: 'Quá tải vi xử lý CPU (CPU_OVERLOAD)',
-  OOM: 'Cạn kiệt bộ nhớ RAM (OOM)',
-  DISK_FULL: 'Đầy dung lượng ổ đĩa (DISK_FULL)',
-  HIGH_LATENCY: 'Độ trễ phản hồi tăng cao (HIGH_LATENCY)',
-  HTTP_5XX_SPIKE: 'Đột biến lỗi máy chủ (HTTP 5xx)',
-  TRAFFIC_OVERLOAD: 'Quá tải lưu lượng truy cập (TRAFFIC_OVERLOAD)',
-  SCALE_DOWN_CANDIDATE: 'Thu hẹp Pod dư thừa (SCALE_DOWN)',
+const getSreDict = () => {
+  const dict = i18n.t('dashHealing:rootCause.sreDict', { returnObjects: true });
+  return dict && typeof dict === 'object' ? dict : {};
+};
+
+const getHeadName = (headName) => {
+  const map = i18n.t('dashHealing:rootCause.heads', { returnObjects: true });
+  return (map && map[headName]) || headName;
+};
+
+const getGruRiskName = (riskKey) => {
+  const map = i18n.t('dashHealing:rootCause.gruRisks', { returnObjects: true });
+  return (map && map[riskKey]) || null;
 };
 
 // Danh sách trắng cho phép loại rủi ro dự báo hợp lệ (ngăn chặn việc lấy tên hành động thay cho rủi ro)
@@ -115,152 +127,97 @@ const VALID_RISKS = new Set([
   'SCALE_DOWN_CANDIDATE',
 ]);
 
-// Bộ từ điển chuẩn hóa SRE 100% Tiếng Việt
-const SRE_DICTIONARY_VI = {
-  // 1. Root causes
-  'Service performance degradation': 'Suy giảm hiệu năng dịch vụ',
-  'Container memory exhausted': 'Cạn kiệt bộ nhớ container (OOM)',
-  'Storage capacity exhausted': 'Cạn kiệt dung lượng lưu trữ',
-  'CPU saturation': 'Bão hòa tài nguyên CPU',
-  'Traffic overload': 'Quá tải lưu lượng truy cập',
-  'Unstable application pod': 'Pod ứng dụng bất ổn định / CrashLoop',
-  'Deployment failure': 'Lỗi triển khai phiên bản mới',
-  'Upstream dependency failure': 'Lỗi dịch vụ phụ thuộc thượng nguồn',
-  'Application errors': 'Lỗi ứng dụng nội bộ (HTTP 5xx)',
-  'Insufficient available replicas': 'Không đủ số lượng Pod replica',
-  'Kubernetes scheduling failure': 'Lỗi lập lịch điều phối Kubernetes',
-  'Workload underutilized (scale down opportunity)': 'Tài nguyên dư thừa (Có thể thu hẹp quy mô)',
-  'OOM_WIREDTIGER_CACHE_PRESSURE_DUE_TO_UNINDEXED_QUERY': 'Tràn bộ nhớ đệm WiredTiger do truy vấn quét thiếu chỉ mục (Index)',
-  'UNKNOWN': 'CHƯA XÁC ĐỊNH (THIẾU BẰNG CHỨNG XÁC THỰC)',
-
-  // 2. Categories
-  'DATABASE_RESOURCE_SATURATION': 'BÃO HÒA TÀI NGUYÊN CSDL',
-  'INFRASTRUCTURE_SATURATION': 'BÃO HÒA HẠ TẦNG',
-  'APPLICATION_SATURATION': 'QUÁ TẢI ỨNG DỤNG',
-  'NETWORK_CONGESTION': 'NGHẼN MẠNG',
-  'INSUFFICIENT_EVIDENCE': 'CHƯA ĐỦ BẰNG CHỨNG XÁC THỰC',
-
-  // 3. Severities & Priorities
-  'CRITICAL': 'KHẨN CẤP',
-  'HIGH': 'CAO',
-  'MEDIUM': 'TRUNG BÌNH',
-  'LOW': 'THẤP',
-
-  // 4. Actions
-  'NO_ACTION': 'NGẮT MẠCH AN TOÀN (NO_ACTION)',
-  'TEMPORARY_IP_BLOCK': 'CHẶN TẠM THỜI IP NGUỒN',
-  'RESTART_POD': 'KHỞI ĐỘNG LẠI POD',
-  'REPLACE_POD': 'THAY THẾ POD (REPLACE)',
-  'DRAIN_NODE': 'DI DỜI POD KHỎI NODE LỖI (DRAIN_NODE)',
-  'SCALE_REPLICAS': 'ĐIỀU CHỈNH BẢN SAO POD (SCALE REPLICAS)',
-  'SCALE_UP': 'MỞ RỘNG BẢN SAO POD (SCALE UP)',
-  'SCALE_DOWN': 'THU HẸP BẢN SAO POD (SCALE DOWN)',
-  'ROLLBACK_DEPLOYMENT': 'ROLLBACK DEPLOYMENT',
-  'CLEANUP_STORAGE': 'DỌN DẸP LƯU TRỮ',
-  'RESTART_DEPLOYMENT': 'ROLLING RESTART DEPLOYMENT',
-
-  // 5. Risks
-  'CPU_OVERLOAD': 'QUÁ TẢI CPU',
-  'OOM': 'TRÀN BỘ NHỚ RAM (OOM)',
-  'DISK_FULL': 'CẠN KIỆT Ổ ĐĨA',
-  'HIGH_LATENCY': 'ĐỘ TRỄ CAO',
-  'HTTP_5XX_SPIKE': 'ĐỘT BIẾN LỖI 5XX',
-  'TRAFFIC_OVERLOAD': 'QUÁ TẢI TRUY CẬP',
-  'UNSTABLE_POD': 'POD BẤT ỔN ĐỊNH',
-  'POD_INSTABILITY': 'POD BẤT ỔN ĐỊNH',
-  'SCALE_DOWN_CANDIDATE': 'XU HƯỚNG CÓ THỂ GIẢM REPLICA',
-};
-
 // Hàm dịch động thông minh nhận diện mẫu câu log & giải trình cho cả dữ liệu cũ trong DB
 const translateSREText = (text) => {
   if (!text || typeof text !== 'string') return text;
   const trimmed = text.trim();
-  if (SRE_DICTIONARY_VI[trimmed]) return SRE_DICTIONARY_VI[trimmed];
+  const dict = getSreDict();
+  if (dict[trimmed]) return dict[trimmed];
 
   // Regex patterns
   if (/^Current incident evidence most strongly supports (.+?)\.?$/i.test(trimmed)) {
     const match = trimmed.match(/^Current incident evidence most strongly supports (.+?)\.?$/i);
     const sub = match[1].trim();
-    const subVi = SRE_DICTIONARY_VI[sub] || sub;
-    return `Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân: ${subVi}.`;
+    const subLocalized = dict[sub] || sub;
+    return i18n.t('dashHealing:rootCause.srePatterns.strongestEvidence', { sub: subLocalized });
   }
 
   if (/No safe infrastructure action is justified by the available evidence/i.test(trimmed)) {
-    return 'Chưa có hành động hạ tầng nào đủ an toàn dựa trên bằng chứng hiện tại (Kích hoạt Circuit Breaker chuyển giao kỹ sư duyệt HITL).';
+    return i18n.t('dashHealing:rootCause.srePatterns.noSafeInfra');
   }
 
   if (/^Latency is above normal \(([\d\.]+)\s*ms\)/i.test(trimmed)) {
     const match = trimmed.match(/^Latency is above normal \(([\d\.]+)\s*ms\)/i);
-    return `Độ trễ xử lý cao hơn bình thường (${match[1]} ms)`;
+    return i18n.t('dashHealing:rootCause.srePatterns.latencyHigh', { ms: match[1] });
   }
 
   if (/Readiness probe is failing/i.test(trimmed)) {
-    return 'Kiểm tra tính sẵn sàng (Readiness probe) thất bại';
+    return i18n.t('dashHealing:rootCause.srePatterns.readinessFail');
   }
 
   if (/Liveness probe is failing/i.test(trimmed)) {
-    return 'Kiểm tra tính sống còn (Liveness probe) thất bại';
+    return i18n.t('dashHealing:rootCause.srePatterns.livenessFail');
   }
 
   if (/Container was OOMKilled/i.test(trimmed)) {
-    return 'Container bị tiêu diệt do tràn bộ nhớ (OOMKilled exitCode 137)';
+    return i18n.t('dashHealing:rootCause.srePatterns.oomKilled');
   }
 
   if (/Pod is in CrashLoopBackOff/i.test(trimmed)) {
-    return 'Pod bị rơi vào vòng lặp sập liên tục (CrashLoopBackOff)';
+    return i18n.t('dashHealing:rootCause.srePatterns.crashLoop');
   }
 
   if (/^Pod restarted multiple times \((\d+)\)/i.test(trimmed)) {
     const match = trimmed.match(/^Pod restarted multiple times \((\d+)\)/i);
-    return `Pod đã khởi động lại nhiều lần liên tiếp (${match[1]} lần)`;
+    return i18n.t('dashHealing:rootCause.srePatterns.restartedMultiple', { count: match[1] });
   }
 
   if (/^CPU usage is critically high \(([\d\.]+%)\)/i.test(trimmed)) {
     const match = trimmed.match(/^CPU usage is critically high \(([\d\.]+%)\)/i);
-    return `Mức sử dụng CPU ở ngưỡng nguy hiểm (${match[1]})`;
+    return i18n.t('dashHealing:rootCause.srePatterns.cpuCrit', { val: match[1] });
   }
 
   if (/^RAM usage is critically high \(([\d\.]+%)\)/i.test(trimmed)) {
     const match = trimmed.match(/^RAM usage is critically high \(([\d\.]+%)\)/i);
-    return `Mức sử dụng RAM ở ngưỡng nguy hiểm (${match[1]})`;
+    return i18n.t('dashHealing:rootCause.srePatterns.ramCrit', { val: match[1] });
   }
 
   if (/^Disk usage is critically high \(([\d\.]+%)\)/i.test(trimmed)) {
     const match = trimmed.match(/^Disk usage is critically high \(([\d\.]+%)\)/i);
-    return `Mức sử dụng ổ đĩa ở ngưỡng nguy hiểm (${match[1]})`;
+    return i18n.t('dashHealing:rootCause.srePatterns.diskCrit', { val: match[1] });
   }
 
   if (/^HTTP 5xx rate is high \(([\d\.]+%)\)/i.test(trimmed)) {
     const match = trimmed.match(/^HTTP 5xx rate is high \(([\d\.]+%)\)/i);
-    return `Tỷ lệ lỗi HTTP 5xx ở mức cao (${match[1]})`;
+    return i18n.t('dashHealing:rootCause.srePatterns.http5xxHigh', { val: match[1] });
   }
 
   if (/^Request rate is high \(([\d\.]+)\)/i.test(trimmed)) {
     const match = trimmed.match(/^Request rate is high \(([\d\.]+)\)/i);
-    return `Lưu lượng yêu cầu (Request rate) tăng cao (${match[1]})`;
+    return i18n.t('dashHealing:rootCause.srePatterns.reqRateHigh', { val: match[1] });
   }
 
   if (/The affected pod is unhealthy or repeatedly restarting/i.test(trimmed)) {
-    return 'Pod bị ảnh hưởng đang ở trạng thái không khỏe mạnh hoặc liên tục khởi động lại.';
+    return i18n.t('dashHealing:rootCause.srePatterns.podUnhealthy');
   }
 
   if (/Additional replicas can distribute load and restore service capacity/i.test(trimmed)) {
-    return 'Bổ sung số lượng Pod replica để phân phối tải và phục hồi năng lực xử lý.';
+    return i18n.t('dashHealing:rootCause.srePatterns.addReplicas');
   }
 
   if (/Security anomaly detected from source IP/i.test(trimmed)) {
     const match = trimmed.match(/source IP ([\d\.]+)/i);
-    return `Phát hiện bất thường bảo mật từ IP nguồn ${match ? match[1] : ''}; tạm thời chặn IP để bảo vệ dịch vụ.`;
+    return i18n.t('dashHealing:rootCause.srePatterns.securityIp', { ip: match ? match[1] : '' });
   }
 
   if (/Action history recorded (\d+) consecutive failure\(s\)/i.test(trimmed)) {
     const match = trimmed.match(/recorded (\d+) consecutive failure\(s\)/i);
-    return `Lịch sử hành động ghi nhận ${match ? match[1] : 2} lần thất bại liên tiếp (Kích hoạt Circuit Breaker chống lặp vô hạn).`;
+    return i18n.t('dashHealing:rootCause.srePatterns.consecutiveFailures', { count: match ? match[1] : 2 });
   }
 
   if (/^Previous (.+?) action result was (.+?)$/i.test(trimmed)) {
     const match = trimmed.match(/^Previous (.+?) action result was (.+?)$/i);
-    return `Hành động ${match[1]} trước đó có kết quả: ${match[2]}.`;
+    return i18n.t('dashHealing:rootCause.srePatterns.prevActionResult', { action: match[1], result: match[2] });
   }
 
   return trimmed;
@@ -275,77 +232,38 @@ const parseAnalysisPayload = (raw) => {
   }
 };
 
-// Tên tiếng Việt chuẩn SRE cho các loại rủi ro dự báo từ GRU
-const GRU_RISK_NAMES_VI = {
-  SCALE_DOWN_CANDIDATE: 'Dự báo khả năng giảm replica',
-  OOM: 'Nguy cơ cạn kiệt bộ nhớ RAM',
-  CPU_OVERLOAD: 'Nguy cơ quá tải xử lý CPU',
-  HIGH_LATENCY: 'Nguy cơ tăng cao độ trễ phản hồi',
-  HTTP_5XX_SPIKE: 'Nguy cơ đột biến lỗi ứng dụng 5xx',
-  TRAFFIC_OVERLOAD: 'Nguy cơ quá tải lưu lượng truy cập',
-  DISK_FULL: 'Nguy cơ đầy dung lượng ổ đĩa',
-};
-
-// Từ điển câu hỏi nghiệp vụ SRE Checklist ngắn gọn (chỉ câu hỏi ngắn, tham số kỹ thuật đưa vào tooltip)
-const SRE_CHECKLIST_QUESTIONS = {
-  'Application health endpoint response': {
-    tech: 'Application health endpoint response',
-    question: 'Ứng dụng có mở cổng kiểm tra sức khỏe không?',
-    detail: 'Kiểm tra xem ứng dụng có thực sự đang chạy và phản hồi HTTP 200 tại cổng/endpoint kiểm tra sức khỏe (/health) không.',
-  },
-  'Probe configuration': {
-    tech: 'Probe configuration',
-    question: 'Cấu hình Probe có chính xác không?',
-    detail: 'Kiểm tra cấu hình Liveness/Readiness Probe (cổng port, đường dẫn path, timeout, periodSeconds) có khớp với thiết kế của ứng dụng không.',
-  },
-  'Application logs': {
-    tech: 'Application logs',
-    question: 'Log ứng dụng có ghi nhận lỗi khởi động không?',
-    detail: 'Nhật ký ứng dụng (Application logs) có ghi nhận lỗi ngoại lệ khi khởi động (exception/panic/database connection error) không.',
-  },
-  'CPU throttling metrics': {
-    tech: 'CPU throttling metrics',
-    question: 'CPU có bị giới hạn quá mức không?',
-    detail: 'Ứng dụng có bị bóp nghẽn CPU (CPU throttling) do giới hạn tài nguyên (cpu limit) bị đặt quá thấp không.',
-  },
-  'Historical latency': {
-    tech: 'Historical latency',
-    question: 'Latency trước sự cố có tăng không?',
-    detail: 'Độ trễ xử lý (Latency) trước thời điểm xảy ra sự cố có dấu hiệu tăng đột biến bất thường không.',
-  },
-  'Kubernetes events chưa được cung cấp': {
-    tech: 'Kubernetes events',
-    question: 'Kubernetes Events có ghi nhận cảnh báo bất thường không?',
-    detail: 'Cần kiểm tra bảng Kubernetes Events của Pod/Namespace xem có cảnh báo bất thường nào từ cụm không.',
-  },
-};
-
-const getSREChecklistQuestion = (rawKey) => {
+// Từ điển câu hỏi nghiệp vụ SRE Checklist ngắn gọn
+const getChecklistQuestionText = (rawKey) => {
   const trimmed = String(rawKey || '').trim();
-  if (SRE_CHECKLIST_QUESTIONS[trimmed]) {
-    return SRE_CHECKLIST_QUESTIONS[trimmed];
-  }
-  return {
-    tech: trimmed,
-    question: translateSREText(trimmed),
-    detail: trimmed,
+  const keyMap = {
+    'Application health endpoint response': 'dashHealing:rootCause.checklist.healthEndpointQ',
+    'Probe configuration': 'dashHealing:rootCause.checklist.probeConfigQ',
+    'Application logs': 'dashHealing:rootCause.checklist.appLogsQ',
+    'CPU throttling metrics': 'dashHealing:rootCause.checklist.cpuThrottleQ',
+    'Historical latency': 'dashHealing:rootCause.checklist.histLatencyQ',
+    'Kubernetes events chưa được cung cấp': 'dashHealing:rootCause.checklist.k8sEventsQ',
   };
+  if (keyMap[trimmed]) {
+    return i18n.t(keyMap[trimmed]);
+  }
+  return translateSREText(trimmed);
 };
 
 // Helper phân tích và bóc tách thông tin kỹ thuật K8s gốc kèm diễn giải SRE trực quan
 const parseSREEventEvidence = (raw) => {
   if (!raw) {
+    const defTitle = i18n.t('dashHealing:rootCause.symptoms.defaultTitle');
     return {
       originalText: '',
-      title: 'Bất thường viễn trắc',
+      title: defTitle,
       podName: null,
       count: 1,
       port: null,
       ip: null,
       url: null,
       timestamp: null,
-      errorSnippet: 'Bất thường viễn trắc',
-      explanation: 'Ghi nhận tín hiệu bất thường qua viễn trắc.',
+      errorSnippet: defTitle,
+      explanation: i18n.t('dashHealing:rootCause.symptoms.defaultExplanation'),
       rawLog: '',
     };
   }
@@ -375,51 +293,51 @@ const parseSREEventEvidence = (raw) => {
   const ip = ipMatch ? ipMatch[1] || ipMatch[0] : null;
 
   // 5. Xác định tên triệu chứng (title)
-  let title = 'Bất thường viễn trắc';
+  let title = i18n.t('dashHealing:rootCause.symptoms.defaultTitle');
   if (lower.includes('liveness probe failed') || lower.includes('liveness probe') || lower.includes('tính sống còn')) {
-    title = 'Liveness Probe thất bại';
+    title = i18n.t('dashHealing:rootCause.symptoms.livenessFailed');
   } else if (lower.includes('readiness probe failed') || lower.includes('readiness probe') || lower.includes('tính sẵn sàng')) {
-    title = 'Readiness Probe thất bại';
+    title = i18n.t('dashHealing:rootCause.symptoms.readinessFailed');
   } else if (lower.includes('startup probe failed') || lower.includes('startup probe')) {
-    title = 'Startup Probe thất bại';
+    title = i18n.t('dashHealing:rootCause.symptoms.startupFailed');
   } else if (lower.includes('oomkilled') || lower.includes('exit code 137') || lower.includes('exitcode 137')) {
-    title = 'Container bị OOMKilled';
+    title = i18n.t('dashHealing:rootCause.symptoms.oomKilled');
   } else if (lower.includes('crashloopbackoff') || lower.includes('back-off restarting')) {
-    title = 'Pod rơi vào CrashLoopBackOff';
+    title = i18n.t('dashHealing:rootCause.symptoms.crashLoop');
   } else if (lower.includes('imagepullbackoff') || lower.includes('errimagepull')) {
-    title = 'Không thể tải Image (ImagePullBackOff)';
+    title = i18n.t('dashHealing:rootCause.symptoms.imagePull');
   } else if (lower.includes('failedscheduling')) {
-    title = 'Không thể xếp lịch Pod (FailedScheduling)';
+    title = i18n.t('dashHealing:rootCause.symptoms.failedScheduling');
   } else if (str.includes(':')) {
     title = translateSREText(str.split(':')[0].trim());
   } else {
     title = translateSREText(str);
   }
 
-  // 6. Xác định lỗi vắn tắt (errorSnippet) và 1 câu giải thích tiếng Việt ngắn (explanation)
+  // 6. Xác định lỗi vắn tắt (errorSnippet) và 1 câu giải thích ngắn (explanation)
   let errorSnippet = null;
   let explanation = null;
 
   if (lower.includes('connection refused') || lower.includes('connect: connection refused')) {
     errorSnippet = 'connection refused';
-    explanation = `Không thể kết nối tới cổng ${port || '8080'} của ứng dụng.`;
+    explanation = i18n.t('dashHealing:rootCause.symptoms.connRefusedExpl', { port: port || '8080' });
   } else if (lower.includes('context deadline exceeded') || lower.includes('client.timeout') || lower.includes('timeout exceeded')) {
     errorSnippet = 'context deadline exceeded (timeout)';
-    explanation = 'Ứng dụng không phản hồi kịp trong thời gian Kubernetes cho phép.';
+    explanation = i18n.t('dashHealing:rootCause.symptoms.timeoutExpl');
   } else if (lower.includes('oomkilled') || lower.includes('exit code 137') || lower.includes('exitcode 137')) {
     errorSnippet = 'exitCode 137 (OOM)';
-    explanation = 'Tiến trình bị hệ điều hành tiêu diệt do cạn kiệt bộ nhớ RAM.';
+    explanation = i18n.t('dashHealing:rootCause.symptoms.oomExpl');
   } else if (lower.includes('crashloopbackoff') || lower.includes('back-off restarting')) {
     errorSnippet = 'CrashLoopBackOff';
-    explanation = 'Pod bị rơi vào vòng lặp sập và khởi động lại liên tục.';
+    explanation = i18n.t('dashHealing:rootCause.symptoms.crashLoopExpl');
   } else if (lower.includes('imagepullbackoff') || lower.includes('errimagepull')) {
     errorSnippet = 'ErrImagePull';
-    explanation = 'Không thể tải container image từ Registry.';
+    explanation = i18n.t('dashHealing:rootCause.symptoms.imagePullExpl');
   } else if (lower.includes('failedscheduling')) {
     errorSnippet = 'FailedScheduling';
-    explanation = 'Kubernetes Scheduler không thể xếp lịch do thiếu tài nguyên hoặc Node phù hợp.';
+    explanation = i18n.t('dashHealing:rootCause.symptoms.failedSchedExpl');
   } else {
-    errorSnippet = 'Bất thường hoạt động';
+    errorSnippet = i18n.t('dashHealing:rootCause.symptoms.defaultSnippet');
     explanation = translateSREText(str);
   }
 
@@ -446,6 +364,7 @@ const parseSREEventEvidence = (raw) => {
 };
 
 export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => {
+  const { t, i18n: i18nInstance } = useTranslation('dashHealing');
   const [activeTab, setActiveTab] = useState('overview');
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
   const [isPlaybookExpanded, setIsPlaybookExpanded] = useState(false);
@@ -559,7 +478,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             return {
               type: ev.source_type || 'AI_TELEMETRY',
               ref: ev.source_reference || incident?.service,
-              summary: translateSREText(summary) || 'Ghi nhận bất thường qua viễn trắc',
+              summary: translateSREText(summary) || i18n.t('dashHealing:rootCause.symptoms.telemetryFallback'),
               score: rawScore !== null ? `${Math.round(rawScore <= 1 ? rawScore * 100 : rawScore)}%` : null,
             };
           });
@@ -622,11 +541,14 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   // QUAN TRỌNG: Chỉ coi là "ĐÃ KHẮC PHỤC" khi sự cố thực sự đã RESOLVED (đã vượt qua bước Verification 12 điểm viễn trắc)
   const isResolved = !hasActualPendingApproval && (
     (incidentDetail?.status || incident?.status || '').toLowerCase().includes('resolve') ||
+    incident?.statusKey === 'RESOLVED_AUTO' ||
+    incident?.statusKey === 'RESOLVED_MANUAL' ||
     (incident?.status && incident?.status.includes('hoàn tất'))
   );
 
   const isVerifyingAfterAction = !isResolved && !hasActualPendingApproval && (
     (incidentDetail?.healing_status || incident?.healingStatus || '').toUpperCase() === 'COMPLETED' ||
+    incident?.statusKey === 'VERIFYING' ||
     (incident?.status && incident?.status.includes('Đang xác minh'))
   );
 
@@ -643,14 +565,15 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         s = incidentDetail.target_id;
       }
     }
-    return s || incident?.service || incident?.target_name || 'dịch vụ ứng dụng';
-  }, [incident?.service, incident?.target_name, incidentDetail]);
+    return s || incident?.service || incident?.target_name || t('incidentUtils.serviceAppFallback');
+  }, [incident?.service, incident?.target_name, incidentDetail, t]);
 
   const incidentTitle = useMemo(() => {
     const rawTitle = incidentDetail?.title || incident?.title || '';
     if (!rawTitle) return '';
     return translateIncidentTitle(rawTitle);
-  }, [incidentDetail?.title, incident?.title]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incidentDetail?.title, incident?.title, i18nInstance.language]);
 
   const rawConfidence =
     incidentDetail?.rca_confidence ??
@@ -669,11 +592,13 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     ? String(rawRiskCandidate).toUpperCase()
     : null;
 
-  const rootCauseType = incidentDetail?.root_cause_type || parsedAnalysis?.root_cause?.cause || incident?.rootCauseType || incident?.primaryRisk || (predictedRisk ? `Nguy cơ ${predictedRisk}` : 'Suy giảm hiệu năng dịch vụ');
+  const sreDict = getSreDict();
+  const gruRiskNames = t('rootCause.gruRisks', { returnObjects: true }) || {};
+  const rootCauseType = incidentDetail?.root_cause_type || parsedAnalysis?.root_cause?.cause || incident?.rootCauseType || incident?.primaryRisk || (predictedRisk ? (gruRiskNames[predictedRisk] || predictedRisk) : sreDict['Service performance degradation'] || 'Service performance degradation');
   const severity = incidentDetail?.severity || parsedAnalysis?.root_cause?.severity || incident?.severity || null;
   const recAction = parsedAnalysis?.recommendation?.action || incidentDetail?.recommendation_action || incident?.recommendationAction || 'NO_ACTION';
-  const recActionVi = SRE_DICTIONARY_VI[recAction] || recAction;
-  const recReason = parsedAnalysis?.recommendation?.reason || incidentDetail?.recommendation_reason || incident?.recommendationReason || incident?.aiReasoning || `Đề xuất hành động ${recAction} cho dịch vụ ${serviceDisplayName}.`;
+  const recActionVi = sreDict[recAction] || recAction;
+  const recReason = parsedAnalysis?.recommendation?.reason || incidentDetail?.recommendation_reason || incident?.recommendationReason || incident?.aiReasoning || t('rootCause.misc.recommendDefault', { action: recAction, service: serviceDisplayName });
   const thresholds = parsedAnalysis?.prediction?.thresholds;
 
   const isUnknown = rootCauseType === 'UNKNOWN' || String(rootCauseType).toLowerCase().includes('unknown');
@@ -698,7 +623,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const incidentIdStr = incident?.id || incident?.rawId || parsedAnalysis?.incident_id || incidentDetail?.id || '';
   const requestId = parsedAnalysis?.request_id || incidentDetail?.request_id || incident?.requestId || null;
   const clusterDisplayName = incidentDetail?.cluster_name || incident?.cluster_name || incident?.clusterName || incident?.cluster || parsedAnalysis?.cluster_id || incidentDetail?.cluster_id || null;
-  const clusterIdStr = clusterDisplayName || 'Chưa xác định';
+  const clusterIdStr = clusterDisplayName || t('common.unidentified');
   const rawNamespace = incidentDetail?.namespace || parsedAnalysis?.namespace || (incident?.namespace && incident.namespace !== '' ? incident.namespace : null);
   const kubectlNsFlag = rawNamespace ? `-n ${rawNamespace} ` : '';
   const namespaceName = rawNamespace || 'default';
@@ -900,15 +825,16 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     let str = String(msg).trim();
     if (str.includes('[Errno 111] Connection refused') || str.includes('Connection refused')) {
       const matchTarget = str.match(/on\s+([a-zA-Z0-9_-]+):/i);
-      const svcName = matchTarget ? matchTarget[1] : (serviceDisplayName || 'dịch vụ');
-      return `Lỗi kết nối Kubernetes API Server (10.96.0.1:443): Connection refused. Không thể gửi lệnh điều phối tới ${svcName} do API Server cụm bị sập hoặc đang khởi động lại.`;
+      const svcName = matchTarget ? matchTarget[1] : (serviceDisplayName || t('rootCause.misc.serviceWord'));
+      return t('rootCause.misc.connRefusedApi', { svc: svcName });
     }
-    // Dịch các thông báo hành động từ K8s Agent (scaling, restart, rollback, replace pod...) sang tiếng Việt
-    str = translateActionMessageToVi(str, serviceDisplayName, 'Tự phục hồi', namespaceName || 'default');
+    // Dịch các thông báo hành động từ K8s Agent (scaling, restart, rollback, replace pod...)
+    str = translateActionMessageToVi(str, serviceDisplayName, t('incidentUtils.actions.DEFAULT'), namespaceName || 'default');
     // Bỏ các từ tiếng Anh kỹ thuật lặp
     str = str.replace(/\s*\(Post-Action Verification Failed\):?/gi, ':');
     str = str.replace(/Hậu kiểm thất bại:\s*/gi, '');
     str = str.replace(/^Hậu kiểm thất bại\s*/gi, '');
+    str = str.replace(/Post-check failed:\s*/gi, '');
     if (serviceDisplayName && serviceDisplayName.toLowerCase() === 'prometheus') {
       str = str.replace(/prometheus-node-exporter/gi, 'prometheus');
       str = str.replace(/prometheus-kube-state-metrics/gi, 'prometheus');
@@ -944,32 +870,32 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   // Nhận định SRE súc tích, tránh lặp lại văn phong mẫu
   const getDevOpsVerdict = (metrics, isVerifiedSuccess, isFailed, rawReason) => {
     if (isVerifiedSuccess && !isFailed) {
-      return 'Chỉ số viễn trắc đã trở về ngưỡng an toàn. Dịch vụ phục hồi ổn định hoàn toàn.';
+      return t('rootCause.verdicts.verifiedSuccess');
     }
     if (metrics) {
       if (metrics.ram !== null && metrics.ram >= 90) {
-        return `Bộ nhớ RAM vẫn cạn kiệt ở mức ${metrics.ram}% (ngưỡng an toàn < 90%). Pod chưa giải phóng bộ nhớ sau thao tác.`;
+        return t('rootCause.verdicts.ramExhausted', { ram: metrics.ram });
       }
       if (metrics.cpu !== null && metrics.cpu >= 80) {
-        return `Mức tải CPU vẫn vượt ngưỡng (${metrics.cpu}%). Tải xử lý chưa hạ nhiệt sau khi thao tác.`;
+        return t('rootCause.verdicts.cpuOverload', { cpu: metrics.cpu });
       }
       if (metrics.latency !== null && metrics.latency > 500) {
-        return `Độ trễ phản hồi vẫn cao (${metrics.latency}ms > 500ms). Dịch vụ vẫn bị nghẽn mạng hoặc quá tải.`;
+        return t('rootCause.verdicts.highLatency', { latency: metrics.latency });
       }
       if (metrics.http5xx !== null && metrics.http5xx > 0) {
-        return `Tỷ lệ lỗi HTTP 5xx vẫn còn (${metrics.http5xx}%). Ứng dụng chưa xử lý ổn định yêu cầu.`;
+        return t('rootCause.verdicts.http5xx', { http5xx: metrics.http5xx });
       }
       if (metrics.restart !== null && metrics.restart > 0) {
-        return `Pod vẫn tiếp tục khởi động lại (${metrics.restart} lần). Container chưa ổn định.`;
+        return t('rootCause.verdicts.restarts', { restart: metrics.restart });
       }
       if (isFailed) {
         if (rawReason && !rawReason.includes('vẫn còn bất thường (CPU:')) {
           return rawReason;
         }
-        return `Hậu kiểm viễn trắc ghi nhận thao tác chưa giải quyết triệt để sự cố.`;
+        return t('rootCause.verdicts.postCheckFailed');
       }
     }
-    return rawReason || (isFailed ? 'Sự cố chưa được giải quyết sau khi thực thi hành động.' : 'Đang theo dõi kiểm tra.');
+    return rawReason || (isFailed ? t('rootCause.verdicts.unresolvedFallback') : t('rootCause.verdicts.monitoringFallback'));
   };
 
   const recObj = parsedAnalysis?.recommendation || {};
@@ -1022,10 +948,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const faultyNodeId = rawActionParams.faulty_node_id || incidentDetail?.node_id || '';
   const clusterNodeCount = incidentDetail?.cluster_node_count ?? incident?.clusterNodeCount ?? null;
   const clusterSubLabel = clusterNodeCount === 1
-    ? 'Cụm hiện có 1 Node'
+    ? t('rootCause.infoCard.clusterNodes1')
     : clusterNodeCount > 1
-      ? `Cụm hiện có ${clusterNodeCount} Node`
-      : (clusterDisplayName ? `Cụm: ${clusterDisplayName}` : 'Chưa xác định');
+      ? t('rootCause.infoCard.clusterNodesN', { count: clusterNodeCount })
+      : (clusterDisplayName ? t('rootCause.infoCard.clusterPrefix', { name: clusterDisplayName }) : t('common.unidentified'));
   const replicaSetRole = rawActionParams.replica_set_role || (isDbService || workloadKindLower === 'statefulset' ? 'StatefulSet (Stateful)' : workloadKindLower === 'daemonset' ? 'DaemonSet (Node-Bound)' : 'Deployment (Stateless)');
   const recDestNodeName = rawActionParams.recommended_destination_node_name || rawActionParams.recommended_destination_node || '';
   const recDestNodeId = rawActionParams.recommended_destination_node_id || rawActionParams.destination_node_id || '';
@@ -1056,10 +982,12 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       return ta - tb;
     });
     let steps = [];
+    const dict = getSreDict();
+    const intlLocale = getIntlLocale(i18nInstance.language);
     if (dbHistory.length > 0) {
       steps = dbHistory.map((item, idx) => {
         const code = item.action_code || item.action_name || 'UNKNOWN_ACTION';
-        const labelVi = SRE_DICTIONARY_VI[code] || item.action_name || code;
+        const labelVi = dict[code] || item.action_name || code;
         const execStatus = String(item.execution_status || '').toUpperCase();
         const verResult = item.verification_result;
         const isStaleRunning = execStatus === 'RUNNING' && (item.started_at || item.created_at) && (Date.now() - new Date(item.started_at || item.created_at).getTime() > 60000);
@@ -1069,11 +997,11 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         const isVerifying = isCompletedExec && !isVerifiedSuccess && !isFailed;
         const actionTs = item.verified_at || item.completed_at || item.created_at;
         const timeStr = actionTs
-          ? new Date(actionTs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          ? new Date(actionTs).toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
           : null;
 
         const rawReason = cleanExecutionError(
-          item.error_message || item.verification_message || (isStaleRunning ? 'Quá thời gian chờ (60s) nhưng Kubernetes Agent chưa phản hồi kết quả thực thi.' : null)
+          item.error_message || item.verification_message || (isStaleRunning ? t('rootCause.timeline.staleRunningReason') : null)
         );
 
         // Trích xuất số lượng bản sao Pod (Replicas) nếu có từ DB hoặc thông điệp
@@ -1117,12 +1045,12 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
           timeStr,
           replicaCount,
           verificationLabel: isFailed
-            ? (isStaleRunning ? 'Xác minh: Thất bại (Timeout >60s)' : 'Xác minh: Thất bại')
+            ? (isStaleRunning ? t('rootCause.timeline.verifTimeout') : t('rootCause.timeline.verifFailed'))
             : isVerifiedSuccess
-              ? 'Xác minh: Thành công'
+              ? t('rootCause.timeline.verifSuccess')
               : isVerifying
-                ? 'Đang kiểm tra lại'
-                : `Trạng thái: ${execStatus || 'Đang xử lý'}`,
+                ? t('rootCause.timeline.verifVerifying')
+                : t('rootCause.timeline.verifStatus', { status: execStatus || t('common.processing') }),
           reason: rawReason,
           metrics,
           conciseVerdict,
@@ -1134,18 +1062,18 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         const existingCodes = new Set(steps.map((s) => s.code));
         blockedActions.forEach((code) => {
           if (!existingCodes.has(code)) {
-            const rawReason = cleanExecutionError(healingErrorMessage || 'Hậu kiểm viễn trắc xác nhận sự cố vẫn chưa được khắc phục.');
+            const rawReason = cleanExecutionError(healingErrorMessage || t('rootCause.timeline.unrecoveredReason'));
             const metrics = extractDevOpsMetrics(rawReason);
             const conciseVerdict = getDevOpsVerdict(metrics, false, true, rawReason);
             steps.push({
               stepIndex: steps.length + 1,
               code,
-              labelVi: SRE_DICTIONARY_VI[code] || code,
+              labelVi: dict[code] || code,
               isFailed: true,
               isVerifiedSuccess: false,
               isVerifying: false,
               timeStr: null,
-              verificationLabel: 'Xác minh: Thất bại (Khóa chống lặp)',
+              verificationLabel: t('rootCause.timeline.verifBlockedLoop'),
               reason: rawReason,
               metrics,
               conciseVerdict,
@@ -1156,19 +1084,19 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       }
     } else if (blockedActions.length > 0) {
       steps = blockedActions.map((code, idx) => {
-        const rawReason = cleanExecutionError(idx === blockedActions.length - 1 ? healingErrorMessage : 'Hậu kiểm viễn trắc xác nhận sự cố vẫn chưa được khắc phục.');
+        const rawReason = cleanExecutionError(idx === blockedActions.length - 1 ? healingErrorMessage : t('rootCause.timeline.unrecoveredReason'));
         const metrics = extractDevOpsMetrics(rawReason);
         const conciseVerdict = getDevOpsVerdict(metrics, false, true, rawReason);
 
         return {
           stepIndex: idx + 1,
           code,
-          labelVi: SRE_DICTIONARY_VI[code] || code,
+          labelVi: dict[code] || code,
           isFailed: true,
           isVerifiedSuccess: false,
           isVerifying: false,
           timeStr: null,
-          verificationLabel: 'Xác minh: Thất bại (Khóa chống lặp)',
+          verificationLabel: t('rootCause.timeline.verifBlockedLoop'),
           reason: rawReason,
           metrics,
           conciseVerdict,
@@ -1186,26 +1114,26 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       steps.push({
         stepIndex: steps.length + 1,
         code: 'DRAIN_NODE',
-        labelVi: 'KIỂM TRA NODE DỰ PHÒNG & DI TẢN POD',
+        labelVi: t('rootCause.timeline.drainNodeStep'),
         isFailed: true,
         isVerifiedSuccess: false,
         isVerifying: false,
         timeStr: steps[steps.length - 1]?.timeStr || null,
         verificationLabel: noStandbyNode
-          ? `Đã kiểm tra Node: KHÔNG CÓ NODE DỰ PHÒNG (Cụm 1 Node: ${nodeLabel}) → Ngắt mạch`
+          ? t('rootCause.timeline.drainNoStandbyBadge', { node: nodeLabel })
           : isPrimaryDbBlocked
-            ? 'Đã kiểm tra Node: CHẶN DI TẢN PRIMARY DB (Chống Split-Brain) → Ngắt mạch'
-            : 'Đã kiểm tra Node: LỖI TẦNG ỨNG DỤNG (Node vật lý bình thường) → Ngắt mạch',
+            ? t('rootCause.timeline.drainPrimaryDbBadge')
+            : t('rootCause.timeline.drainAppLayerBadge'),
         reason: noStandbyNode
-          ? `Hệ thống đã kiểm tra hạ tầng cụm để đưa Pod sang Node khác (DRAIN_NODE), nhưng cụm hiện chỉ có 1 Node (${nodeLabel}) — không có Node dự phòng khỏe mạnh. Hệ thống tự động kích hoạt Ngắt mạch an toàn (NO_ACTION) và chuyển sang Cẩm nang 3 bước.`
+          ? t('rootCause.timeline.drainNoStandbyReason', { node: nodeLabel })
           : isPrimaryDbBlocked
-            ? `Hệ thống đã kiểm tra Node dự phòng (${recDestNodeName}), nhưng đây là cơ sở dữ liệu trạng thái Primary nên chặn tự động Drain Node để tránh mất mát dữ liệu. Kích hoạt Ngắt mạch an toàn (NO_ACTION).`
-            : `Hệ thống đã kiểm tra Node vật lý (${nodeLabel}) và Node dự phòng (${recDestNodeName}), xác nhận hạ tầng Node ổn định nên không thể khắc phục bằng Drain Node. Kích hoạt Ngắt mạch an toàn (NO_ACTION).`,
+            ? t('rootCause.timeline.drainPrimaryDbReason', { destNode: recDestNodeName })
+            : t('rootCause.timeline.drainAppLayerReason', { node: nodeLabel, destNode: recDestNodeName }),
         conciseVerdict: noStandbyNode
-          ? `Cụm hiện chỉ có 1 Node (${nodeLabel}) — không có Node dự phòng an toàn để di tản Pod. Kích hoạt Ngắt mạch an toàn để bảo vệ tính toàn vẹn của cụm.`
+          ? t('rootCause.timeline.drainNoStandbyVerdict', { node: nodeLabel })
           : isPrimaryDbBlocked
-            ? `Cơ sở dữ liệu đang ở vai trò Primary trên Node (${nodeLabel}), chặn tự động di tản để phòng ngừa sự cố phân mảnh dữ liệu (Split-Brain).`
-            : `Hạ tầng phần cứng và tài nguyên Node (${nodeLabel}) vẫn ổn định, nguyên nhân xuất phát từ tầng ứng dụng. Di tản Node không giải quyết được gốc rễ.`,
+            ? t('rootCause.timeline.drainPrimaryDbVerdict', { node: nodeLabel })
+            : t('rootCause.timeline.drainAppLayerVerdict', { node: nodeLabel }),
       });
     }
 
@@ -1219,6 +1147,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     });
 
     return steps;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     incidentDetail?.healing_history,
     blockedActions,
@@ -1231,6 +1160,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     faultyNodeName,
     isDbService,
     rawActionParams.is_primary_database,
+    i18nInstance.language,
   ]);
 
   const totalFailedSteps = previousActionSteps.filter((s) => s.isFailed).length;
@@ -1244,34 +1174,34 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
     if (isResolved) {
       if (succeededCount > 0 && failedCount === 0) {
-        return { label: '🟢 Đã tự khắc phục thành công', color: '#15803D' };
+        return { label: t('rootCause.modalStatus.autoSucceeded'), color: '#15803D' };
       }
       if (succeededCount > 0 && failedCount > 0) {
-        return { label: '🟢 Khắc phục thành công (Sau thử lại)', color: '#15803D' };
+        return { label: t('rootCause.modalStatus.retrySucceeded'), color: '#15803D' };
       }
       if (failedCount > 0 && succeededCount === 0) {
-        return { label: '⚪ Đã đóng (Can thiệp thủ công)', color: '#475569' };
+        return { label: t('rootCause.modalStatus.closedManual'), color: '#475569' };
       }
       if (!hasActions || isNoAction) {
-        return { label: '🔵 Tự ổn định (Telemetry bình thường)', color: '#1D4ED8' };
+        return { label: t('rootCause.modalStatus.autoStabilized'), color: '#1D4ED8' };
       }
-      return { label: '🟢 Đã phục hồi', color: '#15803D' };
+      return { label: t('rootCause.modalStatus.recovered'), color: '#15803D' };
     }
 
     if (failedCount > 0 && succeededCount === 0) {
-      return { label: '🔴 Chưa phục hồi (Tự khắc phục thất bại)', color: '#DC2626' };
+      return { label: t('rootCause.modalStatus.unrecoveredFailed'), color: '#DC2626' };
     }
     if (isVerifyingAfterAction) {
-      return { label: '🟡 Đang xác minh hậu kiểm', color: '#D97706' };
+      return { label: t('rootCause.modalStatus.verifying'), color: '#D97706' };
     }
     if (hasActualPendingApproval) {
-      return { label: '🟠 Chờ phê duyệt HITL', color: '#D97706' };
+      return { label: t('rootCause.modalStatus.hitlPending'), color: '#D97706' };
     }
     if (isNoAction) {
-      return { label: '🔵 Giám sát an toàn (NO_ACTION)', color: '#1D4ED8' };
+      return { label: t('rootCause.modalStatus.safeMonitoring'), color: '#1D4ED8' };
     }
-    return { label: '🔴 Chưa phục hồi', color: '#DC2626' };
-  }, [isResolved, previousActionSteps, isNoAction, isVerifyingAfterAction, hasActualPendingApproval]);
+    return { label: t('rootCause.modalStatus.unrecovered'), color: '#DC2626' };
+  }, [isResolved, previousActionSteps, isNoAction, isVerifyingAfterAction, hasActualPendingApproval, t]);
 
   const isCircuitBreakerActive = Boolean(
     isCircuitBreakerTripped ||
@@ -1282,9 +1212,9 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const effectiveRecAction = (isCircuitBreakerActive && !isResolved)
     ? 'NO_ACTION'
     : recAction;
-  const effectiveRecActionVi = SRE_DICTIONARY_VI[effectiveRecAction] || effectiveRecAction;
+  const effectiveRecActionVi = sreDict[effectiveRecAction] || effectiveRecAction;
   const effectiveRecReason = (isCircuitBreakerActive && !isResolved)
-    ? `Hệ thống đã thực thi ${previousActionSteps.length} cấp tự phục hồi liên tiếp nhưng sự cố chưa được khắc phục triệt để. Cầu dao an toàn (Circuit Breaker - NO_ACTION) đã kích hoạt ngắt mạch để tránh vòng lặp tự động vô hạn. Kỹ sư vui lòng kiểm tra cụm theo Cẩm nang thao tác (Manual Playbook) bên dưới.`
+    ? t('rootCause.decision.cbTrippedFallback', { steps: previousActionSteps.length, defaultValue: `Hệ thống đã thực thi ${previousActionSteps.length} cấp tự phục hồi liên tiếp nhưng sự cố chưa được khắc phục triệt để. Cầu dao an toàn (Circuit Breaker - NO_ACTION) đã kích hoạt ngắt mạch để tránh vòng lặp tự động vô hạn. Kỹ sư vui lòng kiểm tra cụm theo Cẩm nang thao tác (Manual Playbook) bên dưới.` })
     : recReason;
 
   const actionParams = {
@@ -1330,48 +1260,48 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     const sloVerificationStep = (() => {
       const riskStr = `${predictedRisk || ''} ${rootCauseType || ''}`.toUpperCase();
       if (riskStr.includes('OOM') || riskStr.includes('MEMORY')) {
-        return 'Bước 3 [Xác nhận SLO]: Theo dõi mức sử dụng RAM container, cgroup limits và sự kiện OOMKilled trong 5 phút để bảo đảm Pod ổn định.';
+        return t('rootCause.playbook.sloOom');
       }
       if (riskStr.includes('CPU') || riskStr.includes('SATURATION') || riskStr.includes('OVERLOAD')) {
-        return 'Bước 3 [Xác nhận SLO]: Theo dõi chỉ số CPU utilization và throttling của workload trong 5 phút để xác nhận tải đã trở về ngưỡng an toàn.';
+        return t('rootCause.playbook.sloCpu');
       }
       if (riskStr.includes('DISK') || riskStr.includes('STORAGE') || riskStr.includes('ĐĨA') || riskStr.includes('LƯU TRỮ')) {
-        return 'Bước 3 [Xác nhận SLO]: Kiểm tra dung lượng trống trên PVC/node và bảo đảm dịch vụ ghi dữ liệu bình thường sau can thiệp.';
+        return t('rootCause.playbook.sloDisk');
       }
       if (riskStr.includes('LATENCY')) {
-        return 'Bước 3 [Xác nhận SLO]: Theo dõi độ trễ phản hồi (latency) và thông lượng xử lý trong 5 phút để bảo đảm dịch vụ đã phục hồi.';
+        return t('rootCause.playbook.sloLatency');
       }
-      return 'Bước 3 [Xác nhận SLO]: Theo dõi các chỉ số tài nguyên (CPU, RAM, độ trễ, tỷ lệ lỗi 5xx) trong 5 phút để bảo đảm dịch vụ đã phục hồi hoàn toàn.';
+      return t('rootCause.playbook.sloDefault');
     })();
 
     if (isCircuitBreakerTripped || recAction === 'NO_ACTION') {
       const isDiskRisk = (rootCauseType || '').toLowerCase().includes('đĩa') || (rootCauseType || '').toLowerCase().includes('disk') || (rootCauseType || '').toLowerCase().includes('lưu trữ');
       if (isDiskRisk) {
         return [
-          `Bước 1 [Kiểm tra dung lượng]: Kiểm tra phân vùng ổ đĩa và tệp logs: 'kubectl exec -it ${kubectlNsFlag}${kubectlTarget} -- df -h'.`,
-          'Bước 2 [Dọn dẹp lưu trữ]: Dọn dẹp logs, tệp tạm trong emptyDir hoặc mở rộng dung lượng ổ đĩa PVC (PersistentVolumeClaim) trên Node.',
-          "Bước 3 [Đóng sự cố]: Bấm nút 'Xác Nhận & Đóng Sự Cố' ở trên để mở lại Cầu dao tự động (Circuit Breaker) và xác nhận phục hồi."
+          t('rootCause.playbook.diskStep1', { nsFlag: kubectlNsFlag, target: kubectlTarget }),
+          t('rootCause.playbook.diskStep2'),
+          t('rootCause.playbook.diskStep3'),
         ];
       }
       return [
-        `Bước 1 [Kiểm tra nhật ký]: Kiểm tra logs container của ${serviceDisplayName} bằng lệnh 'kubectl logs ${kubectlNsFlag}${kubectlTarget} --tail=50'.`,
-        'Bước 2 [Can thiệp thủ công]: Cầu dao tự động đang ngắt mạch để tránh CrashLoop; kỹ sư kiểm tra và xử lý nguyên nhân gốc rễ.',
-        "Bước 3 [Mở lại cầu dao]: Bấm nút 'Xác Nhận & Đóng Sự Cố' ở trên để hoàn tất bàn giao và khôi phục chế độ tự động hóa."
+        t('rootCause.playbook.cbStep1', { service: serviceDisplayName, nsFlag: kubectlNsFlag, target: kubectlTarget }),
+        t('rootCause.playbook.cbStep2'),
+        t('rootCause.playbook.cbStep3'),
       ];
     }
     if (isDbService) {
       return [
-        'Bước 1 [Kiểm tra kết nối]: Đăng nhập pod cơ sở dữ liệu và xác minh trạng thái cluster/replica quorum.',
-        'Bước 2 [Tối ưu truy vấn]: Kiểm tra nhật ký truy vấn chậm (slow queries) và bổ sung Index cho các bảng có lượt quét lớn.',
-        sloVerificationStep
+        t('rootCause.playbook.dbStep1'),
+        t('rootCause.playbook.dbStep2'),
+        sloVerificationStep,
       ];
     }
     return [
-      `Bước 1 [Kiểm tra nhật ký]: Kiểm tra logs container của ${serviceDisplayName} bằng lệnh 'kubectl logs ${kubectlNsFlag}${kubectlTarget} --tail=50'.`,
-      `Bước 2 [Thực thi khắc phục]: Áp dụng đề xuất '${recActionVi || recAction}' đối với ${workloadKindLower} ${serviceDisplayName} để khôi phục cân bằng tải.`,
-      sloVerificationStep
+      t('rootCause.playbook.cbStep1', { service: serviceDisplayName, nsFlag: kubectlNsFlag, target: kubectlTarget }),
+      t('rootCause.playbook.stdStep2', { action: recActionVi || recAction, kind: workloadKindLower, service: serviceDisplayName }),
+      sloVerificationStep,
     ];
-  }, [rawActionParams.manual_playbook, incident?.manualPlaybook, isCircuitBreakerTripped, recAction, rootCauseType, predictedRisk, kubectlNsFlag, realPodName, workloadKindLower, serviceDisplayName, isDbService, recActionVi]);
+  }, [rawActionParams.manual_playbook, incident?.manualPlaybook, isCircuitBreakerTripped, recAction, rootCauseType, predictedRisk, kubectlNsFlag, realPodName, workloadKindLower, serviceDisplayName, isDbService, recActionVi, t]);
 
   // Ưu tiên & rủi ro lấy trực tiếp từ recommendation JSON hoặc ai_recommendations CSDL (không tự ép mặc định CRITICAL/HIGH)
   const actionPriority = recObj?.priority || incidentDetail?.recommendation_priority || incident?.recommendationPriority || incidentDetail?.severity || incident?.severity || null;
@@ -1381,7 +1311,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   // 6. GIẢI TRÌNH CHI TIẾT DÀNH CHO BÁO CÁO INCIDENT
   // ========================================================
   const fullExplanation = parsedAnalysis?.explanation || incidentDetail?.root_cause_description || incidentDetail?.description || incident?.rootCauseDescription || (
-    `Hệ thống AI ghi nhận dấu hiệu bất thường trên dịch vụ ${serviceDisplayName}. Tác tử giám sát đã kích hoạt phân tích nguyên nhân gốc rễ và đề xuất ${recActionVi}.`
+    t('rootCause.misc.explanationDefault', { service: serviceDisplayName, action: recActionVi })
   );
 
   // ========================================================
@@ -1391,18 +1321,18 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   const similarIncidentIds = Array.isArray(parsedAnalysis?.similar_incident_ids) ? parsedAnalysis.similar_incident_ids : [];
 
   // ========================================================
-  // BỘ BIẾN HIỂN THỊ CHUẨN HÓA 100% TIẾNG VIỆT
+  // BỘ BIẾN HIỂN THỊ CHUẨN HÓA ĐA NGÔN NGỮ
   // ========================================================
   const rootCauseCategoryVi = (evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown)
-    ? 'CHƯA ĐỦ BẰNG CHỨNG XÁC THỰC'
-    : (SRE_DICTIONARY_VI[rootCauseCategory] || rootCauseCategory);
-  const severityVi = severity ? (SRE_DICTIONARY_VI[String(severity).toUpperCase()] || severity) : 'CHƯA PHÂN LOẠI';
-  const rootCauseTypeVi = SRE_DICTIONARY_VI[rootCauseType] || translateSREText(rootCauseType);
-  const actionPriorityVi = actionPriority ? (SRE_DICTIONARY_VI[String(actionPriority).toUpperCase()] || actionPriority) : 'Chưa phân loại';
-  const actionRiskLevelVi = actionRiskLevel ? (SRE_DICTIONARY_VI[String(actionRiskLevel).toUpperCase()] || actionRiskLevel) : 'Chưa phân loại';
+    ? (sreDict['INSUFFICIENT_EVIDENCE'] || 'INSUFFICIENT_EVIDENCE')
+    : (sreDict[rootCauseCategory] || rootCauseCategory);
+  const severityVi = severity ? (sreDict[String(severity).toUpperCase()] || severity) : t('rootCause.misc.unclassified');
+  const rootCauseTypeVi = sreDict[rootCauseType] || translateSREText(rootCauseType);
+  const actionPriorityVi = actionPriority ? (sreDict[String(actionPriority).toUpperCase()] || actionPriority) : t('common.unclassified');
+  const actionRiskLevelVi = actionRiskLevel ? (sreDict[String(actionRiskLevel).toUpperCase()] || actionRiskLevel) : t('common.unclassified');
   const predictedRiskVi = predictedRisk === 'SCALE_DOWN_CANDIDATE'
-    ? 'Xu hướng có thể giảm replica'
-    : (GRU_RISK_NAMES_VI[predictedRisk] || SRE_DICTIONARY_VI[predictedRisk] || predictedRisk);
+    ? (sreDict['SCALE_DOWN_CANDIDATE'] || predictedRisk)
+    : (getGruRiskName(predictedRisk) || sreDict[predictedRisk] || predictedRisk);
   const recReasonVi = useMemo(() => {
     let text = translateSREText(recReason || '');
     if (!text) return '';
@@ -1410,10 +1340,13 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     text = text.replace(/Lỗi gần nhất:\s*Hậu kiểm thất bại.*?$/is, '').trim();
     text = text.replace(/Lỗi gần nhất:.*?$/is, '').trim();
     text = text.replace(/\s*\(Post-Action Verification Failed\)/gi, '');
-    text = text.replace(/Human-in-the-Loop/gi, 'Kỹ sư vận hành');
-    text = text.replace(/Circuit Breaker/gi, 'Cầu dao an toàn');
+    if (i18nInstance.language !== 'en') {
+      text = text.replace(/Human-in-the-Loop/gi, 'Kỹ sư vận hành');
+      text = text.replace(/Circuit Breaker/gi, 'Cầu dao an toàn');
+    }
     return text.trim();
-  }, [recReason]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recReason, i18nInstance.language]);
 
   const detectedEngine = useMemo(() => {
     if (parsedAnalysis?.engine) return parsedAnalysis.engine;
@@ -1424,8 +1357,8 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       }
       return method;
     }
-    return 'Chưa xác định';
-  }, [parsedAnalysis, incidentDetail, incident?.analysisMethod]);
+    return t('common.unidentified');
+  }, [parsedAnalysis, incidentDetail, incident?.analysisMethod, t]);
 
   const handleExecuteRemediation = () => {
     setIsExecuting(true);
@@ -1446,7 +1379,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         const d = new Date(item.collected_at);
         const timeLabel = isNaN(d.getTime())
           ? ''
-          : d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          : d.toLocaleTimeString(getIntlLocale(i18nInstance.language), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
         map.set(key, {
           rawTime: item.collected_at,
@@ -1479,7 +1412,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       stepLabel: `T${idx + 1}`,
       displayTime: item.timeLabel || `T${idx + 1}`,
     }));
-  }, [predictionInputs]);
+  }, [predictionInputs, i18nInstance.language]);
 
   // Thống kê 8 chỉ số tổng hợp (Hiện tại, TB, Max)
   const metricSummary = useMemo(() => {
@@ -1514,43 +1447,53 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
   // Tổng hợp giải trình chi tiết báo cáo sự cố SRE dạng bullet points (dữ liệu đã xác thực, không suy diễn giả)
   const fullExplanationVi = useMemo(() => {
     const rawTranslated = translateSREText(fullExplanation || '');
+    const prefixCheck = t('rootCause.srePatterns.strongestEvidence', { sub: '' }).split(':')[0];
     const isShortGeneric =
       !rawTranslated ||
       rawTranslated.length < 130 ||
-      rawTranslated.startsWith('Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân');
+      rawTranslated.startsWith('Bằng chứng sự cố hiện tại ủng hộ mạnh nhất nguyên nhân') ||
+      (prefixCheck && rawTranslated.startsWith(prefixCheck));
 
     if (!isShortGeneric) {
       return rawTranslated;
     }
 
     const targetDesc = realPodName
-      ? (faultyNodeName ? `Pod: ${realPodName} trên Node ${faultyNodeName}` : `Pod: ${realPodName}`)
-      : (faultyNodeName ? `${workloadKindRaw}: ${serviceDisplayName} trên Node ${faultyNodeName}` : `${workloadKindRaw}: ${serviceDisplayName}`);
+      ? (faultyNodeName ? t('rootCause.misc.podOnNode', { pod: realPodName, node: faultyNodeName }) : t('rootCause.misc.podOnly', { pod: realPodName }))
+      : (faultyNodeName ? t('rootCause.misc.workloadOnNode', { kind: workloadKindRaw, service: serviceDisplayName, node: faultyNodeName }) : t('rootCause.misc.workloadOnly', { kind: workloadKindRaw, service: serviceDisplayName }));
 
     const lines = [];
     const isUnknownOrInsufficient =
       isUnknown ||
       evidenceStatus === 'INSUFFICIENT_EVIDENCE' ||
-      /chưa xác định|thiếu bằng chứng/i.test(rootCauseTypeVi);
+      rootCauseType === 'UNKNOWN' ||
+      /chưa xác định|thiếu bằng chứng|insufficient evidence|unidentified/i.test(rootCauseTypeVi);
 
     if (isUnknownOrInsufficient) {
       lines.push(
-        `• Sự cố phát hiện: Dịch vụ "${serviceDisplayName}" (${targetDesc}) đang gặp bất thường (Mức độ: ${severityVi}) nhưng chưa đủ bằng chứng để xác định nguyên nhân gốc rễ.`
+        t('rootCause.sreReport.bulletUnknown', { service: serviceDisplayName, target: targetDesc, severity: severityVi })
       );
     } else {
       const cleanCause = rootCauseTypeVi.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
       lines.push(
-        `• Sự cố phát hiện: Dịch vụ "${serviceDisplayName}" (${targetDesc}) gặp sự cố "${cleanCause || rootCauseTypeVi}" (Mức độ: ${severityVi}).`
+        t('rootCause.sreReport.bulletKnown', { service: serviceDisplayName, target: targetDesc, cause: cleanCause || rootCauseTypeVi, severity: severityVi })
       );
     }
 
     if (metricSummary) {
       lines.push(
-        `• Tín hiệu viễn trắc eBPF: CPU đỉnh ${metricSummary.cpu.max}% (hiện tại ${metricSummary.cpu.current}%), RAM đỉnh ${metricSummary.ram.max}%, độ trễ ${metricSummary.latency.max} ms, tỷ lệ lỗi 5xx ${metricSummary.http_5xx_rate.max}%, số lần khởi động lại Pod: ${metricSummary.pod_restart_count}.`
+        t('rootCause.sreReport.bulletTelemetry', {
+          cpuMax: metricSummary.cpu.max,
+          cpuCurr: metricSummary.cpu.current,
+          ramMax: metricSummary.ram.max,
+          latMax: metricSummary.latency.max,
+          err5xx: metricSummary.http_5xx_rate.max,
+          restarts: metricSummary.pod_restart_count,
+        })
       );
     } else if (predictedRiskVi) {
       lines.push(
-        `• Cảnh báo rủi ro sớm từ AI: Nguy cơ "${predictedRiskVi}" vượt ngưỡng an toàn.`
+        t('rootCause.sreReport.bulletAiRisk', { risk: predictedRiskVi })
       );
     }
 
@@ -1560,11 +1503,16 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         .map((e) => {
           const rawStr = String(e || '').trim();
           if (!rawStr || rawStr === 'insufficient_evidence' || /insufficient_evidence/i.test(rawStr)) {
-            return 'Chưa đủ dữ liệu nhật ký sự kiện để kết luận';
+            return t('rootCause.sreReport.insufficientEventLog');
           }
           const parsed = parseSREEventEvidence(e);
           if (parsed.podName && parsed.title) {
-            return `${parsed.title} trên Pod ${parsed.podName} (${parsed.count || 1} lần)${parsed.errorSnippet ? ` - ${parsed.errorSnippet}` : ''}`;
+            return t('rootCause.sreReport.evidencePodItem', {
+              title: parsed.title,
+              pod: parsed.podName,
+              count: parsed.count || 1,
+              snippet: parsed.errorSnippet ? ` - ${parsed.errorSnippet}` : '',
+            });
           }
           let s = rawStr.replace(/\.$/, '').trim();
           const jsonIdx = s.indexOf('{"resource":');
@@ -1577,7 +1525,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         })
         .filter(Boolean);
       if (topEvs.length > 0) {
-        lines.push(`• Bằng chứng xác thực: ${topEvs.join('; ')}.`);
+        lines.push(t('rootCause.sreReport.bulletEvidence', { items: topEvs.join('; ') }));
       }
     }
 
@@ -1588,29 +1536,35 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         .replace(/\s+/g, ' ')
         .trim();
       const actionMsg = isCircuitBreakerTripped
-        ? `Kích hoạt Ngắt mạch an toàn (Mức ưu tiên: ${actionPriorityVi}). ${cleanReason}`
-        : `Chưa thực hiện hành động tự động (Mức ưu tiên: ${actionPriorityVi}). ${cleanReason}`;
+        ? t('rootCause.sreReport.bulletActionCb', { priority: actionPriorityVi, reason: cleanReason })
+        : t('rootCause.sreReport.bulletActionNo', { priority: actionPriorityVi, reason: cleanReason });
       lines.push(
-        `• Phương án xử lý & Đề xuất hiện tại: ${actionMsg.trim()} Kỹ sư vui lòng thực hiện theo 3 bước trong Cẩm nang thao tác (Manual Playbook) phía trên.`
+        t('rootCause.sreReport.bulletActionProposal', { msg: actionMsg.trim() })
       );
     } else if (lastStep && lastStep.isVerifiedSuccess) {
       lines.push(
-        `• Kết luận tự phục hồi: Hệ thống đã tự động khắc phục thành công qua Bậc ${lastStep.stepIndex} ("${lastStep.labelVi}") và xác nhận dịch vụ ổn định hoàn toàn.`
+        t('rootCause.sreReport.bulletHealingSuccess', { step: lastStep.stepIndex, name: lastStep.labelVi })
       );
     } else if (lastStep && lastStep.isVerifying && lastStep.code === recAction) {
       lines.push(
-        `• Trạng thái hiện tại: Đã thực thi "${recActionVi}" (Bậc ${lastStep.stepIndex}), hệ thống đang thu thập 12 điểm viễn trắc tiếp theo để hậu kiểm độ ổn định.`
+        t('rootCause.sreReport.bulletHealingVerifying', { action: recActionVi, step: lastStep.stepIndex })
       );
     } else {
       const rollbackDetail = recAction === 'ROLLBACK_DEPLOYMENT'
-        ? ' (quay về bản phát hành ổn định liền trước / revision trước đó)'
+        ? t('rootCause.sreReport.rollbackDetailLong')
         : '';
       lines.push(
-        `• Phương án tự khắc phục tiếp theo: Đề xuất thực thi hành động "${recActionVi}"${rollbackDetail} (Ưu tiên: ${actionPriorityVi}, Rủi ro: ${actionRiskLevelVi}) để nhanh chóng đưa dịch vụ trở về trạng thái ổn định theo chuẩn MAPE-K.`
+        t('rootCause.sreReport.bulletNextAction', {
+          action: recActionVi,
+          rollback: rollbackDetail,
+          priority: actionPriorityVi,
+          risk: actionRiskLevelVi,
+        })
       );
     }
 
     return lines.join('\n');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     fullExplanation,
     serviceDisplayName,
@@ -1630,6 +1584,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     actionPriorityVi,
     actionRiskLevelVi,
     isCircuitBreakerTripped,
+    i18nInstance.language,
   ]);
 
 // Cẩm nang thao tác chuẩn Mockup 3 bước
@@ -1637,17 +1592,17 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     const isProbe = groupedSymptoms.some(g => g.title.includes('Probe')) || symptomsList.some(s => String(s).toLowerCase().includes('probe'));
     if (isProbe) {
       return [
-        'Kiểm tra trạng thái Pod và log ứng dụng',
-        'Kiểm tra cấu hình Probe, tài nguyên',
-        'Khắc phục nguyên nhân và xác nhận phục hồi',
+        t('rootCause.misc.pbProbe1'),
+        t('rootCause.misc.pbProbe2'),
+        t('rootCause.misc.pbProbe3'),
       ];
     }
     return [
-      'Kiểm tra trạng thái Pod và log dịch vụ',
-      'Kiểm tra mức sử dụng tài nguyên CPU, RAM',
-      'Xác minh cấu hình dịch vụ và phục hồi',
+      t('rootCause.misc.pbDefault1'),
+      t('rootCause.misc.pbDefault2'),
+      t('rootCause.misc.pbDefault3'),
     ];
-  }, [groupedSymptoms, symptomsList]);
+  }, [groupedSymptoms, symptomsList, t]);
 
   // Danh sách dòng thời gian Lịch sử tự phục hồi (Timeline Data) - Phản ánh chính xác từ dữ liệu thực tế
   const timelineList = useMemo(() => {
@@ -1656,12 +1611,12 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
         let actionName = ACTION_DISPLAY_NAMES[st.code] || st.labelVi || st.code;
         if (st.code === 'SCALE_REPLICAS' || st.code === 'SCALE_UP') {
           actionName = st.replicaCount
-            ? `Tăng số lượng bản sao Pod (Lên ${st.replicaCount} Pods)`
-            : 'Tăng số lượng bản sao Pod';
+            ? t('rootCause.timeline.scaleUpNameCount', { count: st.replicaCount })
+            : t('rootCause.timeline.scaleUpName');
         } else if (st.code === 'SCALE_DOWN') {
           actionName = st.replicaCount
-            ? `Thu hẹp bản sao Pod (Về ${st.replicaCount} Pods)`
-            : 'Thu hẹp bản sao Pod';
+            ? t('rootCause.timeline.scaleDownNameCount', { count: st.replicaCount })
+            : t('rootCause.timeline.scaleDownName');
         }
         return {
           stepIndex: st.stepIndex,
@@ -1677,7 +1632,8 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
       });
     }
     return [];
-  }, [previousActionSteps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previousActionSteps, i18nInstance.language]);
 
   // Tổng số lần triệu chứng xảy ra
   const totalSymptomCount = useMemo(() => {
@@ -1687,13 +1643,14 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
   // Format thời gian phân tích
   const analyzedTimeFormatted = useMemo(() => {
-    if (!analyzedAtStr) return 'Chưa ghi nhận';
+    if (!analyzedAtStr) return t('common.unrecorded');
     const d = new Date(analyzedAtStr);
     if (isNaN(d.getTime())) return analyzedAtStr;
-    const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const intlLocale = getIntlLocale(i18nInstance.language);
+    const time = d.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const date = d.toLocaleDateString(intlLocale, { day: '2-digit', month: '2-digit', year: 'numeric' });
     return `~ ${time} (${date})`;
-  }, [analyzedAtStr]);
+  }, [analyzedAtStr, t, i18nInstance.language]);
 
   // Nội dung tóm tắt Báo cáo SRE chuẩn Mockup
   const sreSummaryText = useMemo(() => {
@@ -1701,15 +1658,20 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
     const isInsufficient = evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown;
     if (isInsufficient) {
       if (isProbe) {
-        return `SelfAI đã phát hiện sự cố liên quan đến Probe của ${serviceDisplayName}. Hiện chưa đủ bằng chứng để xác định nguyên nhân gốc và đã tạm dừng hành động tự động để đảm bảo an toàn.`;
+        return t('rootCause.sreReport.summaryInsufficientProbe', { service: serviceDisplayName });
       }
-      return `SelfAI ghi nhận dấu hiệu bất thường trên dịch vụ ${serviceDisplayName}. Hiện chưa đủ bằng chứng xác thực để kết luận nguyên nhân gốc rễ và tạm thời dừng hành động tự động để đảm bảo an toàn.`;
+      return t('rootCause.sreReport.summaryInsufficient', { service: serviceDisplayName });
     }
     const rollbackDetail = recAction === 'ROLLBACK_DEPLOYMENT'
-      ? ' (quay về bản phát hành ổn định liền trước)'
+      ? t('rootCause.sreReport.rollbackDetail')
       : '';
-    return `SelfAI xác định nguyên nhân gốc rễ của sự cố trên dịch vụ ${serviceDisplayName} là "${rootCauseTypeVi}". Đề xuất phương án xử lý: ${recActionVi}${rollbackDetail}.`;
-  }, [groupedSymptoms, symptomsList, evidenceStatus, isUnknown, serviceDisplayName, rootCauseTypeVi, recActionVi]);
+    return t('rootCause.sreReport.summaryIdentified', {
+      service: serviceDisplayName,
+      cause: rootCauseTypeVi,
+      action: recActionVi,
+      rollback: rollbackDetail,
+    });
+  }, [groupedSymptoms, symptomsList, evidenceStatus, isUnknown, serviceDisplayName, rootCauseTypeVi, recActionVi, recAction, t]);
 
     if (!incident) return null;
 
@@ -1788,7 +1750,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.015em', display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap', lineHeight: 1.25 }}>
-                <span>Chi tiết sự cố</span>
+                <span>{t('rootCause.header.title')}</span>
                 <span
                   title={incidentIdStr}
                   style={{
@@ -1816,19 +1778,19 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       fontWeight: 700,
                     }}
                   >
-                    Lặp lại {occurrenceCount} lần
+                    {t('rootCause.header.recurrence', { count: occurrenceCount })}
                   </span>
                 )}
               </div>
               <div style={{ fontSize: '0.73rem', color: '#64748B', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 <span>
-                  Dịch vụ: <strong style={{ color: '#047857', fontFamily: 'var(--font-mono)' }}>{serviceDisplayName}</strong>
+                  {t('rootCause.header.serviceLabel')} <strong style={{ color: '#047857', fontFamily: 'var(--font-mono)' }}>{serviceDisplayName}</strong>
                 </span>
                 <span style={{ color: '#CBD5E1' }}>&bull;</span>
                 <span>
-                  Cụm: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{clusterDisplayName || 'Chưa xác định'}</strong>
+                  {t('rootCause.header.clusterLabel')} <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{clusterDisplayName || t('common.unidentified')}</strong>
                 </span>
-                {detectedEngine && detectedEngine !== 'Chưa xác định' && (
+                {detectedEngine && detectedEngine !== t('common.unidentified') && (
                   <>
                     <span style={{ color: '#CBD5E1' }}>&bull;</span>
                     <span style={{ color: '#64748B', fontSize: '0.7rem' }}>{detectedEngine}</span>
@@ -1841,7 +1803,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
           <button
             type="button"
             onClick={onClose}
-            aria-label="Đóng cửa sổ"
+            aria-label={t('rootCause.header.closeAria')}
             style={{
               background: '#F8FAFC',
               border: '1px solid #E2E8F0',
@@ -1893,7 +1855,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               {(evidenceStatus === 'INSUFFICIENT_EVIDENCE' || isUnknown) ? (
                 <>
                   <AlertTriangle size={12} color="#DC2626" />
-                  <span>Chưa xác định nguyên nhân</span>
+                  <span>{t('rootCause.statusSubbar.unknownCause')}</span>
                 </>
               ) : (
                 <span>{rootCauseTypeVi}</span>
@@ -1904,9 +1866,9 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
             {/* RCA confidence */}
             <span style={{ fontSize: '0.74rem', color: '#64748B' }}>
-              Tin cậy RCA:{' '}
+              {t('rootCause.statusSubbar.rcaConfidence')}{' '}
               <strong style={{ color: '#047857', fontFamily: 'var(--font-mono)' }}>
-                {confidence !== null ? `${confidence}%` : 'Chưa đánh giá'}
+                {confidence !== null ? `${confidence}%` : t('common.notEvaluated')}
               </strong>
             </span>
 
@@ -1914,7 +1876,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
             {/* Status */}
             <span style={{ fontSize: '0.74rem', color: '#64748B' }}>
-              Trạng thái:{' '}
+              {t('rootCause.statusSubbar.status')}{' '}
               <strong style={{ color: modalStatus.color }}>
                 {modalStatus.label}
               </strong>
@@ -1928,7 +1890,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
               setIsGruDrawerOpen(!isGruDrawerOpen);
               setActiveTab('io');
             }}
-            title="Xem chi tiết 7 đầu rủi ro & dữ liệu viễn trắc"
+            title={t('rootCause.statusSubbar.aiRiskTooltip')}
             style={{
               backgroundColor: '#F5F3FF',
               color: '#6D28D9',
@@ -1945,7 +1907,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
           >
             <Activity size={12} color="#7C3AED" />
             <span>
-              Dự báo rủi ro AI <strong style={{ fontFamily: 'var(--font-mono)' }}>{gruPredictionConfidence !== null ? `${Math.round(gruPredictionConfidence * 100)}%` : '—'}</strong>
+              {t('rootCause.statusSubbar.aiRiskLabel')} <strong style={{ fontFamily: 'var(--font-mono)' }}>{gruPredictionConfidence !== null ? `${Math.round(gruPredictionConfidence * 100)}%` : '—'}</strong>
             </span>
           </button>
         </div>
@@ -1980,7 +1942,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             }}
           >
             <Sparkles size={13} />
-            <span>1. Chẩn Đoán &amp; Khắc Phục</span>
+            <span>{t('rootCause.tabs.overview')}</span>
           </button>
 
           <button
@@ -2002,7 +1964,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
             }}
           >
             <Database size={13} />
-            <span>2. Viễn Trắc &amp; Dự Báo AI</span>
+            <span>{t('rootCause.tabs.io')}</span>
           </button>
         </div>
 
@@ -2027,10 +1989,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                   <ShieldAlert size={18} color="#DC2626" />
                   <div>
                     <div style={{ fontWeight: 800, fontSize: '0.8125rem', color: '#991B1B' }}>
-                      KHẨN CẤP - CẦN KỸ SƯ KIỂM TRA (NO_ACTION)
+                      {t('rootCause.urgentBanner.title')}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#B91C1C' }}>
-                      Khẩn Cấp — Cần Kiểm Tra Thủ Công
+                      {t('rootCause.urgentBanner.subtitle')}
                     </div>
                   </div>
                 </div>
@@ -2087,7 +2049,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ color: '#94A3B8', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                      {realPodName ? 'Pod lỗi' : 'Workload'}
+                      {realPodName ? t('rootCause.infoCard.podError') : t('rootCause.infoCard.workload')}
                     </div>
                     <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F172A', marginTop: '2px', wordBreak: 'break-all' }}>
                       {realPodName || serviceDisplayName}
@@ -2096,7 +2058,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                   <div style={{ minWidth: 0 }}>
                     <div style={{ color: '#94A3B8', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                      Namespace
+                      {t('rootCause.infoCard.namespace')}
                     </div>
                     <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
                       {namespaceName || 'default'}
@@ -2105,16 +2067,16 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                   <div style={{ minWidth: 0 }}>
                     <div style={{ color: '#94A3B8', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                      Node
+                      {t('rootCause.infoCard.node')}
                     </div>
                     <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
-                      {faultyNodeName || 'Chưa xác định'}
+                      {faultyNodeName || t('common.unidentified')}
                     </div>
                   </div>
 
                   <div style={{ minWidth: 0 }}>
                     <div style={{ color: '#94A3B8', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                      Loại / Bắt đầu
+                      {t('rootCause.infoCard.typeStart')}
                     </div>
                     <div style={{ fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
                       {workloadKindRaw || 'Workload'}
@@ -2198,7 +2160,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         }}
                       >
                         <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: sevStyle.dot, flexShrink: 0 }} />
-                        Mức độ: <strong style={{ color: sevStyle.val, fontWeight: 800 }}>{severityVi}</strong>
+                        {t('rootCause.infoCard.severityPrefix')} <strong style={{ color: sevStyle.val, fontWeight: 800 }}>{severityVi}</strong>
                       </span>
 
                       <span
@@ -2215,7 +2177,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         }}
                       >
                         <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: priStyle.dot, flexShrink: 0 }} />
-                        Ưu tiên: <strong style={{ color: priStyle.val, fontWeight: 800 }}>{actionPriorityVi}</strong>
+                        {t('rootCause.infoCard.priorityPrefix')} <strong style={{ color: priStyle.val, fontWeight: 800 }}>{actionPriorityVi}</strong>
                       </span>
 
                       <span
@@ -2232,7 +2194,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         }}
                       >
                         <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: riskStyle.dot, flexShrink: 0 }} />
-                        Rủi ro: <strong style={{ color: riskStyle.val, fontWeight: 800 }}>{actionRiskLevelVi}</strong>
+                        {t('rootCause.infoCard.riskPrefix')} <strong style={{ color: riskStyle.val, fontWeight: 800 }}>{actionRiskLevelVi}</strong>
                       </span>
 
                       {clusterSubLabel && (
@@ -2252,7 +2214,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 {/* Lỗi thực thi gần nhất (nếu có) */}
                 {healingErrorMessage && (
                   <div style={{ marginTop: '8px', padding: '7px 11px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px', fontSize: '0.74rem', color: '#B91C1C' }}>
-                    <strong>Lỗi thực thi gần nhất:</strong> {healingErrorMessage}
+                    <strong>{t('rootCause.infoCard.latestExecError')}</strong> {healingErrorMessage}
                   </div>
                 )}
               </div>
@@ -2283,7 +2245,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Activity size={15} color="#059669" />
-                        <span>Triệu chứng chính</span>
+                        <span>{t('rootCause.symptoms.title')}</span>
                       </div>
                       {groupedSymptoms.length > 0 && (
                         <span
@@ -2297,7 +2259,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                             borderRadius: '999px',
                           }}
                         >
-                          {groupedSymptoms.length} loại · {totalSymptomCount} lần
+                          {t('rootCause.symptoms.summaryBadge', { types: groupedSymptoms.length, total: totalSymptomCount })}
                         </span>
                       )}
                     </div>
@@ -2354,14 +2316,14 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                           whiteSpace: 'nowrap',
                                         }}
                                       >
-                                        {grp.count} lần
+                                        {t('rootCause.symptoms.countBadge', { count: grp.count })}
                                       </span>
                                     </div>
                                     <div style={{ fontSize: '0.73rem', color: '#475569', marginTop: '2px', lineHeight: 1.38 }}>
                                       {grp.explanation}
                                     </div>
                                     <div style={{ fontSize: '0.67rem', color: '#94A3B8', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
-                                      Pod: {grp.podName} · {grp.count} lần
+                                      {t('rootCause.symptoms.podCountLine', { pod: grp.podName, count: grp.count })}
                                     </div>
                                   </div>
                                 </div>
@@ -2369,7 +2331,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                 <button
                                   type="button"
                                   onClick={() => toggleSymptomKey(grp.key)}
-                                  aria-label="Xem chi tiết K8s"
+                                  aria-label={t('rootCause.symptoms.viewK8sAria')}
                                   style={{
                                     border: '1px solid #E2E8F0',
                                     backgroundColor: '#FFFFFF',
@@ -2387,7 +2349,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                   }}
                                 >
                                   <span>
-                                    {grp.errorSnippet?.includes('timeout') ? 'timeout' : (grp.errorSnippet || 'Chi tiết')}
+                                    {grp.errorSnippet?.includes('timeout') ? 'timeout' : (grp.errorSnippet || t('common.details'))}
                                   </span>
                                   {grp.errorSnippet?.includes('timeout') && (
                                     <span style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
@@ -2416,7 +2378,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         })
                       ) : (
                         <div style={{ fontSize: '0.75rem', color: '#64748B', padding: '6px 10px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
-                          Không ghi nhận triệu chứng bất thường đơn lẻ
+                          {t('rootCause.symptoms.empty')}
                         </div>
                       )}
                     </div>
@@ -2430,12 +2392,12 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                 <CheckCircle2 size={13} color="#059669" />
                                 <span style={{ fontWeight: 700, color: '#047857', backgroundColor: '#ECFDF5', padding: '1px 6px', borderRadius: '5px', fontSize: '0.66rem' }}>
-                                  {parsedEvidenceFor.length} ghi nhận
+                                  {t('rootCause.evidence.recordsBadge', { count: parsedEvidenceFor.length })}
                                 </span>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '0.68rem' }}>
                                   {evidenceForSummary.map((item, idx) => (
                                     <span key={idx}>
-                                      • {item.count} sự kiện ({item.podName})
+                                      {t('rootCause.evidence.eventsByPod', { count: item.count, pod: item.podName })}
                                     </span>
                                   ))}
                                 </div>
@@ -2454,7 +2416,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                   cursor: 'pointer',
                                 }}
                               >
-                                {isExpandedEvidenceList ? 'Thu gọn' : `Xem ${parsedEvidenceFor.length} bản ghi gốc`}
+                                {isExpandedEvidenceList ? t('rootCause.evidence.collapse') : t('rootCause.evidence.expandRaw', { count: parsedEvidenceFor.length })}
                               </button>
                             </div>
 
@@ -2463,7 +2425,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                 {parsedEvidenceFor.map((ev, eIdx) => (
                                   <div key={eIdx} style={{ fontSize: '0.66rem', fontFamily: 'var(--font-mono)', backgroundColor: '#FFFFFF', padding: '5px 7px', borderRadius: '5px', border: '1px solid #E2E8F0', marginBottom: '3px' }}>
                                     <div style={{ fontWeight: 700, color: '#047857' }}>
-                                      {`Bản ghi #${eIdx + 1} • Pod: ${ev.podName || 'workload'}`}
+                                      {t('rootCause.evidence.recordHeader', { idx: eIdx + 1, pod: ev.podName || 'workload' })}
                                     </div>
                                     <div style={{ color: '#475569', wordBreak: 'break-all', marginTop: '2px' }}>
                                       {ev.rawLog || ev.originalText}
@@ -2480,12 +2442,12 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '3px' }}>
                               <HelpCircle size={12} color="#D97706" />
                               <span style={{ fontWeight: 700, color: '#92400E', fontSize: '0.69rem' }}>
-                                Bằng chứng cần bổ sung
+                                {t('rootCause.evidence.missingTitle')}
                               </span>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                               {missingEvidenceList.map((item, idx) => {
-                                const question = SRE_CHECKLIST_QUESTIONS[item]?.question || translateSREText(item);
+                                const question = getChecklistQuestionText(item) || translateSREText(item);
                                 return (
                                   <div key={idx} style={{ color: '#78350F', display: 'flex', alignItems: 'flex-start', gap: '5px', fontSize: '0.69rem' }}>
                                     <span style={{ fontWeight: 800, color: '#D97706' }}>•</span>
@@ -2513,7 +2475,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                       <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <History size={15} color="#059669" />
-                        <span>Lịch sử tự phục hồi</span>
+                        <span>{t('rootCause.timeline.title')}</span>
                       </div>
                       <span
                         style={{
@@ -2526,7 +2488,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                           borderRadius: '999px',
                         }}
                       >
-                        {timelineList.length} hành động
+                        {t('rootCause.timeline.actionsCount', { count: timelineList.length })}
                       </span>
                     </div>
 
@@ -2621,7 +2583,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                               padding: 0,
                             }}
                           >
-                            <span>{isTimelineExpanded ? 'Thu gọn chi tiết ↑' : 'Xem chi tiết lịch sử →'}</span>
+                            <span>{isTimelineExpanded ? t('rootCause.timeline.collapse') : t('rootCause.timeline.expand')}</span>
                           </button>
 
                           {isTimelineExpanded && (
@@ -2629,7 +2591,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                               {timelineList.map((st, idx) => (
                                 <div key={idx} style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '8px 10px', fontSize: '0.72rem' }}>
                                   <div style={{ fontWeight: 700, color: '#0F172A', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                    <span>Bước {st.stepIndex}: {st.actionName} — {st.statusBadge.label}</span>
+                                    <span>{t('rootCause.timeline.stepTitle', { step: st.stepIndex, name: st.actionName, badge: st.statusBadge.label })}</span>
                                     {st.replicaCount && (
                                       <span style={{ backgroundColor: '#ECFDF5', color: '#047857', padding: '1px 6px', borderRadius: '5px', border: '1px solid #A7F3D0', fontSize: '0.67rem', fontWeight: 700 }}>
                                         {st.replicaCount} Pods
@@ -2643,7 +2605,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                     <div style={{ display: 'flex', gap: '5px', marginTop: '6px', flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: '0.67rem' }}>
                                       {st.replicaCount && (
                                         <span style={{ backgroundColor: '#FFFFFF', color: '#047857', padding: '1px 6px', borderRadius: '4px', border: '1px solid #A7F3D0', fontWeight: 700 }}>
-                                          Số Pod: {st.replicaCount}
+                                          {t('rootCause.timeline.podCountChip', { count: st.replicaCount })}
                                         </span>
                                       )}
                                       {st.metrics?.ram !== null && st.metrics?.ram !== undefined && (
@@ -2663,7 +2625,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                                       )}
                                       {st.metrics?.latency !== null && st.metrics?.latency !== undefined && (
                                         <span style={{ backgroundColor: '#FFFFFF', padding: '1px 6px', borderRadius: '4px', border: '1px solid #CBD5E1' }}>
-                                          Độ trễ: {st.metrics.latency}ms
+                                          {t('rootCause.timeline.latencyLabel', { val: st.metrics.latency })}
                                         </span>
                                       )}
                                     </div>
@@ -2677,10 +2639,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     ) : (
                       <div style={{ fontSize: '0.74rem', color: '#64748B', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1', lineHeight: 1.45 }}>
                         {isResolved
-                          ? 'Chưa thực hiện hành động tự động nào. Dịch vụ đã tự ổn định.'
+                          ? t('rootCause.timeline.emptyResolved')
                           : (recAction === 'NO_ACTION' || isUnknown || evidenceStatus === 'INSUFFICIENT_EVIDENCE'
-                              ? 'Chưa thực hiện hành động tự động nào (Hệ thống dừng an toàn do Rule Engine chặn hoặc thiếu bằng chứng).'
-                              : 'Chưa ghi nhận hành động tự phục hồi nào trước đó.')}
+                              ? t('rootCause.timeline.emptyNoAction')
+                              : t('rootCause.timeline.emptyDefault'))}
                       </div>
                     )}
                   </div>
@@ -2706,7 +2668,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <ShieldCheck size={15} color="#059669" />
                         <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A' }}>
-                          Quyết định của SelfAI
+                          {t('rootCause.decision.title')}
                         </span>
                       </div>
                       <span
@@ -2727,10 +2689,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
 
                     <div style={{ fontSize: '0.75rem', color: '#334155', lineHeight: 1.45 }}>
                       {previousActionSteps.length > 0 || isCircuitBreakerActive
-                        ? 'Cầu dao an toàn (Circuit Breaker) đã ngắt mạch sau khi các bước tự phục hồi trước đó chưa thành công.'
+                        ? t('rootCause.decision.circuitBreakerReason')
                         : isInsufficient
-                          ? 'Chưa thực hiện hành động tự động do thiếu bằng chứng xác thực.'
-                          : (recReasonVi || 'Chưa có hành động hạ tầng nào đủ an toàn dựa trên bằng chứng hiện tại.')}
+                          ? t('rootCause.decision.insufficientReason')
+                          : (recReasonVi || t('rootCause.decision.noSafeAction'))}
                     </div>
 
                     {/* Rule Engine & Circuit Breaker Badges */}
@@ -2784,10 +2746,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         }}
                       >
                         <div style={{ color: '#7E22CE', fontWeight: 700, fontSize: '0.66rem', marginBottom: '3px' }}>
-                          Dự báo rủi ro sớm từ AI (tham khảo)
+                          {t('rootCause.decision.aiRiskRef')}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', color: '#581C87' }}>
-                          <span style={{ fontWeight: 700 }}>{GRU_RISK_NAMES_VI[predictedRisk] || predictedRiskVi}</span>
+                          <span style={{ fontWeight: 700 }}>{getGruRiskName(predictedRisk) || predictedRiskVi}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
                             <span style={{ fontFamily: 'var(--font-mono)', backgroundColor: '#FFFFFF', border: '1px solid #DDD6FE', padding: '1px 6px', borderRadius: '5px', fontSize: '0.64rem' }}>
                               {predictedRisk}
@@ -2799,7 +2761,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         </div>
                         {predictedRisk === 'SCALE_DOWN_CANDIDATE' && (
                           <div style={{ color: '#6B21A8', fontSize: '0.65rem', marginTop: '3px', fontStyle: 'italic' }}>
-                            Chưa cho phép giảm replica khi workload đang bất ổn.
+                            {t('rootCause.decision.scaleDownWarning')}
                           </div>
                         )}
                       </div>
@@ -2821,10 +2783,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                       <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <BookOpen size={15} color="#059669" />
-                        <span>Cẩm nang thao tác kỹ sư</span>
+                        <span>{t('rootCause.playbook.title')}</span>
                       </div>
                       <span style={{ fontSize: '0.66rem', fontWeight: 700, color: '#047857', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '1px 7px', borderRadius: '999px' }}>
-                        {isAiPlaybook ? 'AI Playbook' : 'Theo ngữ cảnh RCA'}
+                        {isAiPlaybook ? t('rootCause.playbook.aiBadge') : t('rootCause.playbook.contextBadge')}
                       </span>
                     </div>
 
@@ -2881,20 +2843,20 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       }}
                     >
                       <Terminal size={13} />
-                      <span>{isPlaybookExpanded ? 'Ẩn lệnh điều tra ↑' : 'Xem lệnh điều tra nhanh →'}</span>
+                      <span>{isPlaybookExpanded ? t('rootCause.playbook.hideCmd') : t('rootCause.playbook.showCmd')}</span>
                     </button>
 
                     {isPlaybookExpanded && (
                       <div style={{ marginTop: '10px', backgroundColor: '#0B1120', borderRadius: '8px', padding: '10px 12px', fontSize: '0.71rem', fontFamily: 'var(--font-mono, monospace)', color: '#E2E8F0' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <span style={{ color: '#94A3B8', fontSize: '0.66rem' }}># Lệnh điều tra nhanh:</span>
+                          <span style={{ color: '#94A3B8', fontSize: '0.66rem' }}>{t('rootCause.playbook.cliComment')}</span>
                           <button
                             type="button"
                             onClick={() => handleCopyText(`kubectl logs ${kubectlNsFlag}${realPodName || serviceDisplayName} --tail=50\nkubectl describe pod ${kubectlNsFlag}${realPodName || serviceDisplayName}\nkubectl get pods ${kubectlNsFlag}`, 'playbook-cli')}
                             style={{ background: 'none', border: 'none', color: '#34D399', cursor: 'pointer', fontSize: '0.66rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}
                           >
                             {copiedKey === 'playbook-cli' ? <Check size={11} color="#4ADE80" /> : <Copy size={11} />}
-                            <span>{copiedKey === 'playbook-cli' ? 'Đã sao chép' : 'Sao chép lệnh'}</span>
+                            <span>{copiedKey === 'playbook-cli' ? t('common.copied') : t('rootCause.playbook.copyCmd')}</span>
                           </button>
                         </div>
                         <div style={{ color: '#38BDF8', marginBottom: '4px' }}>
@@ -2927,13 +2889,13 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <FileText size={15} color="#059669" />
                     <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A' }}>
-                      Báo cáo tóm tắt SRE
+                      {t('rootCause.sreReport.title')}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleCopyText(`${sreSummaryText}\n\n${fullExplanationVi}`, 'sre-report-copy')}
-                    aria-label="Sao chép giải trình"
+                    aria-label={t('rootCause.sreReport.copyAria')}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -2949,7 +2911,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                     }}
                   >
                     {copiedKey === 'sre-report-copy' ? <Check size={12} color="#059669" /> : <Copy size={12} />}
-                    <span>{copiedKey === 'sre-report-copy' ? 'Đã sao chép' : 'Sao chép'}</span>
+                    <span>{copiedKey === 'sre-report-copy' ? t('common.copied') : t('common.copy')}</span>
                   </button>
                 </div>
 
@@ -2997,10 +2959,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 >
                   <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Activity size={15} color="#7C3AED" />
-                    <span>Dự Báo 7 Đầu Rủi Ro AI</span>
+                    <span>{t('rootCause.tabIo.headsTitle')}</span>
                   </div>
                   <span style={{ fontSize: '0.68rem', color: '#6D28D9', fontWeight: 700, backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE', padding: '2px 9px', borderRadius: '999px' }}>
-                    Ngưỡng chuẩn: {(primaryThreshold * 100).toFixed(0)}%
+                    {t('rootCause.tabIo.thresholdBadge', { pct: (primaryThreshold * 100).toFixed(0) })}
                   </span>
                 </div>
 
@@ -3026,7 +2988,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                           >
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '5px' }}>
                               <span style={{ fontSize: '0.74rem', fontWeight: 700, color: isTriggered ? '#DC2626' : '#0F172A' }}>
-                                {HEAD_NAMES_VI[headName] || headName}
+                                {getHeadName(headName) || headName}
                               </span>
                               <span style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: isTriggered ? '#B91C1C' : '#64748B', whiteSpace: 'nowrap' }}>
                                 {confPct}% / {thPct}%
@@ -3044,7 +3006,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                               />
                             </div>
                             <div style={{ fontSize: '0.65rem', marginTop: '4px', fontWeight: 600, color: isTriggered ? '#991B1B' : '#64748B' }}>
-                              {isTriggered ? 'Vượt ngưỡng cảnh báo' : 'Trong giới hạn an toàn'}
+                              {isTriggered ? t('rootCause.tabIo.exceeded') : t('rootCause.tabIo.withinSafe')}
                             </div>
                           </div>
                         );
@@ -3061,7 +3023,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         color: '#64748B',
                       }}
                     >
-                      Điểm xác suất chi tiết của 7 đầu rủi ro AI chưa được lưu trong bản ghi này.
+                      {t('rootCause.tabIo.noRiskOutputs')}
                     </div>
                   )}
                 </div>
@@ -3091,10 +3053,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 >
                   <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Sliders size={15} color="#059669" />
-                    <span>Dữ Liệu Viễn Trắc Đầu Vào</span>
+                    <span>{t('rootCause.tabIo.telemetryTitle')}</span>
                   </div>
                   <span style={{ fontSize: '0.68rem', color: '#047857', fontWeight: 700, backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 9px', borderRadius: '999px', fontFamily: 'var(--font-mono)' }}>
-                    {formattedTimesteps.length > 0 ? `${formattedTimesteps.length} mốc telemetry` : 'Không có telemetry'}
+                    {formattedTimesteps.length > 0 ? t('rootCause.tabIo.timestepsCount', { count: formattedTimesteps.length }) : t('rootCause.tabIo.noTelemetry')}
                   </span>
                 </div>
 
@@ -3110,7 +3072,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         color: '#64748B',
                       }}
                     >
-                      Chưa ghi nhận chuỗi viễn trắc đầu vào cho sự cố này.
+                      {t('rootCause.tabIo.noTelemetryDesc')}
                     </div>
                   )}
                   {metricSummary && (
@@ -3120,7 +3082,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.cpu.current}%
                         </div>
-                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Đỉnh: {metricSummary.cpu.max}%</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>{t('rootCause.tabIo.peakPrefix', { val: `${metricSummary.cpu.max}%` })}</div>
                       </div>
 
                       <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #3B82F6' }}>
@@ -3128,7 +3090,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.ram.current}%
                         </div>
-                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Đỉnh: {metricSummary.ram.max}%</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>{t('rootCause.tabIo.peakPrefix', { val: `${metricSummary.ram.max}%` })}</div>
                       </div>
 
                       <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #F59E0B' }}>
@@ -3136,15 +3098,15 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.disk.current}%
                         </div>
-                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Đỉnh: {metricSummary.disk.max}%</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>{t('rootCause.tabIo.peakPrefix', { val: `${metricSummary.disk.max}%` })}</div>
                       </div>
 
                       <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #8B5CF6' }}>
-                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B' }}>ĐỘ TRỄ</div>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B' }}>{t('rootCause.tabIo.latencyLabel')}</div>
                         <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.latency.current}ms
                         </div>
-                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Đỉnh: {metricSummary.latency.max}ms</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>{t('rootCause.tabIo.peakPrefix', { val: `${metricSummary.latency.max}ms` })}</div>
                       </div>
 
                       <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #06B6D4' }}>
@@ -3152,15 +3114,15 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.request_rate.current} <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>r/s</span>
                         </div>
-                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Đỉnh: {metricSummary.request_rate.max}</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>{t('rootCause.tabIo.peakPrefix', { val: metricSummary.request_rate.max })}</div>
                       </div>
 
                       <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: metricSummary.http_5xx_rate.max > 0 ? '#FEF2F2' : '#F8FAFC', border: metricSummary.http_5xx_rate.max > 0 ? '1px solid #FECACA' : '1px solid #E2E8F0', borderTop: '2px solid #EF4444' }}>
-                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: metricSummary.http_5xx_rate.max > 0 ? '#DC2626' : '#64748B' }}>LỖI 5XX (%)</div>
+                        <div style={{ fontSize: '0.64rem', fontWeight: 700, color: metricSummary.http_5xx_rate.max > 0 ? '#DC2626' : '#64748B' }}>{t('rootCause.tabIo.errors5xxLabel')}</div>
                         <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.http_5xx_rate.current}%
                         </div>
-                        <div style={{ fontSize: '0.64rem', color: '#B91C1C' }}>Đỉnh: {metricSummary.http_5xx_rate.max}%</div>
+                        <div style={{ fontSize: '0.64rem', color: '#B91C1C' }}>{t('rootCause.tabIo.peakPrefix', { val: `${metricSummary.http_5xx_rate.max}%` })}</div>
                       </div>
 
                       <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #EC4899' }}>
@@ -3168,7 +3130,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.pod_restart_count}
                         </div>
-                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>K8s Restarts</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>{t('rootCause.tabIo.k8sRestarts')}</div>
                       </div>
 
                       <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderTop: '2px solid #6366F1' }}>
@@ -3176,7 +3138,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                         <div style={{ fontSize: '0.9rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
                           {metricSummary.replica_count}
                         </div>
-                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>Pods cụm</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748B' }}>{t('rootCause.tabIo.clusterPods')}</div>
                       </div>
                     </div>
                   )}
@@ -3186,13 +3148,13 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.73rem', textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
                         <thead>
                           <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: 700 }}>
-                            <th style={{ padding: '6px 5px' }}>Mốc</th>
-                            <th style={{ padding: '6px 5px' }}>Thời điểm</th>
+                            <th style={{ padding: '6px 5px' }}>{t('rootCause.tabIo.colStep')}</th>
+                            <th style={{ padding: '6px 5px' }}>{t('rootCause.tabIo.colTime')}</th>
                             <th style={{ padding: '6px 5px' }}>CPU</th>
                             <th style={{ padding: '6px 5px' }}>RAM</th>
                             <th style={{ padding: '6px 5px' }}>Disk</th>
                             <th style={{ padding: '6px 5px' }}>Req/s</th>
-                            <th style={{ padding: '6px 5px' }}>Độ trễ</th>
+                            <th style={{ padding: '6px 5px' }}>{t('rootCause.tabIo.colLatency')}</th>
                             <th style={{ padding: '6px 5px' }}>5xx</th>
                             <th style={{ padding: '6px 5px' }}>Restarts</th>
                             <th style={{ padding: '6px 5px' }}>Pods</th>
@@ -3243,17 +3205,17 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
           }}
         >
           <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-            Thời điểm ghi nhận: {(() => {
+            {t('rootCause.footer.detectedAt')} {(() => {
               const rawDate = incidentDetail?.detected_at || incidentDetail?.created_at || incident?.detectedAt || incident?.created_at;
-              if (!rawDate) return 'Chưa ghi nhận';
+              if (!rawDate) return t('common.notRecorded');
               const d = new Date(rawDate);
-              return isNaN(d.getTime()) ? String(rawDate) : d.toLocaleString('vi-VN');
+              return isNaN(d.getTime()) ? String(rawDate) : d.toLocaleString(getIntlLocale(i18nInstance.language));
             })()}
             {occurrenceCount > 1 && (incidentDetail?.last_occurred_at || incident?.lastOccurredAt) && (() => {
               const rawLast = incidentDetail?.last_occurred_at || incident?.lastOccurredAt;
               const dLast = new Date(rawLast);
-              const formattedLast = isNaN(dLast.getTime()) ? String(rawLast) : dLast.toLocaleString('vi-VN');
-              return ` • Lần gần nhất: ${formattedLast}`;
+              const formattedLast = isNaN(dLast.getTime()) ? String(rawLast) : dLast.toLocaleString(getIntlLocale(i18nInstance.language));
+              return t('rootCause.footer.lastOccurred', { time: formattedLast });
             })()}
           </div>
 
@@ -3293,10 +3255,10 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 color: '#475569',
                 cursor: 'pointer',
               }}
-              title="Sao chép toàn bộ payload JSON dữ liệu phân tích RCA phục vụ kỹ thuật"
+              title={t('rootCause.footer.copyJsonTitle')}
             >
               {copiedKey === 'raw_json' ? <Check size={13} color="#10B981" /> : <Copy size={13} />}
-              <span>{copiedKey === 'raw_json' ? 'Đã sao chép JSON' : 'Sao chép JSON'}</span>
+              <span>{copiedKey === 'raw_json' ? t('rootCause.footer.copiedJson') : t('rootCause.footer.copyJson')}</span>
             </button>
 
             {!isResolved && !resolveSuccess ? (
@@ -3320,14 +3282,14 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                   boxShadow: '0 1px 3px rgba(220, 38, 38, 0.25)',
                   transition: 'all 0.15s ease',
                 }}
-                title="Xác nhận dịch vụ đã ổn định và đóng sự cố này (Đưa vòng lặp MAPE-K về trạng thái bình thường)"
+                title={t('rootCause.footer.resolveTitle')}
               >
                 {isResolvingIncident ? (
                   <RefreshCw size={13} className="animate-spin" />
                 ) : (
                   <CheckCircle2 size={14} color="#FFFFFF" />
                 )}
-                <span>{isResolvingIncident ? 'Đang đóng...' : 'Xác Nhận & Đóng Sự Cố'}</span>
+                <span>{isResolvingIncident ? t('rootCause.footer.resolving') : t('rootCause.footer.resolveBtn')}</span>
               </button>
             ) : (
               <div
@@ -3345,7 +3307,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 }}
               >
                 <CheckCircle2 size={13} color="#15803D" />
-                <span>Đã đóng sự cố (Resolved)</span>
+                <span>{t('rootCause.footer.resolvedBadge')}</span>
               </div>
             )}
 
@@ -3364,7 +3326,7 @@ export const RootCauseModal = ({ incident, onClose, onResolve, onNavigate }) => 
                 transition: 'all 0.15s ease',
               }}
             >
-              Đóng cửa sổ
+              {t('common.closeWindow')}
             </button>
           </div>
         </div>

@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n, { getIntlLocale } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import { aiService } from '../../../services/aiService';
 import { clusterService } from '../../../services/clusterService';
@@ -51,15 +53,15 @@ const getThisYearStr = () => {
 
 
 const formatRelativeTime = (dateStr) => {
-  if (!dateStr) return 'Vừa xong';
+  if (!dateStr) return i18n.t('dashHealing:common.justNow');
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Vừa xong';
-  if (mins < 60) return `${mins} phút trước`;
+  if (mins < 1) return i18n.t('dashHealing:common.justNow');
+  if (mins < 60) return i18n.t('dashHealing:common.minutesAgo', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} giờ trước`;
+  if (hours < 24) return i18n.t('dashHealing:common.hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days} ngày trước`;
+  return i18n.t('dashHealing:common.daysAgo', { count: days });
 };
 
 // Chuẩn hóa confidence: không tự gán mặc định, giữ nguyên giá trị 0, trả về null nếu không hợp lệ
@@ -176,15 +178,15 @@ const resolveServiceName = (item, registeredWorkloads = []) => {
     if (c) return c;
   }
 
-  return 'ứng dụng hệ thống';
+  return null;
 };
 
 const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
   const shortId = item.id.length > 12 ? `INC-${item.id.slice(0, 8).toUpperCase()}` : item.id;
   const isResolved = item.status === 'RESOLVED';
-  const isRecovering = item.status === 'INVESTIGATING';
 
-  const serviceName = resolveServiceName(item, registeredWorkloads);
+  const resolvedServiceName = resolveServiceName(item, registeredWorkloads);
+  const serviceName = resolvedServiceName || i18n.t('dashHealing:common.systemApp');
 
   // Phân tích kết quả RCA lưu trong DB (nếu có)
   let rcaParsed = null;
@@ -229,42 +231,65 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
 
   const hasNoActions = failedCount === 0 && succeededCount === 0 && !item.healing_action_id;
 
-  let statusLabel = 'Đang theo dõi';
-  if (isResolved) {
+  let statusKey = 'MONITORING';
+  let statusLabel = i18n.t('dashHealing:incidents.status.monitoring');
+  if (item._forceResolvedLocal) {
+    statusKey = 'RESOLVED_AUTO';
+    statusLabel = i18n.t('dashHealing:incidents.status.resolvedComplete');
+  } else if (isResolved) {
     if (isHealingFailed && !isHealingSucceeded) {
-      statusLabel = 'Đã đóng (Can thiệp thủ công)';
+      statusKey = 'RESOLVED_MANUAL';
+      statusLabel = i18n.t('dashHealing:incidents.status.closedManual');
     } else if (isHealingSucceeded) {
-      statusLabel = 'Đã khắc phục hoàn tất';
+      statusKey = 'RESOLVED_AUTO';
+      statusLabel = i18n.t('dashHealing:incidents.status.resolvedComplete');
     } else if (hasNoActions || isNoAction) {
-      statusLabel = 'Tự ổn định (Telemetry bình thường)';
+      statusKey = 'RESOLVED_STABLE';
+      statusLabel = i18n.t('dashHealing:incidents.status.autoStabilized');
     } else {
-      statusLabel = 'Đã khắc phục hoàn tất';
+      statusKey = 'RESOLVED_AUTO';
+      statusLabel = i18n.t('dashHealing:incidents.status.resolvedComplete');
     }
   } else if (hasPendingApproval) {
-    statusLabel = 'Chờ phê duyệt HITL';
+    statusKey = 'HITL_PENDING';
+    statusLabel = i18n.t('dashHealing:incidents.status.hitlPending');
   } else if (isCriticalNoAction) {
-    statusLabel = 'Cảnh báo khẩn (Cần kiểm tra - NO_ACTION)';
+    statusKey = 'CRITICAL_NO_ACTION';
+    statusLabel = i18n.t('dashHealing:incidents.status.criticalNoAction');
   } else if (item.healing_verification_result === false) {
-    statusLabel = 'Hậu kiểm thất bại (Chưa phục hồi)';
+    statusKey = 'VERIFICATION_FAILED';
+    statusLabel = i18n.t('dashHealing:incidents.status.verificationFailed');
   } else if (isHealingFailed && !isHealingSucceeded) {
-    statusLabel = 'Tự khắc phục thất bại (Chưa phục hồi)';
+    statusKey = 'HEALING_FAILED_UNRECOVERED';
+    statusLabel = i18n.t('dashHealing:incidents.status.healingFailedUnrecovered');
   } else if (isRecentlyVerifying) {
-    statusLabel = 'Đang tự phục hồi (Đang xác minh)';
+    statusKey = 'VERIFYING';
+    statusLabel = i18n.t('dashHealing:incidents.status.verifying');
   } else if (item.healing_status === 'COMPLETED') {
-    statusLabel = 'Hậu kiểm thất bại (Chưa phục hồi)';
+    statusKey = 'VERIFICATION_FAILED';
+    statusLabel = i18n.t('dashHealing:incidents.status.verificationFailed');
   } else if (isRecentlyRunning) {
-    statusLabel = 'Đang tự phục hồi';
+    statusKey = 'HEALING';
+    statusLabel = i18n.t('dashHealing:incidents.status.healing');
   } else if (item.healing_status === 'IN_PROGRESS' || item.healing_status === 'RUNNING') {
-    statusLabel = 'Tự khắc phục thất bại (Timeout >60s)';
+    statusKey = 'HEALING_TIMEOUT';
+    statusLabel = i18n.t('dashHealing:incidents.status.healingTimeout');
   } else if (item.healing_status === 'FAILED') {
-    statusLabel = 'Tự khắc phục thất bại';
+    statusKey = 'HEALING_FAILED';
+    statusLabel = i18n.t('dashHealing:incidents.status.healingFailed');
   } else if (item.status === 'INVESTIGATING') {
-    statusLabel = 'Đang điều tra';
+    statusKey = 'INVESTIGATING';
+    statusLabel = i18n.t('dashHealing:incidents.status.investigating');
   } else if (item.status === 'OPEN') {
-    statusLabel = isNoAction
-      ? 'Tự động an toàn (NO_ACTION)'
-      : 'Đang xử lý / Giám sát';
+    if (isNoAction) {
+      statusKey = 'NO_ACTION_SAFE';
+      statusLabel = i18n.t('dashHealing:incidents.status.noActionSafe');
+    } else {
+      statusKey = 'PROCESSING';
+      statusLabel = i18n.t('dashHealing:incidents.status.processing');
+    }
   } else if (item.status) {
+    statusKey = 'CUSTOM';
     statusLabel = item.status;
   }
   const recReason = rcaParsed?.recommendation?.reason || item.recommendation_reason || null;
@@ -289,7 +314,7 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
       type: idx === 0 ? 'AI_TELEMETRY' : 'K8S_EVENT',
       ref: serviceName,
       summary: typeof ev === 'string' ? ev : (ev.summary || JSON.stringify(ev)),
-      score: rcaConfidence !== null ? `${rcaConfidence}%` : 'Chưa đánh giá',
+      score: rcaConfidence !== null ? `${rcaConfidence}%` : i18n.t('dashHealing:common.notEvaluated'),
     }));
   }
 
@@ -298,7 +323,7 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
   const healingErrorMessage = item.healing_error_message || item.healing_result_error || null;
   let failureHint = null;
   if (!isResolved && item.healing_status === 'FAILED' && healingErrorMessage) {
-    failureHint = `Lỗi thực thi: ${healingErrorMessage}`;
+    failureHint = i18n.t('dashHealing:incidents.mapped.execError', { msg: healingErrorMessage });
   } else if (!isResolved && isNoAction && String(item.severity || '').toUpperCase() === 'CRITICAL' && recReason) {
     failureHint = String(recReason);
   }
@@ -312,12 +337,14 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
     clusterName: item.cluster_name,
     title: translateIncidentTitle(item.title),
     service: serviceName,
+    isSystemFallback: !resolvedServiceName,
     namespace: item.namespace || null,
     node: item.node_name || null,
     actualPodName: item.actual_pod_name || null,
     clusterNodeCount: item.cluster_node_count ?? null,
     workloadType: item.workload_type || null,
     severity: (item.severity || 'HIGH').toUpperCase(),
+    statusKey,
     status: statusLabel,
     occurrenceCount,
     lastOccurredAt,
@@ -325,14 +352,18 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
     failureHint,
     time: formatRelativeTime(lastOccurredAt),
     detectedAt: lastOccurredAt,
-    impact: item.description || `Ảnh hưởng hiệu năng dịch vụ ${serviceName}`,
+    impact: item.description || i18n.t('dashHealing:incidents.mapped.impactDefault', { service: serviceName }),
     rootCause: item.root_cause_description || item.description || null,
-    rootCauseType: item.root_cause_type || (predictedRisk ? `Nguy cơ ${predictedRisk}` : 'Bất thường dịch vụ'),
+    rootCauseType: item.root_cause_type || (predictedRisk
+      ? i18n.t('dashHealing:incidents.mapped.riskPrefix', { risk: predictedRisk })
+      : i18n.t('dashHealing:incidents.mapped.serviceAnomaly')),
     confidence: rcaConfidence,
     rcaConfidence: rcaConfidence,
     predictedRisk: predictedRisk,
     primaryRisk: predictedRisk ? `${predictedRisk}${rcaConfidence !== null ? ` (${rcaConfidence}%)` : ''}` : null,
-    mttr: item.mttr_seconds !== null && item.mttr_seconds !== undefined ? `${item.mttr_seconds}s` : (isResolved ? 'Đã khắc phục hoàn tất' : 'Đang theo dõi'),
+    mttr: item.mttr_seconds !== null && item.mttr_seconds !== undefined
+      ? `${item.mttr_seconds}s`
+      : (isResolved ? i18n.t('dashHealing:incidents.status.resolvedComplete') : i18n.t('dashHealing:incidents.status.monitoring')),
     hasPendingApproval: hasPendingApproval,
     pendingApprovalId: item.pending_approval_id || null,
     healingStatus: item.healing_status || null,
@@ -347,7 +378,8 @@ const mapBackendIncidentToUI = (item, registeredWorkloads = []) => {
 };
 
 export const IncidentsPage = ({ onNavigate }) => {
-  const { currentOrg, currentEnv, envList, setCurrentEnv, refreshActiveIncidents } = useDashboard();
+  const { t, i18n: i18nInstance } = useTranslation('dashHealing');
+  const { currentOrg, currentEnv, envList, refreshActiveIncidents } = useDashboard();
   const [selectedCluster, setSelectedCluster] = useState(() => currentEnv?.cluster || currentEnv?.clusterId || 'all'); // 'all' | clusterId
 
   // Tự động đồng bộ bộ lọc khi người dùng chuyển Cụm K8s trên Header Top Navbar
@@ -392,23 +424,23 @@ export const IncidentsPage = ({ onNavigate }) => {
   const currentFilterLabel = useMemo(() => {
     if (timeFilterMode === 'today') {
       const parts = getTodayStr().split('-');
-      return `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})`;
+      return t('incidents.calendar.todayLabel', { date: `${parts[2]}/${parts[1]}/${parts[0]}` });
     }
     if (timeFilterMode === 'date') {
-      if (!selectedDate) return 'Chọn ngày';
+      if (!selectedDate) return t('common.selectDate');
       const parts = selectedDate.split('-');
-      return `Ngày ${parts[2]}/${parts[1]}/${parts[0]}`;
+      return t('incidents.calendar.dateLabel', { date: `${parts[2]}/${parts[1]}/${parts[0]}` });
     }
     if (timeFilterMode === 'month') {
-      if (!selectedMonth) return 'Chọn tháng';
+      if (!selectedMonth) return t('common.selectMonth');
       const parts = selectedMonth.split('-');
-      return `Tháng ${parts[1]}/${parts[0]}`;
+      return t('incidents.calendar.monthLabel', { month: `${parts[1]}/${parts[0]}` });
     }
     if (timeFilterMode === 'year') {
-      return `Năm ${selectedYear}`;
+      return t('incidents.calendar.yearLabel', { year: selectedYear });
     }
-    return 'Tất cả thời gian';
-  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear]);
+    return t('common.allTime');
+  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear, t]);
   
   // Trạng thái phân trang (Pagination)
   const [page, setPage] = useState(1);
@@ -419,11 +451,11 @@ export const IncidentsPage = ({ onNavigate }) => {
     setPage(1);
   }, [selectedCluster, selectedSeverity, selectedStatus, selectedService, searchQuery, timeFilterMode, selectedDate, selectedMonth, selectedYear]);
 
-  const [incidents, setIncidents] = useState([]);
+  const [rawIncidents, setRawIncidents] = useState([]);
   const [clusterList, setClusterList] = useState([]);
   const [registeredWorkloads, setRegisteredWorkloads] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
+  const [, setIsUsingLiveDb] = useState(false);
   const [activeModalIncident, setActiveModalIncident] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deepLinkIncidentId, setDeepLinkIncidentId] = useState(() => {
@@ -434,6 +466,11 @@ export const IncidentsPage = ({ onNavigate }) => {
     }
   });
   const handledDeepLinkRef = useRef(null);
+
+  const currentLanguage = i18nInstance.language;
+  const incidents = useMemo(() => {
+    return rawIncidents.map((it) => mapBackendIncidentToUI(it, registeredWorkloads, currentLanguage));
+  }, [rawIncidents, registeredWorkloads, currentLanguage]);
 
   useEffect(() => {
     const syncDeepLinkFromUrl = () => {
@@ -550,12 +587,12 @@ export const IncidentsPage = ({ onNavigate }) => {
       const res = await aiService.getIncidents(params);
       const items = res?.items || (Array.isArray(res) ? res : []);
 
-      setIncidents(items.map((it) => mapBackendIncidentToUI(it, registeredWorkloads)));
+      setRawIncidents(items);
       setIsUsingLiveDb(true);
     } catch (err) {
       if (!silent) {
         console.warn('[IncidentsPage] Không thể kết nối API sự cố:', err.message);
-        setIncidents([]);
+        setRawIncidents([]);
         setIsUsingLiveDb(false);
       }
     } finally {
@@ -591,13 +628,13 @@ export const IncidentsPage = ({ onNavigate }) => {
       }
     }
 
-    setIncidents((prev) =>
+    setRawIncidents((prev) =>
       prev.map((inc) =>
-        inc.id === id || inc.rawId === targetRawId
+        inc.id === id || inc.id === targetRawId
           ? {
               ...inc,
-              status: 'Đã khắc phục hoàn tất',
-              mttr: 'Đã khắc phục hoàn tất',
+              status: 'RESOLVED',
+              _forceResolvedLocal: true,
             }
           : inc
       )
@@ -607,8 +644,9 @@ export const IncidentsPage = ({ onNavigate }) => {
         prev
           ? {
               ...prev,
-              status: 'Đã khắc phục hoàn tất',
-              mttr: 'Đã khắc phục hoàn tất',
+              statusKey: 'RESOLVED_AUTO',
+              status: t('incidents.status.resolvedComplete'),
+              mttr: t('incidents.status.resolvedComplete'),
             }
           : null
       );
@@ -700,7 +738,7 @@ export const IncidentsPage = ({ onNavigate }) => {
         (inc.clusterId && selectedCluster && inc.clusterId.toLowerCase() === selectedCluster.toLowerCase());
       if (!matchCluster || !checkTimeMatch(inc.detectedAt)) return;
 
-      if (inc.service && inc.service !== 'ứng dụng hệ thống') {
+      if (inc.service && !inc.isSystemFallback) {
         const cleaned = normalizeK8sServiceName(inc.service) || cleanServiceName(inc.service);
         if (cleaned && liveSet.has(cleaned)) {
           counts[cleaned] = (counts[cleaned] || 0) + 1;
@@ -776,32 +814,41 @@ export const IncidentsPage = ({ onNavigate }) => {
 
     const total = list.length;
     const critical = list.filter((i) => i.severity === 'CRITICAL' || i.severity === 'HIGH').length;
-    const recovering = list.filter((i) => (i.status === 'Đang tự phục hồi' || i.status === 'Đang tự phục hồi (Đang xác minh)' || i.status.includes('duyệt'))).length;
-    const resolved = list.filter((i) => i.status.includes('hoàn tất') || i.status.includes('Đã đóng') || i.status.includes('Tự ổn định') || (i.status.includes('an toàn') && i.severity !== 'CRITICAL')).length;
+    const recovering = list.filter((i) => i.statusKey === 'HEALING' || i.statusKey === 'VERIFYING' || i.statusKey === 'HITL_PENDING').length;
+    const resolved = list.filter((i) =>
+      i.statusKey === 'RESOLVED_AUTO' ||
+      i.statusKey === 'RESOLVED_MANUAL' ||
+      i.statusKey === 'RESOLVED_STABLE' ||
+      (i.statusKey === 'NO_ACTION_SAFE' && i.severity !== 'CRITICAL')
+    ).length;
     return { total, critical, recovering, resolved };
   }, [incidents, selectedCluster, checkTimeMatch]);
 
   // Bộ lọc dữ liệu phía Client (bao gồm bộ lọc thời gian)
   const filteredIncidents = useMemo(() => {
+    const resolvedKeys = new Set(['RESOLVED_AUTO', 'RESOLVED_MANUAL', 'RESOLVED_STABLE']);
     return incidents.filter((inc) => {
       const matchSeverity = selectedSeverity === 'all' || inc.severity === selectedSeverity;
       const matchStatus =
         selectedStatus === 'all' ||
-        (selectedStatus === 'OPEN' && (!inc.status.includes('khắc phục') && !inc.status.includes('hoàn tất') && !inc.status.includes('Đã đóng') && !inc.status.includes('Tự ổn định'))) ||
+        (selectedStatus === 'OPEN' && !resolvedKeys.has(inc.statusKey)) ||
         (selectedStatus === 'RECOVERING' &&
-          (inc.status.includes('phục hồi') ||
-            inc.status.includes('xác minh') ||
-            inc.status.includes('Đang xử lý') ||
-            inc.status.includes('Giám sát'))) ||
-        (selectedStatus === 'HITL' && inc.status.includes('duyệt')) ||
+          (inc.statusKey === 'HEALING' ||
+            inc.statusKey === 'VERIFYING' ||
+            inc.statusKey === 'PROCESSING' ||
+            inc.statusKey === 'MONITORING')) ||
+        (selectedStatus === 'HITL' && inc.statusKey === 'HITL_PENDING') ||
         (selectedStatus === 'NO_ACTION' &&
-          (inc.status.includes('NO_ACTION') ||
-            inc.status.includes('an toàn') ||
-            inc.status.includes('Cảnh báo') ||
-            inc.status.includes('Cần kiểm tra'))) ||
+          (inc.statusKey === 'NO_ACTION_SAFE' ||
+            inc.statusKey === 'CRITICAL_NO_ACTION')) ||
         (selectedStatus === 'FAILED' &&
-          (inc.status.includes('thất bại') || inc.healingStatus === 'FAILED' || inc.status.includes('Chưa phục hồi') || inc.status.includes('Thủ công'))) ||
-        (selectedStatus === 'RESOLVED' && (inc.status.includes('khắc phục') || inc.status.includes('hoàn tất') || inc.status.includes('Đã đóng') || inc.status.includes('Tự ổn định')));
+          (inc.statusKey === 'VERIFICATION_FAILED' ||
+            inc.statusKey === 'HEALING_FAILED_UNRECOVERED' ||
+            inc.statusKey === 'HEALING_TIMEOUT' ||
+            inc.statusKey === 'HEALING_FAILED' ||
+            inc.statusKey === 'RESOLVED_MANUAL' ||
+            inc.healingStatus === 'FAILED')) ||
+        (selectedStatus === 'RESOLVED' && resolvedKeys.has(inc.statusKey));
       const matchService = selectedService === 'all' || inc.service === selectedService;
       const matchSearch =
         !searchQuery.trim() ||
@@ -836,7 +883,7 @@ export const IncidentsPage = ({ onNavigate }) => {
 
   const activeClusterLabel =
     selectedCluster === 'all'
-      ? 'Toàn bộ cụm K8s'
+      ? t('common.allClusters')
       : availableClusters.find((c) => c.id === selectedCluster)?.name || selectedCluster;
 
   const hasActiveFilters =
@@ -956,10 +1003,10 @@ export const IncidentsPage = ({ onNavigate }) => {
                 margin: 0,
               }}
             >
-              Quản Lý Sự Cố &amp; Phân Tích Nguyên Nhân Gốc
+              {t('incidents.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Theo dõi sự cố, suy diễn nguyên nhân nhân quả &amp; trạng thái tự phục hồi từ cụm{' '}
+              {t('incidents.subtitlePrefix')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
             </p>
           </div>
@@ -973,31 +1020,31 @@ export const IncidentsPage = ({ onNavigate }) => {
             style={actionBtnStyle(isRefreshing || isLoading)}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>{isRefreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
+            <span>{isRefreshing ? t('common.refreshing') : t('common.refresh')}</span>
           </button>
         </div>
       </div>
 
       {/* Hàng 4 Thẻ KPI Tóm Tắt (đồng bộ viền màu phía trên giống Dashboard, Logs & Events) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         {/* Card 1: Tổng Sự Cố */}
         <div
           onClick={() => {
             setSelectedSeverity('all');
             setSelectedStatus('all');
           }}
-          title="Nhấp để hiển thị tất cả sự cố"
+          title={t('incidents.kpi.totalTooltip')}
           style={{ ...kpiCardStyle('#059669'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
-              TỔNG SỰ CỐ
+              {t('incidents.kpi.totalTitle')}
             </span>
             <Layers size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
-              {isLoading && incidents.length === 0 ? '...' : stats.total.toLocaleString('vi-VN')}
+              {isLoading && incidents.length === 0 ? '...' : stats.total.toLocaleString(getIntlLocale(i18nInstance.language))}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600, fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {activeClusterLabel}
@@ -1008,12 +1055,12 @@ export const IncidentsPage = ({ onNavigate }) => {
         {/* Card 2: Nguy Cấp / Cao */}
         <div
           onClick={() => setSelectedSeverity((prev) => (prev === 'CRITICAL' ? 'all' : 'CRITICAL'))}
-          title="Nhấp để lọc nhanh sự cố Nguy cấp (Critical)"
+          title={t('incidents.kpi.criticalTooltip')}
           style={{ ...kpiCardStyle('#EF4444', selectedSeverity === 'CRITICAL'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
-              NGUY CẤP &amp; CAO
+              {t('incidents.kpi.criticalTitle')}
             </span>
             <AlertTriangle size={14} color={stats.critical > 0 ? '#EF4444' : '#94A3B8'} />
           </div>
@@ -1026,10 +1073,10 @@ export const IncidentsPage = ({ onNavigate }) => {
                 fontFamily: 'var(--font-mono)',
               }}
             >
-              {isLoading && incidents.length === 0 ? '...' : stats.critical.toLocaleString('vi-VN')}
+              {isLoading && incidents.length === 0 ? '...' : stats.critical.toLocaleString(getIntlLocale(i18nInstance.language))}
             </span>
             <span style={{ fontSize: '0.7rem', color: stats.critical > 0 ? '#DC2626' : '#64748B', fontWeight: stats.critical > 0 ? 600 : 500 }}>
-              {stats.critical > 0 ? 'Ưu tiên xử lý' : 'Không có nguy cấp'}
+              {stats.critical > 0 ? t('incidents.kpi.criticalHint') : t('incidents.kpi.criticalNone')}
             </span>
           </div>
         </div>
@@ -1037,12 +1084,12 @@ export const IncidentsPage = ({ onNavigate }) => {
         {/* Card 3: Đang Tự Phục Hồi */}
         <div
           onClick={() => setSelectedStatus((prev) => (prev === 'RECOVERING' ? 'all' : 'RECOVERING'))}
-          title="Nhấp để lọc nhanh sự cố đang tự phục hồi"
+          title={t('incidents.kpi.recoveringTooltip')}
           style={{ ...kpiCardStyle('#F59E0B', selectedStatus === 'RECOVERING'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
-              ĐANG TỰ PHỤC HỒI
+              {t('incidents.kpi.recoveringTitle')}
             </span>
             <Zap size={14} color={stats.recovering > 0 ? '#F59E0B' : '#94A3B8'} />
           </div>
@@ -1055,10 +1102,10 @@ export const IncidentsPage = ({ onNavigate }) => {
                 fontFamily: 'var(--font-mono)',
               }}
             >
-              {isLoading && incidents.length === 0 ? '...' : stats.recovering.toLocaleString('vi-VN')}
+              {isLoading && incidents.length === 0 ? '...' : stats.recovering.toLocaleString(getIntlLocale(i18nInstance.language))}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#64748B' }}>
-              {stats.recovering > 0 ? 'MAPE-K đang chạy' : 'Hệ thống ổn định'}
+              {stats.recovering > 0 ? t('incidents.kpi.recoveringActive') : t('incidents.kpi.recoveringStable')}
             </span>
           </div>
         </div>
@@ -1066,21 +1113,21 @@ export const IncidentsPage = ({ onNavigate }) => {
         {/* Card 4: Đã Khắc Phục */}
         <div
           onClick={() => setSelectedStatus((prev) => (prev === 'RESOLVED' ? 'all' : 'RESOLVED'))}
-          title="Nhấp để lọc nhanh sự cố đã khắc phục"
+          title={t('incidents.kpi.resolvedTooltip')}
           style={{ ...kpiCardStyle('#10B981', selectedStatus === 'RESOLVED'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
-              ĐÃ KHẮC PHỤC
+              {t('incidents.kpi.resolvedTitle')}
             </span>
             <CheckCircle2 size={14} color="#10B981" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, color: '#059669', fontFamily: 'var(--font-mono)' }}>
-              {isLoading && incidents.length === 0 ? '...' : stats.resolved.toLocaleString('vi-VN')}
+              {isLoading && incidents.length === 0 ? '...' : stats.resolved.toLocaleString(getIntlLocale(i18nInstance.language))}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
-              Khôi phục SLA 99.9%
+              {t('incidents.kpi.resolvedHint')}
             </span>
           </div>
         </div>
@@ -1103,10 +1150,10 @@ export const IncidentsPage = ({ onNavigate }) => {
         {/* Hàng 1: Tìm kiếm + Pill Mức độ + Lịch */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           {/* Search Input */}
-          <div style={{ position: 'relative', flex: '1 1 250px', maxWidth: '360px' }}>
+          <div className="dash-search-box" style={{ position: 'relative', flex: '1 1 250px', maxWidth: '360px' }}>
             <input
               type="text"
-              placeholder="Tìm kiếm mã sự cố, tiêu đề, dịch vụ, nguyên nhân..."
+              placeholder={t('incidents.filters.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -1127,7 +1174,7 @@ export const IncidentsPage = ({ onNavigate }) => {
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                aria-label="Xóa từ khóa tìm kiếm"
+                aria-label={t('incidents.filters.clearSearchAria')}
                 style={{
                   position: 'absolute',
                   right: '8px',
@@ -1157,11 +1204,11 @@ export const IncidentsPage = ({ onNavigate }) => {
             }}
           >
             {[
-              { id: 'all', label: 'Tất cả', color: '#059669', bg: '#ECFDF5' },
-              { id: 'CRITICAL', label: 'Nguy cấp', color: '#DC2626', bg: '#FEF2F2' },
-              { id: 'HIGH', label: 'Cao', color: '#EA580C', bg: '#FFF7ED' },
-              { id: 'MEDIUM', label: 'Trung bình', color: '#D97706', bg: '#FFFBEB' },
-              { id: 'LOW', label: 'Thấp', color: '#2563EB', bg: '#EFF6FF' },
+              { id: 'all', label: t('incidents.filters.sevAll'), color: '#059669', bg: '#ECFDF5' },
+              { id: 'CRITICAL', label: t('incidents.filters.sevCritical'), color: '#DC2626', bg: '#FEF2F2' },
+              { id: 'HIGH', label: t('incidents.filters.sevHigh'), color: '#EA580C', bg: '#FFF7ED' },
+              { id: 'MEDIUM', label: t('incidents.filters.sevMedium'), color: '#D97706', bg: '#FFFBEB' },
+              { id: 'LOW', label: t('incidents.filters.sevLow'), color: '#2563EB', bg: '#EFF6FF' },
             ].map((sev) => {
               const active = selectedSeverity === sev.id;
               return (
@@ -1207,7 +1254,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}
-              title="Mở bảng lịch chọn ngày, tháng hoặc năm"
+              title={t('incidents.calendar.buttonTitle')}
             >
               <Calendar size={14} color={isCalendarOpen ? '#059669' : '#64748B'} />
               <span>{currentFilterLabel}</span>
@@ -1223,6 +1270,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                   right: '0',
                   zIndex: 100,
                   width: '326px',
+                  maxWidth: 'calc(100vw - 32px)',
                   backgroundColor: '#FFFFFF',
                   borderRadius: '12px',
                   border: '1px solid #E2E8F0',
@@ -1250,7 +1298,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                       cursor: 'pointer',
                     }}
                   >
-                    Ngày
+                    {t('common.day')}
                   </button>
                   <button
                     type="button"
@@ -1267,7 +1315,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                       cursor: 'pointer',
                     }}
                   >
-                    Tháng
+                    {t('common.month')}
                   </button>
                   <button
                     type="button"
@@ -1284,7 +1332,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                       cursor: 'pointer',
                     }}
                   >
-                    Năm
+                    {t('common.year')}
                   </button>
                 </div>
 
@@ -1292,7 +1340,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                 {(timeFilterMode === 'date' || timeFilterMode === 'today' || timeFilterMode === 'all') && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                      Chọn ngày cụ thể:
+                      {t('incidents.calendar.pickExactDate')}
                     </label>
                     <input
                       type="date"
@@ -1319,7 +1367,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                     {/* Quick presets for days with incidents */}
                     <div style={{ marginTop: '10px' }}>
                       <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
-                        Ngày có sự cố gần đây:
+                        {t('incidents.calendar.recentDates')}
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                         {recentIncidentDates.map((dStr) => {
@@ -1350,7 +1398,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                                 cursor: 'pointer',
                               }}
                             >
-                              {isToday ? `Hôm nay (${dParts[2]}/${dParts[1]})` : `${dParts[2]}/${dParts[1]}`}
+                              {isToday ? t('incidents.calendar.todayChip', { date: `${dParts[2]}/${dParts[1]}` }) : `${dParts[2]}/${dParts[1]}`}
                             </button>
                           );
                         })}
@@ -1363,7 +1411,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                 {timeFilterMode === 'month' && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                      Chọn tháng &amp; năm:
+                      {t('incidents.calendar.pickMonthYear')}
                     </label>
                     <input
                       type="month"
@@ -1386,7 +1434,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                     />
 
                     <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
-                      Các tháng trong năm {selectedMonth?.split('-')[0] || '2026'}:
+                      {t('incidents.calendar.monthsInYear', { year: selectedMonth?.split('-')[0] || '2026' })}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((mNum) => {
@@ -1412,7 +1460,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                               textAlign: 'center',
                             }}
                           >
-                            Tháng {mNum}
+                            {t('incidents.calendar.monthItem', { num: mNum })}
                           </button>
                         );
                       })}
@@ -1424,7 +1472,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                 {timeFilterMode === 'year' && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '6px' }}>
-                      Chọn năm khảo sát:
+                      {t('incidents.calendar.pickSurveyYear')}
                     </label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                       {availableYears.map((yr) => {
@@ -1449,7 +1497,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                               textAlign: 'center',
                             }}
                           >
-                            Năm {yr}
+                            {t('incidents.calendar.yearItem', { year: yr })}
                           </button>
                         );
                       })}
@@ -1477,7 +1525,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                         padding: 0,
                       }}
                     >
-                      Hôm nay
+                      {t('common.today')}
                     </button>
                     <button
                       type="button"
@@ -1495,7 +1543,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                         padding: 0,
                       }}
                     >
-                      Tất cả
+                      {t('common.all')}
                     </button>
                   </div>
                   <button
@@ -1512,7 +1560,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                       cursor: 'pointer',
                     }}
                   >
-                    Áp dụng
+                    {t('common.apply')}
                   </button>
                 </div>
               </div>
@@ -1535,31 +1583,31 @@ export const IncidentsPage = ({ onNavigate }) => {
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
             {/* Status Select */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>Trạng thái</span>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>{t('incidents.filters.statusLabel')}</span>
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
                 style={selectControlStyle}
               >
-                <option value="all">Tất cả trạng thái</option>
-                <option value="OPEN">Chưa khắc phục (Đang mở)</option>
-                <option value="RECOVERING">Đang xử lý / Giám sát</option>
-                <option value="HITL">Chờ phê duyệt HITL</option>
-                <option value="NO_ACTION">Cần kiểm tra / Ngắt mạch (NO_ACTION)</option>
-                <option value="FAILED">Tự khắc phục thất bại</option>
-                <option value="RESOLVED">Đã khắc phục hoàn tất</option>
+                <option value="all">{t('incidents.filters.statusAll')}</option>
+                <option value="OPEN">{t('incidents.filters.statusOpen')}</option>
+                <option value="RECOVERING">{t('incidents.filters.statusRecovering')}</option>
+                <option value="HITL">{t('incidents.filters.statusHitl')}</option>
+                <option value="NO_ACTION">{t('incidents.filters.statusNoAction')}</option>
+                <option value="FAILED">{t('incidents.filters.statusFailed')}</option>
+                <option value="RESOLVED">{t('incidents.filters.statusResolved')}</option>
               </select>
             </div>
 
             {/* Service Select */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>Dịch vụ</span>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>{t('incidents.filters.serviceLabel')}</span>
               <select
                 value={selectedService}
                 onChange={(e) => setSelectedService(e.target.value)}
                 style={selectControlStyle}
               >
-                <option value="all">Tất cả dịch vụ ({availableServices.length})</option>
+                <option value="all">{t('incidents.filters.serviceAll', { count: availableServices.length })}</option>
                 {availableServices.map((svc) => (
                   <option key={svc.name} value={svc.name}>
                     {svc.name} {svc.count > 0 ? '(' + svc.count + ')' : ''}
@@ -1589,7 +1637,7 @@ export const IncidentsPage = ({ onNavigate }) => {
               }}
             >
               <RotateCcw size={12} />
-              <span>Đặt lại</span>
+              <span>{t('common.reset')}</span>
             </button>
           </div>
 
@@ -1597,12 +1645,12 @@ export const IncidentsPage = ({ onNavigate }) => {
             {isLoading && incidents.length === 0 ? (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 <RefreshCw size={12} className="animate-spin" color="#059669" />
-                <span>Đang đồng bộ danh sách sự cố...</span>
+                <span>{t('incidents.counter.syncing')}</span>
               </span>
             ) : (
               <>
-                Hiển thị <strong style={{ color: '#0F172A' }}>{totalFiltered > 0 ? startIndex + 1 : 0}-{endIndex}</strong> /{' '}
-                <strong style={{ color: '#0F172A' }}>{totalFiltered}</strong> sự cố
+                {t('incidents.counter.showing')} <strong style={{ color: '#0F172A' }}>{totalFiltered > 0 ? startIndex + 1 : 0}-{endIndex}</strong> /{' '}
+                <strong style={{ color: '#0F172A' }}>{totalFiltered}</strong> {t('incidents.counter.unit')}
               </>
             )}
           </div>
@@ -1632,22 +1680,22 @@ export const IncidentsPage = ({ onNavigate }) => {
                 }}
               >
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '132px' }}>
-                  MÃ SỰ CỐ
+                  {t('incidents.table.colId')}
                 </th>
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '112px' }}>
-                  MỨC ĐỘ
+                  {t('incidents.table.colSeverity')}
                 </th>
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '185px' }}>
-                  DỊCH VỤ / NODE
+                  {t('incidents.table.colServiceNode')}
                 </th>
                 <th style={{ padding: '11px 18px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', minWidth: '340px' }}>
-                  TIÊU ĐỀ SỰ CỐ
+                  {t('incidents.table.colTitle')}
                 </th>
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '185px' }}>
-                  TRẠNG THÁI
+                  {t('incidents.table.colStatus')}
                 </th>
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '126px', textAlign: 'right' }}>
-                  THAO TÁC
+                  {t('incidents.table.colActions')}
                 </th>
               </tr>
             </thead>
@@ -1659,10 +1707,10 @@ export const IncidentsPage = ({ onNavigate }) => {
                       <RefreshCw size={20} className="animate-spin" color="#059669" />
                     </div>
                     <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0F172A' }}>
-                      Đang đồng bộ danh sách sự cố...
+                      {t('incidents.loading.title')}
                     </div>
                     <div style={{ fontSize: '0.78rem', marginTop: '4px', color: '#64748B' }}>
-                      Đang phân tích dữ liệu viễn trắc và chuỗi nguyên nhân gốc rễ
+                      {t('incidents.loading.subtitle')}
                     </div>
                   </td>
                 </tr>
@@ -1686,13 +1734,13 @@ export const IncidentsPage = ({ onNavigate }) => {
                     </div>
                     <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0F172A' }}>
                       {incidents.length === 0
-                        ? `Cụm ${activeClusterLabel} không ghi nhận sự cố nào`
-                        : 'Không tìm thấy sự cố nào phù hợp với bộ lọc'}
+                        ? t('incidents.empty.noIncidentsCluster', { cluster: activeClusterLabel })
+                        : t('incidents.empty.noMatching')}
                     </div>
                     <div style={{ fontSize: '0.78rem', marginTop: '4px', color: '#64748B' }}>
                       {incidents.length === 0
-                        ? 'Toàn bộ các dịch vụ và node trên cụm đang hoạt động an toàn theo thời gian thực.'
-                        : 'Thử điều chỉnh lại mức độ, trạng thái, khung thời gian hoặc từ khóa tìm kiếm.'}
+                        ? t('incidents.empty.healthySubtitle')
+                        : t('incidents.empty.filterSubtitle')}
                     </div>
                     {hasActiveFilters && (
                       <button
@@ -1710,7 +1758,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                           cursor: 'pointer',
                         }}
                       >
-                        Đặt lại bộ lọc
+                        {t('common.resetFilters')}
                       </button>
                     )}
                   </td>
@@ -1721,13 +1769,17 @@ export const IncidentsPage = ({ onNavigate }) => {
                   const isHigh = item.severity === 'HIGH';
                   const isMed = item.severity === 'MEDIUM';
 
-                  const isDone = item.status.includes('hoàn tất');
-                  const isAutoStabilized = item.status.includes('Tự ổn định');
-                  const isClosedManual = item.status.includes('Can thiệp thủ công') || item.status.includes('Đã đóng');
-                  const isUrgentNoAction = item.status.includes('Cần kiểm tra');
-                  const isSafeNoAction = !isUrgentNoAction && (item.status.includes('NO_ACTION') || item.status.includes('an toàn'));
-                  const isWait = item.status.includes('duyệt');
-                  const isFailed = item.status.includes('thất bại') || item.status.includes('Chưa phục hồi');
+                  const isDone = item.statusKey === 'RESOLVED_AUTO';
+                  const isAutoStabilized = item.statusKey === 'RESOLVED_STABLE';
+                  const isClosedManual = item.statusKey === 'RESOLVED_MANUAL';
+                  const isUrgentNoAction = item.statusKey === 'CRITICAL_NO_ACTION';
+                  const isSafeNoAction = item.statusKey === 'NO_ACTION_SAFE';
+                  const isWait = item.statusKey === 'HITL_PENDING';
+                  const isFailed =
+                    item.statusKey === 'VERIFICATION_FAILED' ||
+                    item.statusKey === 'HEALING_FAILED_UNRECOVERED' ||
+                    item.statusKey === 'HEALING_TIMEOUT' ||
+                    item.statusKey === 'HEALING_FAILED';
                   const isAlertRow = (isCrit || isFailed || isUrgentNoAction) && !isDone && !isClosedManual && !isAutoStabilized;
 
                   return (
@@ -1770,7 +1822,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                           </span>
                           {item.occurrenceCount > 1 && (
                             <span
-                              title={`Sự cố lặp lại ${item.occurrenceCount} lần`}
+                              title={t('incidents.table.recurrenceTitle', { count: item.occurrenceCount })}
                               style={{
                                 backgroundColor: '#FEF3C7',
                                 color: '#B45309',
@@ -1913,10 +1965,10 @@ export const IncidentsPage = ({ onNavigate }) => {
                               cursor: 'pointer',
                               transition: 'all 0.15s ease',
                             }}
-                            title="Chuyển ngay tới Cổng Phê Duyệt HITL"
+                            title={t('incidents.table.hitlButtonTitle')}
                           >
                             <Clock size={12} />
-                            <span>Chờ phê duyệt HITL &rarr;</span>
+                            <span>{t('incidents.table.hitlButtonLabel')} &rarr;</span>
                           </button>
                         ) : (
                           <span
@@ -1981,7 +2033,7 @@ export const IncidentsPage = ({ onNavigate }) => {
                             }}
                           >
                             <Eye size={12} />
-                            <span>Xem chi tiết</span>
+                            <span>{t('common.viewDetails')}</span>
                           </button>
 
                           <div
@@ -2028,9 +2080,9 @@ export const IncidentsPage = ({ onNavigate }) => {
             {/* Chọn số bản ghi / trang & Tóm tắt */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: '#64748B', fontSize: '0.74rem' }}>Hiển thị mỗi trang:</span>
+                <span style={{ color: '#64748B', fontSize: '0.74rem' }}>{t('incidents.counter.perPageLabel')}</span>
                 <select
-                  aria-label="Số bản ghi mỗi trang"
+                  aria-label={t('incidents.counter.perPageAria')}
                   value={pageSize}
                   onChange={(e) => {
                     setPageSize(Number(e.target.value));
@@ -2058,20 +2110,20 @@ export const IncidentsPage = ({ onNavigate }) => {
               <span style={{ color: '#CBD5E1' }}>|</span>
 
               <span style={{ color: '#64748B', fontSize: '0.74rem' }}>
-                <strong style={{ color: '#0F172A' }}>{startIndex + 1}-{endIndex}</strong> / <strong style={{ color: '#0F172A' }}>{totalFiltered}</strong> sự cố
+                <strong style={{ color: '#0F172A' }}>{startIndex + 1}-{endIndex}</strong> / <strong style={{ color: '#0F172A' }}>{totalFiltered}</strong> {t('incidents.counter.unit')}
               </span>
             </div>
 
             {/* Các nút bấm chuyển trang */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ color: '#64748B', fontSize: '0.74rem', marginRight: '4px' }}>
-                Trang <strong style={{ color: '#0F172A' }}>{safePage}</strong> / {totalPages}
+                {t('common.page')} <strong style={{ color: '#0F172A' }}>{safePage}</strong> / {totalPages}
               </span>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <button
                   type="button"
-                  title="Trang đầu"
+                  title={t('common.firstPage')}
                   disabled={safePage <= 1}
                   onClick={() => setPage(1)}
                   style={{
@@ -2092,7 +2144,7 @@ export const IncidentsPage = ({ onNavigate }) => {
 
                 <button
                   type="button"
-                  title="Trang trước"
+                  title={t('common.prev')}
                   disabled={safePage <= 1}
                   onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                   style={{
@@ -2157,7 +2209,7 @@ export const IncidentsPage = ({ onNavigate }) => {
 
                 <button
                   type="button"
-                  title="Trang tiếp theo"
+                  title={t('common.nextPageTitle')}
                   disabled={safePage >= totalPages}
                   onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
                   style={{
@@ -2178,7 +2230,7 @@ export const IncidentsPage = ({ onNavigate }) => {
 
                 <button
                   type="button"
-                  title="Trang cuối"
+                  title={t('common.lastPage')}
                   disabled={safePage >= totalPages}
                   onClick={() => setPage(totalPages)}
                   style={{

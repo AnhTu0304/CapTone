@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Activity,
   AlertTriangle,
@@ -12,12 +13,12 @@ import {
   Zap,
 } from 'lucide-react';
 import {
-  BRANCHED_ACTIONS,
-  BRANCHED_CONTEXT_AGENTS,
-  BRANCHED_ROOT_CAUSES,
-  POLICY_BRANCH_META,
   RISK_AGENT_MAP,
   RULE_AGENT_MAP,
+  getBranchedActions,
+  getBranchedContextAgents,
+  getBranchedRootCauses,
+  getPolicyBranchMeta,
   normalizeActionCodeForBranch,
   normalizeCauseCodeFromText,
 } from './BranchedPipelineCatalog';
@@ -84,6 +85,12 @@ export const BranchedPipelineSection = ({
   verifyOutcomeMode = 'auto',
   onChangeVerifyOutcome,
 }) => {
+  const { t } = useTranslation('dashboard');
+  const branchedContextAgents = useMemo(() => getBranchedContextAgents(t), [t]);
+  const branchedRootCauses = useMemo(() => getBranchedRootCauses(t), [t]);
+  const branchedActions = useMemo(() => getBranchedActions(t), [t]);
+  const policyBranchMeta = useMemo(() => getPolicyBranchMeta(t), [t]);
+
   const isSimulating = Boolean(simulatedCauseCode);
 
   // ==========================================
@@ -102,16 +109,16 @@ export const BranchedPipelineSection = ({
       activeRisks: new Set(),
       activeAgents: new Set(),
       policyBranch: null,
-      policyReasonVi: 'Hệ thống đang ổn định — mở rộng các nhánh hoặc click vào 1/16 Nguyên nhân gốc để mô phỏng luồng.',
-      liveModeLabel: isAgentConnected ? 'Dữ liệu thực (Live) • Ổn định' : 'Mất kết nối Agent',
+      policyReasonVi: t('pipeline.branched.stablePrompt'),
+      liveModeLabel: isAgentConnected ? t('pipeline.branched.liveStable') : t('pipeline.branched.agentDisconnected'),
     };
 
     if (simulatedCauseCode) {
-      const causeObj = BRANCHED_ROOT_CAUSES.find((c) => c.code === simulatedCauseCode);
+      const causeObj = branchedRootCauses.find((c) => c.code === simulatedCauseCode);
       if (causeObj) {
-        const actionObj = BRANCHED_ACTIONS.find((a) => a.code === causeObj.primaryActionCode) || BRANCHED_ACTIONS[9];
+        const actionObj = branchedActions.find((a) => a.code === causeObj.primaryActionCode) || branchedActions[9];
         const secondaryObj = causeObj.secondaryActionCode
-          ? BRANCHED_ACTIONS.find((a) => a.code === causeObj.secondaryActionCode) || null
+          ? branchedActions.find((a) => a.code === causeObj.secondaryActionCode) || null
           : null;
         return {
           isFlowActive: true,
@@ -126,7 +133,7 @@ export const BranchedPipelineSection = ({
           activeAgents: new Set(causeObj.agents || ['metrics', 'log', 'k8s_event', 'history']),
           policyBranch: causeObj.policyBranch || actionObj.defaultBranch || 'AUTO',
           policyReasonVi: causeObj.policyReasonVi,
-          liveModeLabel: `Mô phỏng: ${causeObj.shortLabelVi} → ${actionObj.code}`,
+          liveModeLabel: t('pipeline.branched.simModeLabel', { cause: causeObj.shortLabelVi, action: actionObj.code }),
         };
       }
     }
@@ -173,9 +180,8 @@ export const BranchedPipelineSection = ({
           activeMetrics: liveWarnMetrics,
           activeRules: liveTriggeredRules,
           activeRisks: liveTriggeredRisks,
-          policyReasonVi:
-            'AI/Rule Engine vừa ghi nhận biến động và 4 Agent đang thu thập ngữ cảnh — Backend chưa tạo sự cố OPEN hay kích hoạt lệnh K8s.',
-          liveModeLabel: 'Dữ liệu thực (Live) • Đang gom RCA (0 sự cố)',
+          policyReasonVi: t('pipeline.branched.gatheringRcaReason'),
+          liveModeLabel: t('pipeline.branched.gatheringRcaBadge'),
         };
       }
       return emptyFlow;
@@ -213,8 +219,8 @@ export const BranchedPipelineSection = ({
     }
 
     const causeObj =
-      BRANCHED_ROOT_CAUSES.find((c) => c.code === detectedCauseCode) ||
-      BRANCHED_ROOT_CAUSES[BRANCHED_ROOT_CAUSES.length - 1];
+      branchedRootCauses.find((c) => c.code === detectedCauseCode) ||
+      branchedRootCauses[branchedRootCauses.length - 1];
 
     const hitlRawAction =
       latestHitlApproval &&
@@ -251,13 +257,13 @@ export const BranchedPipelineSection = ({
       liveBranch =
         normalizedActCode === 'NO_ACTION'
           ? 'AUDIT'
-          : BRANCHED_ACTIONS.find((a) => a.code === normalizedActCode)?.defaultBranch || causeObj.policyBranch;
+          : branchedActions.find((a) => a.code === normalizedActCode)?.defaultBranch || causeObj.policyBranch;
     }
 
-    const actionObj = BRANCHED_ACTIONS.find((a) => a.code === normalizedActCode) || BRANCHED_ACTIONS[9];
+    const actionObj = branchedActions.find((a) => a.code === normalizedActCode) || branchedActions[9];
 
     const secondaryObj = causeObj.secondaryActionCode
-      ? BRANCHED_ACTIONS.find((a) => a.code === causeObj.secondaryActionCode) || null
+      ? branchedActions.find((a) => a.code === causeObj.secondaryActionCode) || null
       : null;
 
     // Tránh hiển thị mô tả cũ của Scale Down khi hành động hiện tại là NO_ACTION / Ngắt mạch
@@ -270,17 +276,17 @@ export const BranchedPipelineSection = ({
       rawRecReason && !isStaleScaleReasonOnNoAction && (!recNormCode || recNormCode === actionObj.code)
         ? rawRecReason
         : isCircuitBreakerTripped || isAuditActive
-          ? 'Circuit Breaker / Audit đang kích hoạt: tạm dừng can thiệp K8s (NO_ACTION) và ghi Audit Log theo rào chắn an toàn.'
+          ? t('pipeline.branched.auditHaltedReason')
           : causeObj.policyReasonVi;
 
     // Kiểm tra bằng chứng thực tế của từng Agent (không gắn nhãn "Có bằng chứng" nếu Agent báo 0 lỗi / không bất thường)
     const logSubLower = String(pipelineContext?.rcaAgentsSummary?.logSub || '').toLowerCase();
     const k8sSubLower = String(pipelineContext?.rcaAgentsSummary?.k8sEventSub || '').toLowerCase();
     const liveActiveAgentsList = (causeObj.agents || ['metrics', 'log', 'k8s_event', 'history']).filter((agId) => {
-      if (agId === 'log' && /0 lỗi|không có lỗi|0 error/.test(logSubLower) && !liveTriggeredRules.has('R4') && !liveTriggeredRisks.has('HTTP_5XX_SPIKE')) {
+      if (agId === 'log' && /0 lỗi|không có lỗi|0 error|0 log error/.test(logSubLower) && !liveTriggeredRules.has('R4') && !liveTriggeredRisks.has('HTTP_5XX_SPIKE')) {
         return false;
       }
-      if (agId === 'k8s_event' && /không bất thường|pod ổn định|normal/.test(k8sSubLower) && !liveTriggeredRules.has('R5')) {
+      if (agId === 'k8s_event' && /không bất thường|pod ổn định|normal|no anomaly|pod stable/.test(k8sSubLower) && !liveTriggeredRules.has('R5')) {
         return false;
       }
       return true;
@@ -298,9 +304,12 @@ export const BranchedPipelineSection = ({
       activeAgents: new Set(liveActiveAgentsList.length > 0 ? liveActiveAgentsList : ['metrics']),
       policyBranch: liveBranch,
       policyReasonVi: resolvedLiveReasonVi,
-      liveModeLabel: `Live: ${causeObj.shortLabelVi} → ${actionObj.code}`,
+      liveModeLabel: t('pipeline.branched.liveModeLabel', { cause: causeObj.shortLabelVi, action: actionObj.code }),
     };
   }, [
+    t,
+    branchedRootCauses,
+    branchedActions,
     simulatedCauseCode,
     isAgentConnected,
     liveMetrics,
@@ -329,7 +338,7 @@ export const BranchedPipelineSection = ({
   );
 
   const escalatedActionObj = isUnrecoveredLoop
-    ? baseFlow.secondaryActionObj || BRANCHED_ACTIONS[9]
+    ? baseFlow.secondaryActionObj || branchedActions[9]
     : null;
   const effectiveDisplayActionObj = isUnrecoveredLoop ? escalatedActionObj : baseFlow.activeActionObj;
   const effectivePolicyBranch = isUnrecoveredLoop
@@ -407,7 +416,7 @@ export const BranchedPipelineSection = ({
   const RC_W = 356;
   const RC_ITEM_H = 42;
   const RC_ITEM_GAP = 9;
-  const RC_TOTAL_H = BRANCHED_ROOT_CAUSES.length * RC_ITEM_H + (BRANCHED_ROOT_CAUSES.length - 1) * RC_ITEM_GAP; // 807px
+  const RC_TOTAL_H = branchedRootCauses.length * RC_ITEM_H + (branchedRootCauses.length - 1) * RC_ITEM_GAP; // 807px
   const RC_START_Y = Math.round(D2_MID_Y - RC_TOTAL_H / 2);
   const RC_COMPACT_H = 300;
   const RC_COMPACT_Y = Math.round(D2_MID_Y - RC_COMPACT_H / 2);
@@ -423,7 +432,7 @@ export const BranchedPipelineSection = ({
   const AC_W = 340;
   const AC_ITEM_H = 54;
   const AC_ITEM_GAP = 12;
-  const AC_TOTAL_H = BRANCHED_ACTIONS.length * AC_ITEM_H + (BRANCHED_ACTIONS.length - 1) * AC_ITEM_GAP; // 648px
+  const AC_TOTAL_H = branchedActions.length * AC_ITEM_H + (branchedActions.length - 1) * AC_ITEM_GAP; // 648px
   const AC_START_Y = Math.round(D2_MID_Y - AC_TOTAL_H / 2);
   const AC_COMPACT_H = 300;
   const AC_COMPACT_Y = Math.round(D2_MID_Y - AC_COMPACT_H / 2);
@@ -789,7 +798,7 @@ export const BranchedPipelineSection = ({
       const sortedTargets = [...(spec.agents || [])]
         .map((agId) => ({
           agId,
-          agIdx: BRANCHED_CONTEXT_AGENTS.findIndex((a) => a.id === agId),
+          agIdx: branchedContextAgents.findIndex((a) => a.id === agId),
         }))
         .filter((item) => item.agIdx >= 0)
         .sort((a, b) => a.agIdx - b.agIdx);
@@ -826,7 +835,7 @@ export const BranchedPipelineSection = ({
     );
     const sx = RULE_COMPACT_X + RULE_COMPACT_W;
     const sy = RULE_COMPACT_Y + RULE_COMPACT_H / 2;
-    BRANCHED_CONTEXT_AGENTS.forEach((ag, agIdx) => {
+    branchedContextAgents.forEach((ag, agIdx) => {
       const agY = AG_START_Y + agIdx * (AG_H + AG_GAP) + AG_H / 2;
       const isRuleTarget = activeRuleTargets.has(ag.id);
       const exitY = Math.round(sy + (agIdx - 1.5) * 9);
@@ -857,9 +866,9 @@ export const BranchedPipelineSection = ({
       const sx = R_X + R_W;
       const targetAgIds = RISK_AGENT_MAP[node.riskKey] || ['metrics', 'k8s_event'];
       targetAgIds.forEach((agId) => {
-        const agIdx = BRANCHED_CONTEXT_AGENTS.findIndex((a) => a.id === agId);
+        const agIdx = branchedContextAgents.findIndex((a) => a.id === agId);
         if (agIdx < 0) return;
-        const ag = BRANCHED_CONTEXT_AGENTS[agIdx];
+        const ag = branchedContextAgents[agIdx];
         const agY = AG_START_Y + agIdx * (AG_H + AG_GAP) + AG_H / 2;
         const isAgActive = flowState.isFlowActive && flowState.activeAgents.has(ag.id);
         const mx = sx + (AG_X - sx) * 0.52;
@@ -872,7 +881,7 @@ export const BranchedPipelineSection = ({
       });
     });
   } else {
-    BRANCHED_CONTEXT_AGENTS.forEach((ag, agIdx) => {
+    branchedContextAgents.forEach((ag, agIdx) => {
       const agY = AG_START_Y + agIdx * (AG_H + AG_GAP) + AG_H / 2;
       const isAgActive = flowState.isFlowActive && flowState.activeAgents.has(ag.id);
       const sx = R_X + R_W;
@@ -889,7 +898,7 @@ export const BranchedPipelineSection = ({
 
   // 4.6: 04A 4 Agent → 04B 16 Nguyên Nhân Gốc
   const targetCauseIndex = flowState.activeCauseObj
-    ? BRANCHED_ROOT_CAUSES.findIndex((c) => c.code === flowState.activeCauseObj.code)
+    ? branchedRootCauses.findIndex((c) => c.code === flowState.activeCauseObj.code)
     : -1;
   const activeCausePortY = isCausesExpanded
     ? targetCauseIndex >= 0
@@ -899,7 +908,7 @@ export const BranchedPipelineSection = ({
 
   const edgesAgentsToCauses = [];
   if (isCausesExpanded) {
-    BRANCHED_CONTEXT_AGENTS.forEach((ag, agIdx) => {
+    branchedContextAgents.forEach((ag, agIdx) => {
       const sy = AG_START_Y + agIdx * (AG_H + AG_GAP) + AG_H / 2;
       const sx = AG_X + AG_W;
       const isAgActive = flowState.isFlowActive && flowState.activeAgents.has(ag.id);
@@ -927,7 +936,7 @@ export const BranchedPipelineSection = ({
       }
     });
   } else {
-    BRANCHED_CONTEXT_AGENTS.forEach((ag, agIdx) => {
+    branchedContextAgents.forEach((ag, agIdx) => {
       const sy = AG_START_Y + agIdx * (AG_H + AG_GAP) + AG_H / 2;
       const sx = AG_X + AG_W;
       const ey = RC_COMPACT_Y + 52 + agIdx * 62;
@@ -944,7 +953,7 @@ export const BranchedPipelineSection = ({
 
   // 4.7: 04B 16 Nguyên Nhân → 05 Policy
   const edgesCausesToPolicy = isCausesExpanded
-    ? BRANCHED_ROOT_CAUSES.map((cause, idx) => {
+    ? branchedRootCauses.map((cause, idx) => {
         const sy = RC_START_Y + idx * (RC_ITEM_H + RC_ITEM_GAP) + RC_ITEM_H / 2;
         const sx = RC_X + RC_W;
         const isTarget = flowState.isFlowActive && flowState.activeCauseObj?.code === cause.code;
@@ -967,7 +976,7 @@ export const BranchedPipelineSection = ({
 
   // 4.8: 05 Policy → 06A 10 Action
   const edgesPolicyToActions = isActionsExpanded
-    ? BRANCHED_ACTIONS.map((act, idx) => {
+    ? branchedActions.map((act, idx) => {
         const ey = AC_START_Y + idx * (AC_ITEM_H + AC_ITEM_GAP) + AC_ITEM_H / 2;
         const sx = PL_X + PL_W;
         const isCurrentTarget = flowState.isFlowActive && flowState.effectiveDisplayActionObj?.code === act.code;
@@ -996,12 +1005,12 @@ export const BranchedPipelineSection = ({
 
   // 4.9: 06A 10 Action → 06B 3 Cổng → 07 Hậu Kiểm 60s
   const policyGateCards = [
-    { ...POLICY_BRANCH_META.AUTO, y: GT_START_Y },
-    { ...POLICY_BRANCH_META.HITL, y: GT_START_Y + GT_H + GT_GAP },
-    { ...POLICY_BRANCH_META.AUDIT, y: GT_START_Y + 2 * (GT_H + GT_GAP) },
+    { ...policyBranchMeta.AUTO, y: GT_START_Y },
+    { ...policyBranchMeta.HITL, y: GT_START_Y + GT_H + GT_GAP },
+    { ...policyBranchMeta.AUDIT, y: GT_START_Y + 2 * (GT_H + GT_GAP) },
   ];
   const activeActIdx = flowState.effectiveDisplayActionObj
-    ? BRANCHED_ACTIONS.findIndex((a) => a.code === flowState.effectiveDisplayActionObj.code)
+    ? branchedActions.findIndex((a) => a.code === flowState.effectiveDisplayActionObj.code)
     : -1;
   const activeActionPortY =
     isActionsExpanded && activeActIdx >= 0
@@ -1053,51 +1062,51 @@ export const BranchedPipelineSection = ({
   const verificationChecks = isSimulating
     ? [
         {
-          label: 'CPU / RAM',
+          label: t('pipeline.branched.verifyChecks.cpuRam'),
           ok: !(flowState.isUnrecoveredLoop && (causeTriggers.has('cpu') || causeTriggers.has('ram'))),
-          failText: 'Còn vượt ngưỡng',
-          okText: 'An toàn',
+          failText: t('pipeline.branched.verifyChecks.exceeded'),
+          okText: t('pipeline.branched.verifyChecks.safe'),
         },
         {
-          label: 'Độ trễ (Latency)',
+          label: t('pipeline.branched.verifyChecks.latency'),
           ok: !(flowState.isUnrecoveredLoop && (causeTriggers.has('latency') || causeTriggers.has('request_rate') || causeTriggers.size === 0)),
-          failText: '> 600ms (Chưa giảm)',
-          okText: '< 600ms (Đạt)',
+          failText: t('pipeline.branched.verifyChecks.latFail'),
+          okText: t('pipeline.branched.verifyChecks.latOk'),
         },
         {
-          label: 'Lỗi HTTP 5xx',
+          label: t('pipeline.branched.verifyChecks.http5xx'),
           ok: !(flowState.isUnrecoveredLoop && causeTriggers.has('http_5xx_rate')),
-          failText: 'Còn lỗi 5xx',
-          okText: '0% lỗi',
+          failText: t('pipeline.branched.verifyChecks.still5xx'),
+          okText: t('pipeline.branched.verifyChecks.zero5xx'),
         },
         {
-          label: 'Pod & Restart Δ',
+          label: t('pipeline.branched.verifyChecks.podRestart'),
           ok: !(flowState.isUnrecoveredLoop && (causeTriggers.has('pod_restart_count') || causeTriggers.has('replica_count') || causeTriggers.has('disk'))),
-          failText: 'Chưa ổn định',
+          failText: t('pipeline.branched.verifyChecks.unstable'),
           okText: 'Ready (Δ=0)',
         },
       ]
     : [
         {
-          label: 'CPU / RAM',
+          label: t('pipeline.branched.verifyChecks.cpuRam'),
           ok: verifyOutcomeMode !== 'unrecovered' && liveCpuVal <= 80 && liveRamVal <= 85,
           failText: `${liveCpuVal.toFixed(0)}% / ${liveRamVal.toFixed(0)}%`,
           okText: `${liveCpuVal.toFixed(0)}% / ${liveRamVal.toFixed(0)}% ✓`,
         },
         {
-          label: 'Độ trễ (Latency)',
+          label: t('pipeline.branched.verifyChecks.latency'),
           ok: verifyOutcomeMode !== 'unrecovered' && liveLatVal <= 600,
           failText: `${liveLatVal.toFixed(0)}ms (>600)`,
           okText: `${liveLatVal.toFixed(0)}ms ✓`,
         },
         {
-          label: 'Lỗi HTTP 5xx',
+          label: t('pipeline.branched.verifyChecks.http5xx'),
           ok: verifyOutcomeMode !== 'unrecovered' && live5xxVal <= 5,
           failText: `${live5xxVal.toFixed(1)}% (>5%)`,
           okText: `${live5xxVal.toFixed(1)}% ✓`,
         },
         {
-          label: 'Pod & Restart Δ',
+          label: t('pipeline.branched.verifyChecks.podRestart'),
           ok: verifyOutcomeMode !== 'unrecovered' && liveRestartsNum === 0,
           failText: `${liveRestartsNum} restarts`,
           okText: `Ready (${podCount}p)`,
@@ -1142,7 +1151,7 @@ export const BranchedPipelineSection = ({
   const stagePills = [
     {
       step: '00',
-      label: 'TARGET SERVICE',
+      label: t('pipeline.branched.pills.00'),
       x: SV_X,
       w: SV_W,
       top: SV_Y - 36,
@@ -1153,7 +1162,7 @@ export const BranchedPipelineSection = ({
     },
     {
       step: '01',
-      label: 'VIỄN TRẮC (8)',
+      label: t('pipeline.branched.pills.01'),
       x: M_X,
       w: M_W,
       top: (isTelemetryExpanded ? M_START_Y : M_COMPACT_Y) - 36,
@@ -1165,7 +1174,7 @@ export const BranchedPipelineSection = ({
     },
     {
       step: '02',
-      label: 'DỰ BÁO CHUỖI THỜI GIAN (AI)',
+      label: t('pipeline.branched.pills.02'),
       x: HUB_X,
       w: HUB_W,
       top: HUB_Y - 36,
@@ -1175,7 +1184,7 @@ export const BranchedPipelineSection = ({
     },
     {
       step: 'RULE',
-      label: 'RULE ENGINE (6 LUẬT HÀNG NGANG)',
+      label: t('pipeline.branched.pills.RULE'),
       x: isRuleExpanded ? RULE_ROW_X : RULE_COMPACT_X,
       w: isRuleExpanded ? RULE_ROW_TOTAL_W : RULE_COMPACT_W,
       top: isRuleExpanded ? RULE_ROW_Y - 134 : RULE_COMPACT_Y - 36,
@@ -1187,7 +1196,7 @@ export const BranchedPipelineSection = ({
     },
     {
       step: '03',
-      label: '7 ĐẦU RỦI RO AI',
+      label: t('pipeline.branched.pills.03'),
       x: R_X,
       w: R_W,
       top: (isRisksExpanded ? R_START_Y : R_COMPACT_Y) - 36,
@@ -1199,7 +1208,7 @@ export const BranchedPipelineSection = ({
     },
     {
       step: '04A',
-      label: '4 AGENT ĐỘC LẬP',
+      label: t('pipeline.branched.pills.04A'),
       x: AG_X,
       w: AG_W,
       top: AG_START_Y - 36,
@@ -1209,7 +1218,7 @@ export const BranchedPipelineSection = ({
     },
     {
       step: '04B',
-      label: '16 NGUYÊN NHÂN GỐC',
+      label: t('pipeline.branched.pills.04B'),
       x: RC_X,
       w: RC_W,
       top: (isCausesExpanded ? RC_START_Y : RC_COMPACT_Y) - 36,
@@ -1221,7 +1230,7 @@ export const BranchedPipelineSection = ({
     },
     {
       step: '05',
-      label: 'RECOMMENDATION & POLICY',
+      label: t('pipeline.branched.pills.05'),
       x: PL_X,
       w: PL_W,
       top: PL_Y - 36,
@@ -1231,7 +1240,7 @@ export const BranchedPipelineSection = ({
     },
     {
       step: '06A',
-      label: '10 HÀNH ĐỘNG (ACTION)',
+      label: t('pipeline.branched.pills.06A'),
       x: AC_X,
       w: AC_W,
       top: (isActionsExpanded ? AC_START_Y : AC_COMPACT_Y) - 36,
@@ -1243,7 +1252,7 @@ export const BranchedPipelineSection = ({
     },
     {
       step: '06B',
-      label: 'CỔNG ĐIỀU PHỐI K8S',
+      label: t('pipeline.branched.pills.06B'),
       x: GT_X,
       w: GT_W,
       top: GT_START_Y - 36,
@@ -1253,7 +1262,7 @@ export const BranchedPipelineSection = ({
     },
     {
       step: '07',
-      label: 'HẬU KIỂM 60S',
+      label: t('pipeline.branched.pills.07'),
       x: VF_X,
       w: VF_W,
       top: VF_Y - 36,
@@ -1296,10 +1305,10 @@ export const BranchedPipelineSection = ({
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0F172A' }}>
-              Sơ Đồ 2 • Kiến Trúc Toàn Luồng (00 Service → 8 Metric • 6 Rule • 7 Risk • 4 Agent • 16 Nguyên Nhân • 10 Action • 07)
+              {t('pipeline.branched.bannerTitle')}
             </div>
             <div style={{ fontSize: '0.74rem', color: '#475569', marginTop: '2px' }}>
-              Khối 00 Service thu thập qua 3 luồng (Metrics/Probe → 01, LogsCollector → Log Agent, EventsCollector → K8s Event Agent); bấm từng nguyên nhân để mô phỏng luồng sáng.
+              {t('pipeline.branched.bannerDesc')}
             </div>
           </div>
         </div>
@@ -1349,27 +1358,27 @@ export const BranchedPipelineSection = ({
             {isSimulating ? <Play size={12} /> : <Activity size={12} />}
             <span>
               {flowState.isUnrecoveredLoop && flowState.activeCauseObj
-                ? `${flowState.liveModeLabel} (Chưa hồi phục → Leo thang ${flowState.effectiveDisplayActionObj?.code})`
+                ? `${flowState.liveModeLabel}${t('pipeline.branched.escalateSuffix', { action: flowState.effectiveDisplayActionObj?.code })}`
                 : flowState.liveModeLabel}
             </span>
           </span>
 
           {isSimulating && (
             <button type="button" data-testid="d2-back-to-live-btn" onClick={(e) => { e.stopPropagation(); onClearSimulation(); }} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #7C3AED', backgroundColor: '#7C3AED', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
-              Về dữ liệu thực (Live)
+              {t('pipeline.branched.backToLive')}
             </button>
           )}
 
           <button type="button" data-testid="d2-toggle-all-btn" onClick={() => onToggleAllBranches(!allBranchesExpanded)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #93C5FD', backgroundColor: allBranchesExpanded ? '#2563EB' : '#EFF6FF', color: allBranchesExpanded ? '#FFFFFF' : '#1D4ED8', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
-            {allBranchesExpanded ? '− Thu gọn tất cả' : '+ Mở rộng tất cả'}
+            {allBranchesExpanded ? t('pipeline.branched.collapseAll') : t('pipeline.branched.expandAll')}
           </button>
 
           <button type="button" data-testid="d2-toggle-causes-btn" onClick={onToggleCauses} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #C4B5FD', backgroundColor: isCausesExpanded ? '#7C3AED' : '#FFFFFF', color: isCausesExpanded ? '#FFFFFF' : '#6D28D9', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
-            {isCausesExpanded ? '− Thu gọn 16 RCA' : '+ Mở 16 Nguyên nhân'}
+            {isCausesExpanded ? t('pipeline.branched.collapseCauses') : t('pipeline.branched.expandCauses')}
           </button>
 
           <button type="button" data-testid="d2-toggle-actions-btn" onClick={onToggleActions} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #99F6E4', backgroundColor: isActionsExpanded ? '#0F766E' : '#FFFFFF', color: isActionsExpanded ? '#FFFFFF' : '#0F766E', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
-            {isActionsExpanded ? '− Thu gọn 10 Action' : '+ Mở 10 Action'}
+            {isActionsExpanded ? t('pipeline.branched.collapseActions') : t('pipeline.branched.expandActions')}
           </button>
         </div>
       </div>
@@ -1387,7 +1396,7 @@ export const BranchedPipelineSection = ({
             <span>{col.label}</span>
             {col.onToggle && (
               <span style={{ marginLeft: '2px', padding: '0 5px', borderRadius: '999px', backgroundColor: '#FFFFFF', border: `1px solid ${col.border}`, fontSize: '0.6rem', fontWeight: 800 }}>
-                {col.isOpen ? '− Gọn' : '+ Mở'}
+                {col.isOpen ? t('pipeline.branched.compactBtn') : t('pipeline.branched.expandBtn')}
               </span>
             )}
           </span>
@@ -1452,13 +1461,13 @@ export const BranchedPipelineSection = ({
       {/* Nhãn chú thích 2 rãnh thu thập Log & K8s Event từ 00 Service (Cách A) */}
       <div data-testid="d2-collector-log-rail" style={{ position: 'absolute', left: `${Math.round(HUB_X + HUB_W / 2)}px`, top: `${LOG_COLLECT_BUS_Y - 10}px`, transform: 'translateX(-50%)', zIndex: 8, pointerEvents: 'none' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '2px 10px', borderRadius: '999px', backgroundColor: isLogCollectorActive ? '#FFFBEB' : 'rgba(255, 255, 255, 0.96)', border: `1px solid ${isLogCollectorActive ? '#F59E0B' : '#FDE68A'}`, color: isLogCollectorActive ? '#B45309' : '#D97706', fontSize: '0.6rem', fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 2px 5px rgba(15, 23, 42, 0.04)' }}>
-          LogsCollector → Log Agent (Container Logs)
+          {t('pipeline.branched.logRail')}
         </span>
       </div>
 
       <div data-testid="d2-collector-k8s-rail" style={{ position: 'absolute', left: `${Math.round(HUB_X + HUB_W / 2)}px`, top: `${EVENT_COLLECT_BUS_Y - 10}px`, transform: 'translateX(-50%)', zIndex: 8, pointerEvents: 'none' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '2px 10px', borderRadius: '999px', backgroundColor: isK8sCollectorActive ? '#ECFDF5' : 'rgba(255, 255, 255, 0.96)', border: `1px solid ${isK8sCollectorActive ? '#10B981' : '#A7F3D0'}`, color: isK8sCollectorActive ? '#047857' : '#059669', fontSize: '0.6rem', fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 2px 5px rgba(15, 23, 42, 0.04)' }}>
-          EventsCollector &amp; Pods → K8s Event Agent
+          {t('pipeline.branched.k8sRail')}
         </span>
       </div>
 
@@ -1498,14 +1507,14 @@ export const BranchedPipelineSection = ({
               <Server size={12} /> K8S WORKLOAD
             </span>
             <span style={{ fontSize: '0.58rem', fontWeight: 800, padding: '1px 7px', borderRadius: '999px', backgroundColor: !isAgentConnected ? '#F1F5F9' : flowState.isFlowActive ? '#FEE2E2' : '#ECFDF5', color: !isAgentConnected ? '#64748B' : flowState.isFlowActive ? '#DC2626' : '#059669' }}>
-              {isSimulating ? 'Mô phỏng lỗi' : isAgentConnected ? `${podCount} Pod • Online` : 'Offline'}
+              {isSimulating ? t('pipeline.branched.serviceNode.simFault') : isAgentConnected ? t('pipeline.branched.serviceNode.podOnline', { count: podCount }) : t('pipeline.branched.serviceNode.offline')}
             </span>
           </div>
           <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={selectedService}>
             {selectedService}
           </div>
           <div style={{ fontSize: '0.63rem', color: '#64748B', marginTop: '2px' }}>
-            Nguồn thu thập 3 luồng trực tiếp:
+            {t('pipeline.branched.serviceNode.sourcesTitle')}
           </div>
         </div>
 
@@ -1525,7 +1534,7 @@ export const BranchedPipelineSection = ({
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '1px solid #F1F5F9', fontSize: '0.62rem', fontWeight: 700, color: '#0284C7' }}>
-          <span>Hậu kiểm quay về giám sát</span>
+          <span>{t('pipeline.branched.serviceNode.feedbackFooter')}</span>
           <span>↻ 07</span>
         </div>
       </div>
@@ -1548,7 +1557,7 @@ export const BranchedPipelineSection = ({
                 <div style={{ fontSize: '0.52rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase' }}>Metric Input</div>
                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cfg.label}</div>
                 <div style={{ fontSize: '0.6rem', fontFamily: 'var(--font-mono)', color: mState.isWarning ? '#DC2626' : '#64748B' }}>
-                  {mState.isSimTriggered ? 'Kích hoạt mô phỏng' : `${mState.latest} ${cfg.unit} • TB: ${mState.avg}`}
+                  {mState.isSimTriggered ? t('pipeline.branched.metricSimTriggered') : `${mState.latest} ${cfg.unit} • ${t('predictions.telemetryChart.avgShort')} ${mState.avg}`}
                 </div>
               </div>
               <div style={{ position: 'absolute', right: '-7px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', borderRadius: '50%', backgroundColor: '#FFFFFF', border: `2px solid ${mState.isWarning ? '#EF4444' : '#94A3B8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#64748B' }}>+</div>
@@ -1562,19 +1571,19 @@ export const BranchedPipelineSection = ({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
               <span style={{ fontSize: '0.625rem', fontWeight: 800, color: '#059669' }}>METRIC INPUT</span>
               <span style={{ fontSize: '0.6rem', fontWeight: 800, padding: '1px 6px', borderRadius: '999px', backgroundColor: warningMetricItemsCount > 0 ? '#FEF3C7' : '#ECFDF5', color: warningMetricItemsCount > 0 ? '#B45309' : '#059669' }}>
-                {warningMetricItemsCount > 0 ? `${warningMetricItemsCount} cảnh báo` : `${metricConfigs.length}/${metricConfigs.length} ổn định`}
+                {warningMetricItemsCount > 0 ? t('pipeline.canvas.compactMetrics.warningCount', { count: warningMetricItemsCount }) : t('pipeline.canvas.compactMetrics.stableCount', { count: metricConfigs.length, total: metricConfigs.length })}
               </span>
             </div>
-            <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0F172A' }}>8 Chỉ số Viễn trắc</div>
+            <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0F172A' }}>{t('pipeline.canvas.compactMetrics.title')}</div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>CPU / RAM</span><span style={{ fontWeight: 700, color: '#0F172A' }}>{liveCpuVal.toFixed(1)}% / {liveRamVal.toFixed(1)}%</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>Latency</span><span style={{ fontWeight: 700, color: liveLatVal > 200 ? '#DC2626' : '#7C3AED' }}>{liveLatVal.toFixed(0)} ms</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>Req/s • 5xx</span><span style={{ fontWeight: 700, color: live5xxVal > 5 ? '#DC2626' : '#0891B2' }}>{liveReqVal.toFixed(1)} • {live5xxVal.toFixed(1)}%</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>Restarts • Pods</span><span style={{ fontWeight: 700, color: '#6366F1' }}>{liveMetrics.pod_restart_count?.latest ?? 0} lần • {liveMetrics.replica_count?.latest ?? podCount ?? 1} Pod</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748B' }}>Restarts • Pods</span><span style={{ fontWeight: 700, color: '#6366F1' }}>{t('pipeline.canvas.compactMetrics.restartsVal', { restarts: liveMetrics.pod_restart_count?.latest ?? 0, pods: liveMetrics.replica_count?.latest ?? podCount ?? 1 })}</span></div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '7px', borderTop: '1px solid #F1F5F9', fontSize: '0.68rem', fontWeight: 800, color: '#059669' }}>
-            <span>Nhấn mở 8 nhánh</span>
+            <span>{t('pipeline.canvas.compactMetrics.clickToExpand')}</span>
             <span style={{ padding: '1px 7px', borderRadius: '999px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0' }}>+8</span>
           </div>
         </div>
@@ -1590,7 +1599,7 @@ export const BranchedPipelineSection = ({
             <span style={{ fontSize: '0.78125rem', fontWeight: 700, color: '#1E293B' }}>AI Analysis & Health Assessment</span>
           </div>
           <span style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: '4px', backgroundColor: isSimulating ? '#EDE9FE' : !isAgentConnected ? '#F1F5F9' : currentActiveStep < totalSteps ? '#FEF3C7' : '#DCFCE7', color: isSimulating ? '#6D28D9' : !isAgentConnected ? '#64748B' : currentActiveStep < totalSteps ? '#D97706' : '#15803D', fontWeight: 700 }}>
-            {isSimulating ? 'Mô phỏng' : isAgentConnected ? `${currentActiveStep}/${totalSteps} Bước` : `0/${totalSteps} Bước`}
+            {isSimulating ? t('pipeline.branched.causeCard.simulating') : isAgentConnected ? t('pipeline.canvas.aiHub.stepsProgress', { step: currentActiveStep, total: totalSteps }) : t('pipeline.canvas.aiHub.stepsProgress', { step: 0, total: totalSteps })}
           </span>
         </div>
 
@@ -1646,7 +1655,7 @@ export const BranchedPipelineSection = ({
                 <line x1={sweepTargetX} y1={chartPad.top} x2={sweepTargetX} y2={chartPad.top + innerH} stroke="#2563EB" strokeWidth="1.5" strokeDasharray="3 2" />
                 <circle cx={sweepTargetX} cy={getMiniY(Number(effectiveTimesteps[activeSweepIdx]?.latency || effectiveTimesteps[activeSweepIdx]?.ram || 50))} r="4.5" fill="#2563EB" stroke="#FFFFFF" strokeWidth="2" />
                 <text x={sweepTargetX} y={chartPad.top - 8} fill="#2563EB" fontSize="8.5" fontWeight="800" fontFamily="var(--font-mono)" textAnchor={activeSweepIdx >= 10 ? 'end' : activeSweepIdx <= 1 ? 'start' : 'middle'}>
-                  {currentStepLabel} ({activeSweepIdx === 0 ? 'Đủ 12 bước -> AI' : 'Đầu gom mới'})
+                  {currentStepLabel} ({activeSweepIdx === 0 ? t('pipeline.canvas.aiHub.enough12') : t('pipeline.canvas.aiHub.newHead')})
                 </text>
               </g>
             )}
@@ -1660,9 +1669,9 @@ export const BranchedPipelineSection = ({
         </div>
 
         <div style={{ padding: '10px 14px', textAlign: 'center', borderTop: '1px solid #F1F5F9', marginTop: 'auto', backgroundColor: '#FAFAFA' }}>
-          <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>AI to Analyze {selectedService} & Assess Health</div>
+          <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>{t('pipeline.canvas.aiHub.analyzeFooter', { service: selectedService })}</div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3px 10px', borderRadius: '16px', backgroundColor: isSimulating || isRiskDetected ? '#FEE2E2' : '#E0F2FE', color: isSimulating || isRiskDetected ? '#991B1B' : '#0369A1', fontSize: '0.6875rem', fontWeight: 700, fontFamily: 'var(--font-mono)', marginTop: '6px' }}>
-            <span>{isScaleDownOptimization ? 'Chỉ số tối ưu:' : 'Điểm rủi ro tổng:'}</span>
+            <span>{isScaleDownOptimization ? t('pipeline.canvas.aiHub.optScore') : t('pipeline.canvas.aiHub.riskScore')}</span>
             <strong>{isSimulating ? 'DEMO_TRIGGERED' : `${rawRiskScore.toFixed(4)} (${isScaleDownOptimization ? 'SCALE_DOWN_OPT' : isPredictionHealthy ? 'HEALTHY' : prediction?.status || 'HEALTHY'})`}</strong>
           </div>
         </div>
@@ -1741,7 +1750,7 @@ export const BranchedPipelineSection = ({
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{rule.name}</span>
                 </span>
                 <span style={{ fontSize: '0.56rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: isTrig ? '#DC2626' : '#059669', flexShrink: 0 }}>
-                  {isTrig && isSimulating ? 'VI PHẠM' : rule.value}
+                  {isTrig && isSimulating ? t('pipeline.branched.ruleViolated') : rule.value}
                 </span>
               </div>
 
@@ -1786,11 +1795,11 @@ export const BranchedPipelineSection = ({
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>
-                Rule Engine — 6 Luật Ngưỡng Tĩnh (Hàng Ngang)
+                {t('pipeline.branched.ruleCompactTitle')}
               </div>
               <div style={{ fontSize: '0.68rem', color: isRuleActiveAny ? '#DC2626' : '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {isRuleActiveAny
-                  ? effectiveRuleChecks.filter((r) => r.effectiveTriggered).map((r) => r.id).join(', ') + ' đang kích hoạt → Rẽ thẳng tới Agent'
+                  ? t('pipeline.branched.ruleCompactActive', { ids: effectiveRuleChecks.filter((r) => r.effectiveTriggered).map((r) => r.id).join(', ') })
                   : 'CPU, Traffic Surge, RAM/OOM, HTTP 5xx, Pod Instability, Disk Saturation'}
               </div>
             </div>
@@ -1798,10 +1807,10 @@ export const BranchedPipelineSection = ({
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '3px 10px', borderRadius: '999px', backgroundColor: isRuleActiveAny ? '#FEE2E2' : '#ECFDF5', color: isRuleActiveAny ? '#DC2626' : '#059669' }}>
-              {isRuleActiveAny ? `${effectiveRuleTriggerCount}/6 Vi phạm` : '0/6 An toàn'}
+              {isRuleActiveAny ? t('pipeline.branched.ruleCompactViolatedCount', { count: effectiveRuleTriggerCount }) : t('pipeline.branched.ruleCompactSafeCount')}
             </span>
             <span style={{ padding: '4px 10px', borderRadius: '999px', backgroundColor: '#FFF7ED', border: '1px solid #FDBA74', fontSize: '0.68rem', fontWeight: 800, color: '#EA580C' }}>
-              + Mở 6 luật (+6)
+              {t('pipeline.branched.ruleCompactExpand')}
             </span>
           </div>
         </div>
@@ -1824,7 +1833,7 @@ export const BranchedPipelineSection = ({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: node.effectiveTriggered ? trigAccent : '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{node.title}</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.62rem', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-                  <span style={{ color: node.effectiveTriggered ? trigAccent : '#64748B' }}>Ngưỡng: {node.thresholdPercent}%</span>
+                  <span style={{ color: node.effectiveTriggered ? trigAccent : '#64748B' }}>{t('pipeline.canvas.risks.threshold', { pct: node.thresholdPercent })}</span>
                   <strong style={{ color: node.effectiveTriggered ? trigAccent : '#10B981' }}>{node.displayPercent}</strong>
                 </div>
               </div>
@@ -1838,21 +1847,21 @@ export const BranchedPipelineSection = ({
           <div style={{ position: 'absolute', right: '-6px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: triggeredRiskItemsCount > 0 ? '#EF4444' : '#94A3B8', border: '2px solid #FFFFFF' }} />
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <span style={{ fontSize: '0.625rem', fontWeight: 800, color: triggeredRiskItemsCount > 0 ? '#DC2626' : '#059669' }}>HỒ SƠ RỦI RO</span>
+              <span style={{ fontSize: '0.625rem', fontWeight: 800, color: triggeredRiskItemsCount > 0 ? '#DC2626' : '#059669' }}>{t('pipeline.canvas.risks.profileHeader')}</span>
               <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '999px', backgroundColor: triggeredRiskItemsCount > 0 ? '#FEE2E2' : '#ECFDF5', color: triggeredRiskItemsCount > 0 ? '#DC2626' : '#059669' }}>
-                {triggeredRiskItemsCount > 0 ? `${triggeredRiskItemsCount}/7 cảnh báo` : 'An toàn'}
+                {triggeredRiskItemsCount > 0 ? t('pipeline.canvas.risks.warningCount', { count: triggeredRiskItemsCount }) : t('pipeline.canvas.risks.safe')}
               </span>
             </div>
-            <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0F172A' }}>7 Đầu Rủi Ro AI</div>
+            <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0F172A' }}>{t('pipeline.canvas.risks.title')}</div>
           </div>
           <div style={{ padding: '8px 10px', borderRadius: '10px', backgroundColor: triggeredRiskItemsCount > 0 ? '#FEF2F2' : '#F8FAFC', border: `1px solid ${triggeredRiskItemsCount > 0 ? '#FECACA' : '#E2E8F0'}` }}>
-            <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748B' }}>CAO NHẤT HIỆN TẠI</div>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748B' }}>{t('pipeline.canvas.risks.highestNow')}</div>
             <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0F172A', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {isSimulating && flowState.activeRisks.size > 0 ? Array.from(flowState.activeRisks).join(', ') : isAgentConnected ? topRiskEval?.title || 'Ổn định' : 'Chưa kết nối'}
+              {isSimulating && flowState.activeRisks.size > 0 ? Array.from(flowState.activeRisks).join(', ') : isAgentConnected ? topRiskEval?.title || t('pipeline.canvas.risks.stable') : t('pipeline.canvas.risks.disconnected')}
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '7px', borderTop: '1px solid #F1F5F9', fontSize: '0.68rem', fontWeight: 800, color: '#DC2626' }}>
-            <span>Nhấn mở 7 nhánh</span>
+            <span>{t('pipeline.canvas.risks.clickToExpand')}</span>
             <span style={{ padding: '1px 7px', borderRadius: '999px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA' }}>+7</span>
           </div>
         </div>
@@ -1861,16 +1870,16 @@ export const BranchedPipelineSection = ({
       {/* ============================================================ */}
       {/* CỘT 04A: 4 AGENT GOM NGỮ CẢNH ĐỘC LẬP                        */}
       {/* ============================================================ */}
-      {BRANCHED_CONTEXT_AGENTS.map((ag, idx) => {
+      {branchedContextAgents.map((ag, idx) => {
         const AgIcon = ag.icon;
         const y = AG_START_Y + idx * (AG_H + AG_GAP);
         const isAgActive = flowState.isFlowActive && flowState.activeAgents.has(ag.id);
         const isAgCleanScanned = flowState.isFlowActive && !isSimulating && !isAgActive && isAgentConnected;
-        const agCleanBadgeText = ag.id === 'log' || ag.id === 'k8s_event' ? 'Đã quét (0 lỗi)' : 'Đã đối chiếu';
+        const agCleanBadgeText = ag.id === 'log' || ag.id === 'k8s_event' ? t('pipeline.branched.agent.scannedZero') : t('pipeline.branched.agent.checked');
         const agCleanFooterText =
           ag.id === 'log' || ag.id === 'k8s_event'
-            ? 'Đã đối chiếu — Không có bất thường'
-            : `Đã đối chiếu — ${ag.role}`;
+            ? t('pipeline.branched.agent.checkedClean')
+            : t('pipeline.branched.agent.checkedWithRole', { role: ag.role });
 
         const isAgCollectingOnly = Boolean(
           flowState.isGatheringRcaContext && !flowState.isFlowActive && isAgentConnected && !isSimulating
@@ -1880,7 +1889,7 @@ export const BranchedPipelineSection = ({
         if (ag.id === 'metrics' && isAgentConnected && !isSimulating) subInfo = pipelineContext?.rcaAgentsSummary?.metricsSub || ag.role;
         else if (ag.id === 'log' && isAgentConnected && !isSimulating) subInfo = pipelineContext?.rcaAgentsSummary?.logSub || ag.role;
         else if (ag.id === 'k8s_event' && isAgentConnected && !isSimulating) subInfo = pipelineContext?.rcaAgentsSummary?.k8sEventSub || ag.role;
-        else if (ag.id === 'history' && isAgentConnected && !isSimulating) subInfo = pipelineContext?.rcaAgentsSummary?.historySub || `${pipelineContext?.totalServiceIncidentsCount ?? 0} lịch sử sự cố`;
+        else if (ag.id === 'history' && isAgentConnected && !isSimulating) subInfo = pipelineContext?.rcaAgentsSummary?.historySub || t('pipeline.branched.agent.historyFallback', { count: pipelineContext?.totalServiceIncidentsCount ?? 0 });
 
         return (
           <div key={ag.id} data-testid={`d2-agent-${ag.id}`} style={{ position: 'absolute', left: `${AG_X}px`, top: `${y}px`, width: `${AG_W}px`, height: `${AG_H}px`, backgroundColor: '#FFFFFF', borderRadius: '12px', border: `1.5px solid ${isAgActive ? ag.color : '#CBD5E1'}`, boxShadow: isAgActive ? `0 8px 20px ${ag.color}2E` : '0 3px 10px rgba(15, 23, 42, 0.05)', padding: '11px 13px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', opacity: flowState.isFlowActive && !isAgActive ? (isAgCleanScanned ? 0.8 : 0.56) : 1, zIndex: 12, transition: 'all 0.2s ease' }}>
@@ -1896,13 +1905,13 @@ export const BranchedPipelineSection = ({
                 <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>{ag.name}</span>
               </div>
               <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', backgroundColor: isAgActive ? ag.bg : isAgCollectingOnly ? '#FFFBEB' : isAgCleanScanned ? '#F8FAFC' : '#F1F5F9', border: isAgCollectingOnly ? '1px solid #FDE68A' : isAgCleanScanned ? '1px solid #E2E8F0' : 'none', color: isAgActive ? ag.color : isAgCollectingOnly ? '#B45309' : '#64748B' }}>
-                {isAgActive ? 'Có bằng chứng' : isAgCleanScanned ? agCleanBadgeText : isAgCollectingOnly ? 'Đang thu thập' : 'Chờ tín hiệu'}
+                {isAgActive ? t('pipeline.branched.agent.hasEvidence') : isAgCleanScanned ? agCleanBadgeText : isAgCollectingOnly ? t('pipeline.branched.agent.collecting') : t('pipeline.branched.agent.waiting')}
               </span>
             </div>
 
             <div style={{ fontSize: '0.69rem', color: '#475569', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{subInfo}</div>
             <div style={{ fontSize: '0.62rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: isAgActive ? ag.color : isAgCollectingOnly ? '#B45309' : '#94A3B8' }}>
-              {isAgActive ? 'Bằng chứng hợp lệ → RootCauseAgent' : isAgCleanScanned ? agCleanFooterText : isAgCollectingOnly ? 'Đang gom ngữ cảnh (Chờ mở Incident)' : ag.role}
+              {isAgActive ? t('pipeline.branched.agent.validEvidenceFooter') : isAgCleanScanned ? agCleanFooterText : isAgCollectingOnly ? t('pipeline.branched.agent.collectingFooter') : ag.role}
             </div>
           </div>
         );
@@ -1912,13 +1921,13 @@ export const BranchedPipelineSection = ({
       {/* CỘT 04B: 16 NGUYÊN NHÂN GỐC                                  */}
       {/* ============================================================ */}
       {isCausesExpanded ? (
-        BRANCHED_ROOT_CAUSES.map((cause, idx) => {
+        branchedRootCauses.map((cause, idx) => {
           const y = RC_START_Y + idx * (RC_ITEM_H + RC_ITEM_GAP);
           const isSelectedOrActive = flowState.isFlowActive && flowState.activeCauseObj?.code === cause.code;
           const isSimTarget = simulatedCauseCode === cause.code;
 
           return (
-            <div key={cause.code} data-testid={`d2-cause-${cause.code}`} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onSelectSimulatedCause(cause.code); }} title={`${cause.labelVi} (${cause.code}) — Click để chạy thử luồng`} style={{ position: 'absolute', left: `${RC_X}px`, top: `${y}px`, width: `${RC_W}px`, height: `${RC_ITEM_H}px`, backgroundColor: isSelectedOrActive ? cause.bg : '#FFFFFF', borderRadius: '9px', border: `1.5px solid ${isSelectedOrActive ? cause.color : '#E2E8F0'}`, boxShadow: isSelectedOrActive ? `0 5px 14px ${cause.color}2B` : '0 1px 5px rgba(15, 23, 42, 0.04)', padding: '0 12px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', cursor: 'pointer', zIndex: isSelectedOrActive ? 15 : 11, opacity: flowState.isFlowActive && !isSelectedOrActive ? 0.65 : 1, transition: 'all 0.16s ease' }}>
+            <div key={cause.code} data-testid={`d2-cause-${cause.code}`} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onSelectSimulatedCause(cause.code); }} title={t('pipeline.branched.causeCard.clickToSim', { label: cause.labelVi, code: cause.code })} style={{ position: 'absolute', left: `${RC_X}px`, top: `${y}px`, width: `${RC_W}px`, height: `${RC_ITEM_H}px`, backgroundColor: isSelectedOrActive ? cause.bg : '#FFFFFF', borderRadius: '9px', border: `1.5px solid ${isSelectedOrActive ? cause.color : '#E2E8F0'}`, boxShadow: isSelectedOrActive ? `0 5px 14px ${cause.color}2B` : '0 1px 5px rgba(15, 23, 42, 0.04)', padding: '0 12px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', cursor: 'pointer', zIndex: isSelectedOrActive ? 15 : 11, opacity: flowState.isFlowActive && !isSelectedOrActive ? 0.65 : 1, transition: 'all 0.16s ease' }}>
               <div style={{ position: 'absolute', left: '-5px', top: '50%', transform: 'translateY(-50%)', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: isSelectedOrActive ? cause.color : '#CBD5E1', border: '1.5px solid #FFFFFF' }} />
               <div style={{ position: 'absolute', right: '-5px', top: '50%', transform: 'translateY(-50%)', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: isSelectedOrActive ? cause.color : '#CBD5E1', border: '1.5px solid #FFFFFF' }} />
 
@@ -1932,7 +1941,7 @@ export const BranchedPipelineSection = ({
               </div>
 
               <span style={{ fontSize: '0.6rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', backgroundColor: isSelectedOrActive ? '#FFFFFF' : '#F8FAFC', border: `1px solid ${isSelectedOrActive ? cause.color : '#E2E8F0'}`, color: isSelectedOrActive ? cause.color : '#64748B', flexShrink: 0 }}>
-                {isSimTarget ? (isUnrecoveredLoop ? 'RE-RCA' : 'MÔ PHỎNG') : isSelectedOrActive ? 'ĐANG CHẠY' : cause.policyBranch}
+                {isSimTarget ? (isUnrecoveredLoop ? 'RE-RCA' : t('pipeline.branched.causeCard.simulating')) : isSelectedOrActive ? t('pipeline.branched.causeCard.running') : cause.policyBranch}
               </span>
             </div>
           );
@@ -1944,21 +1953,21 @@ export const BranchedPipelineSection = ({
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#7C3AED', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><Sparkles size={13} /> ROOTCAUSE AGENT</span>
-              <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', backgroundColor: '#F5F3FF', color: '#6D28D9' }}>16 Nguyên nhân</span>
+              <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', backgroundColor: '#F5F3FF', color: '#6D28D9' }}>{t('pipeline.branched.causeCard.compactCount')}</span>
             </div>
-            <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0F172A' }}>Chẩn Đoán Nguyên Nhân Gốc</div>
-            <div style={{ fontSize: '0.73rem', color: '#64748B', marginTop: '4px', lineHeight: 1.4 }}>Hội tụ bằng chứng từ 4 Agent độc lập để xác định đúng 1/16 nguyên nhân gốc.</div>
+            <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0F172A' }}>{t('pipeline.branched.causeCard.compactTitle')}</div>
+            <div style={{ fontSize: '0.73rem', color: '#64748B', marginTop: '4px', lineHeight: 1.4 }}>{t('pipeline.branched.causeCard.compactDesc')}</div>
           </div>
           <div style={{ padding: '10px 12px', borderRadius: '10px', backgroundColor: flowState.activeCauseObj ? flowState.activeCauseObj.bg : flowState.isGatheringRcaContext ? '#FFFBEB' : '#F0FDF4', border: `1px solid ${flowState.activeCauseObj ? `${flowState.activeCauseObj.color}55` : flowState.isGatheringRcaContext ? '#FDE68A' : '#BBF7D0'}` }}>
             <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-              {isUnrecoveredLoop ? 'Re-RCA sau Action #1' : flowState.isSimulated ? 'Nguyên nhân đang mô phỏng' : flowState.isFlowActive ? 'Nguyên nhân thực tế' : flowState.isGatheringRcaContext ? 'Đang gom ngữ cảnh (0 sự cố)' : 'Trạng thái hiện tại'}
+              {isUnrecoveredLoop ? t('pipeline.branched.causeCard.reRcaHeader') : flowState.isSimulated ? t('pipeline.branched.causeCard.simHeader') : flowState.isFlowActive ? t('pipeline.branched.causeCard.liveHeader') : flowState.isGatheringRcaContext ? t('pipeline.branched.causeCard.gatheringHeader') : t('pipeline.branched.causeCard.currentStateHeader')}
             </div>
             <div style={{ fontSize: '0.84rem', fontWeight: 800, color: flowState.activeCauseObj?.color || (flowState.isGatheringRcaContext ? '#B45309' : '#15803D'), marginTop: '3px' }}>
-              {flowState.activeCauseObj ? flowState.activeCauseObj.labelVi : flowState.isGatheringRcaContext ? 'Đang thu thập viễn trắc 4 Agent (Chưa chốt RCA)' : 'Dịch vụ ổn định (0 lỗi)'}
+              {flowState.activeCauseObj ? flowState.activeCauseObj.labelVi : flowState.isGatheringRcaContext ? t('pipeline.branched.causeCard.gatheringDesc') : t('pipeline.branched.causeCard.stableDesc')}
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', fontSize: '0.74rem', fontWeight: 800, color: '#7C3AED' }}>
-            <span>Nhấn mở đủ 16 nguyên nhân</span>
+            <span>{t('pipeline.branched.causeCard.clickExpand')}</span>
             <span style={{ padding: '2px 9px', borderRadius: '999px', backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE' }}>+16</span>
           </div>
         </div>
@@ -1977,35 +1986,35 @@ export const BranchedPipelineSection = ({
             <span style={{ fontSize: '0.78rem', fontWeight: 800, color: isUnrecoveredLoop ? '#991B1B' : '#92400E' }}>Recommendation & Policy</span>
           </div>
           <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '2px 7px', borderRadius: '999px', backgroundColor: isUnrecoveredLoop ? '#FEE2E2' : '#FEF3C7', color: isUnrecoveredLoop ? '#DC2626' : '#B45309' }}>
-            {flowState.effectivePolicyBranch || 'CHỜ'}
+            {flowState.effectivePolicyBranch || t('pipeline.branched.policy.waiting')}
           </span>
         </div>
 
         <div style={{ padding: '12px 13px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '8px' }}>
           <div style={{ padding: '8px 10px', borderRadius: '9px', backgroundColor: isUnrecoveredLoop ? '#FFF7ED' : '#F8FAFC', border: `1px solid ${isUnrecoveredLoop ? '#FED7AA' : '#E2E8F0'}` }}>
             <div style={{ fontSize: '0.62rem', fontWeight: 700, color: isUnrecoveredLoop ? '#C2410C' : '#64748B', textTransform: 'uppercase' }}>
-              {isUnrecoveredLoop ? 'Leo thang Bậc 2 (Do Action #1 chưa ổn)' : 'Ánh xạ Nguyên nhân → Action'}
+              {isUnrecoveredLoop ? t('pipeline.branched.policy.escalateHeader') : t('pipeline.branched.policy.mapHeader')}
             </div>
             <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0F172A', marginTop: '3px' }}>
-              {flowState.effectiveDisplayActionObj ? `${flowState.effectiveDisplayActionObj.labelVi} (${flowState.effectiveDisplayActionObj.code})` : 'Duy trì giám sát bình thường'}
+              {flowState.effectiveDisplayActionObj ? `${flowState.effectiveDisplayActionObj.labelVi} (${flowState.effectiveDisplayActionObj.code})` : t('pipeline.branched.policy.normalMonitor')}
             </div>
             {isUnrecoveredLoop && flowState.activeActionObj && (
-              <div style={{ fontSize: '0.62rem', color: '#64748B', marginTop: '3px' }}>Trước đó đã thử: {flowState.activeActionObj.code} (Chưa đạt SLA)</div>
+              <div style={{ fontSize: '0.62rem', color: '#64748B', marginTop: '3px' }}>{t('pipeline.branched.policy.prevTried', { code: flowState.activeActionObj.code })}</div>
             )}
             {!isUnrecoveredLoop && flowState.secondaryActionObj && (
-              <div style={{ fontSize: '0.64rem', color: '#7C3AED', marginTop: '3px', fontWeight: 700 }}>Leo thang / Dự phòng: {flowState.secondaryActionObj.code}</div>
+              <div style={{ fontSize: '0.64rem', color: '#7C3AED', marginTop: '3px', fontWeight: 700 }}>{t('pipeline.branched.policy.backupPrefix', { code: flowState.secondaryActionObj.code })}</div>
             )}
           </div>
 
           <div style={{ fontSize: '0.69rem', color: '#334155', lineHeight: 1.45, flex: 1, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical' }}>
             {isUnrecoveredLoop
-              ? `Hậu kiểm 60s ghi nhận còn lỗi → Re-RCA nâng bậc xử lý lên ${flowState.effectiveDisplayActionObj?.code || 'NO_ACTION'} để dứt điểm sự cố (hoặc ngắt mạch an toàn).`
+              ? t('pipeline.branched.policy.escalateReason', { code: flowState.effectiveDisplayActionObj?.code || 'NO_ACTION' })
               : flowState.policyReasonVi}
           </div>
 
           <div style={{ fontSize: '0.64rem', color: '#B45309', fontWeight: 700, display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #F1F5F9', paddingTop: '7px' }}>
             <span>Cooldown {pipelineContext?.policyMeta?.cooldownSec || 60}s</span>
-            <span>Rẽ nhánh Action →</span>
+            <span>{t('pipeline.branched.policy.branchAction')}</span>
           </div>
         </div>
       </div>
@@ -2014,7 +2023,7 @@ export const BranchedPipelineSection = ({
       {/* CỘT 06A: 10 HÀNH ĐỘNG (ACTION)                               */}
       {/* ============================================================ */}
       {isActionsExpanded ? (
-        BRANCHED_ACTIONS.map((act, idx) => {
+        branchedActions.map((act, idx) => {
           const ActIcon = act.icon;
           const y = AC_START_Y + idx * (AC_ITEM_H + AC_ITEM_GAP);
           const isCurrentTarget = flowState.isFlowActive && flowState.effectiveDisplayActionObj?.code === act.code;
@@ -2041,7 +2050,7 @@ export const BranchedPipelineSection = ({
               </div>
 
               <span style={{ fontSize: '0.56rem', fontWeight: 800, padding: '2px 7px', borderRadius: '999px', backgroundColor: isCurrentTarget ? (isUnrecoveredLoop ? '#EA580C' : act.color) : isInitialTriedFailed ? '#FEE2E2' : isBackupPreview ? '#E2E8F0' : '#F8FAFC', color: isCurrentTarget ? '#FFFFFF' : isInitialTriedFailed ? '#DC2626' : isBackupPreview ? '#334155' : '#64748B', flexShrink: 0 }}>
-                {isCurrentTarget ? (isUnrecoveredLoop ? (act.code === 'NO_ACTION' ? 'NGẮT MẠCH' : 'LEO THANG CẤP 2') : 'ĐANG CHỌN') : isInitialTriedFailed ? 'CẤP 1 (CHƯA ĐẠT)' : isBackupPreview ? 'DỰ PHÒNG' : act.riskLevel}
+                {isCurrentTarget ? (isUnrecoveredLoop ? (act.code === 'NO_ACTION' ? t('pipeline.branched.actionCard.circuitBreak') : t('pipeline.branched.actionCard.escalate2')) : t('pipeline.branched.actionCard.selected')) : isInitialTriedFailed ? t('pipeline.branched.actionCard.level1Failed') : isBackupPreview ? t('pipeline.branched.actionCard.backup') : act.riskLevel}
               </span>
             </div>
           );
@@ -2053,19 +2062,19 @@ export const BranchedPipelineSection = ({
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#0F766E', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><Zap size={13} /> ACTION EXECUTOR</span>
-              <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', backgroundColor: '#F0FDFA', color: '#0F766E' }}>10 Hành động</span>
+              <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', backgroundColor: '#F0FDFA', color: '#0F766E' }}>{t('pipeline.branched.actionCard.compactCount')}</span>
             </div>
-            <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0F172A' }}>Chọn Hành Động Khắc Phục</div>
-            <div style={{ fontSize: '0.73rem', color: '#64748B', marginTop: '4px', lineHeight: 1.4 }}>Định tuyến chính xác tới 1/10 hành động Kubernetes (hoặc leo thang Cấp 2 khi hậu kiểm chưa đạt).</div>
+            <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0F172A' }}>{t('pipeline.branched.actionCard.compactTitle')}</div>
+            <div style={{ fontSize: '0.73rem', color: '#64748B', marginTop: '4px', lineHeight: 1.4 }}>{t('pipeline.branched.actionCard.compactDesc')}</div>
           </div>
           <div style={{ padding: '10px 12px', borderRadius: '10px', backgroundColor: isUnrecoveredLoop ? '#FFF7ED' : flowState.effectiveDisplayActionObj ? '#F0FDFA' : '#F8FAFC', border: `1px solid ${isUnrecoveredLoop ? '#FED7AA' : flowState.effectiveDisplayActionObj ? '#99F6E4' : '#E2E8F0'}` }}>
-            <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>{isUnrecoveredLoop ? 'Hành động leo thang Cấp 2' : 'Hành động đang đi qua'}</div>
+            <div style={{ fontSize: '0.64rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>{isUnrecoveredLoop ? t('pipeline.branched.actionCard.compactHeaderEsc') : t('pipeline.branched.actionCard.compactHeaderActive')}</div>
             <div style={{ fontSize: '0.84rem', fontWeight: 800, color: isUnrecoveredLoop ? '#EA580C' : flowState.effectiveDisplayActionObj?.color || '#0F172A', marginTop: '3px' }}>
-              {flowState.effectiveDisplayActionObj ? flowState.effectiveDisplayActionObj.labelVi : 'Chưa kích hoạt can thiệp'}
+              {flowState.effectiveDisplayActionObj ? flowState.effectiveDisplayActionObj.labelVi : t('pipeline.branched.actionCard.compactIdle')}
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #F1F5F9', fontSize: '0.74rem', fontWeight: 800, color: '#0F766E' }}>
-            <span>Nhấn mở đủ 10 hành động</span>
+            <span>{t('pipeline.branched.actionCard.clickExpand')}</span>
             <span style={{ padding: '2px 9px', borderRadius: '999px', backgroundColor: '#F0FDFA', border: '1px solid #99F6E4' }}>+10</span>
           </div>
         </div>
@@ -2085,10 +2094,10 @@ export const BranchedPipelineSection = ({
               <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#0F172A', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><GateIcon size={15} color={gate.color} />{gate.labelVi}</span>
             </div>
             <div style={{ fontSize: '0.68rem', color: '#475569', lineHeight: 1.35 }}>
-              {isActiveGate ? `Đang điều phối: ${flowState.effectiveDisplayActionObj?.labelVi || gate.shortVi}` : gate.code === 'AUTO' ? 'Gửi lệnh WebSocket trực tiếp xuống K8s Agent.' : gate.code === 'HITL' ? 'Giữ lệnh rủi ro cao chờ kỹ sư duyệt.' : 'Dừng can thiệp cụm K8s & ghi Audit Log.'}
+              {isActiveGate ? t('pipeline.branched.gate.dispatching', { action: flowState.effectiveDisplayActionObj?.labelVi || gate.shortVi }) : gate.code === 'AUTO' ? t('pipeline.branched.gate.autoIdle') : gate.code === 'HITL' ? t('pipeline.branched.gate.hitlIdle') : t('pipeline.branched.gate.auditIdle')}
             </div>
             <div style={{ fontSize: '0.63rem', fontWeight: 800, color: isActiveGate ? gate.color : '#64748B' }}>
-              {isActiveGate ? '● LUỒNG ĐANG CHẠY QUA ĐÂY' : 'Trạng thái chờ'}
+              {isActiveGate ? t('pipeline.branched.gate.activeFlow') : t('pipeline.branched.gate.standby')}
             </div>
           </div>
         );
@@ -2129,25 +2138,25 @@ export const BranchedPipelineSection = ({
             ? '#FECDD3'
             : '#BAE6FD';
         const verifyHeaderBadgeText = isUnrecoveredLoop
-          ? 'CHƯA HỒI PHỤC'
+          ? t('pipeline.branched.verify.unrecoveredBadge')
           : isAuditHaltedLive
-            ? `${recoveryStats?.totalActions ?? 0} THỬ • NGẮT MẠCH`
+            ? t('pipeline.branched.verify.auditHaltedBadge', { count: recoveryStats?.totalActions ?? 0 })
             : isSimulating
               ? flowState.isFlowActive
-                ? 'ĐÃ HỒI PHỤC'
-                : `${recoveryStats?.totalActions ?? 0} ĐÃ THỬ`
+                ? t('pipeline.branched.verify.recoveredBadge')
+                : t('pipeline.branched.verify.triedBadge', { count: recoveryStats?.totalActions ?? 0 })
               : isVerifyingInProgress
-                ? 'ĐANG HẬU KIỂM'
-                : `${recoveryStats?.totalActions ?? 0} ĐÃ THỬ (24h)`;
+                ? t('pipeline.branched.verify.verifyingBadge')
+                : t('pipeline.branched.verify.tried24hBadge', { count: recoveryStats?.totalActions ?? 0 });
         const verifyFooterText = isUnrecoveredLoop
-          ? `↻ Quay về 04B Re-RCA → Leo thang ${flowState.effectiveDisplayActionObj?.code || 'NO_ACTION'}`
+          ? t('pipeline.branched.verify.footerEscalate', { code: flowState.effectiveDisplayActionObj?.code || 'NO_ACTION' })
           : isAuditHaltedLive
-            ? '⛔ Ngắt mạch AUDIT — Chỉ giám sát SLA & ghi nhận lịch sử'
+            ? t('pipeline.branched.verify.footerAuditHalted')
             : !isSimulating && flowState.isFlowActive && !allSlaHealthyLive
-              ? '⏳ Chưa đạt đủ 4 tiêu chí SLA — Tiếp tục theo dõi'
+              ? t('pipeline.branched.verify.footerUnmet')
               : lastResolvedIncident && !flowState.isFlowActive
-                ? '✓ Gần nhất: Tự đóng & về 00 Service'
-                : '✓ Đạt SLA → Tự đóng → Về 00 Service';
+                ? t('pipeline.branched.verify.footerLatestClosed')
+                : t('pipeline.branched.verify.footerSlaOk');
 
         return (
           <div data-testid="d2-verify-card" style={{ position: 'absolute', left: `${VF_X}px`, top: `${VF_Y}px`, width: `${VF_W}px`, height: `${VF_H}px`, backgroundColor: '#FFFFFF', borderRadius: '14px', border: `1.5px solid ${verifyBorderColor}`, boxShadow: isUnrecoveredLoop ? '0 10px 24px rgba(220, 38, 38, 0.22)' : isAuditHaltedLive ? '0 10px 24px rgba(225, 29, 72, 0.16)' : flowState.isFlowActive ? '0 10px 24px rgba(2, 132, 199, 0.18)' : '0 4px 14px rgba(15, 23, 42, 0.06)', display: 'flex', flexDirection: 'column', zIndex: 13 }}>
@@ -2157,7 +2166,7 @@ export const BranchedPipelineSection = ({
 
             <div style={{ padding: '10px 13px', backgroundColor: verifyHeaderBg, borderBottom: `1px solid ${verifyHeaderBorder}`, borderTopLeftRadius: '12px', borderTopRightRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '0.78rem', fontWeight: 800, color: isUnrecoveredLoop ? '#DC2626' : isAuditHaltedLive ? '#BE123C' : '#0369A1', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <RefreshCw size={14} className={isVerifyingInProgress && !isSimulating ? 'animate-spin' : ''} /> Hậu Kiểm 60s
+                <RefreshCw size={14} className={isVerifyingInProgress && !isSimulating ? 'animate-spin' : ''} /> {t('pipeline.branched.verify.title')}
               </span>
               <span data-testid="d2-verify-status-badge" style={{ fontSize: '0.58rem', fontWeight: 800, padding: '2px 7px', borderRadius: '999px', backgroundColor: isUnrecoveredLoop ? '#FEE2E2' : isAuditHaltedLive ? '#FFE4E6' : '#E0F2FE', color: isUnrecoveredLoop ? '#DC2626' : isAuditHaltedLive ? '#BE123C' : '#0369A1', whiteSpace: 'nowrap' }}>
                 {verifyHeaderBadgeText}
@@ -2165,7 +2174,7 @@ export const BranchedPipelineSection = ({
             </div>
 
             <div style={{ padding: '9px 12px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '6px' }}>
-              <div style={{ fontSize: '0.63rem', fontWeight: 700, color: '#475569' }}>Đo lại 12 mẫu (60s) trên 4 tiêu chí SLA:</div>
+              <div style={{ fontSize: '0.63rem', fontWeight: 700, color: '#475569' }}>{t('pipeline.branched.verify.measure4Criteria')}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 {verificationChecks.map((chk) => (
                   <div key={chk.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '7px', backgroundColor: !chk.ok ? '#FEF2F2' : '#F8FAFC', border: `1px solid ${!chk.ok ? '#FCA5A5' : '#E2E8F0'}`, fontSize: '0.62rem' }}>
@@ -2177,7 +2186,7 @@ export const BranchedPipelineSection = ({
 
               <div data-testid="d2-verify-live-stats" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', borderRadius: '7px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', fontSize: '0.6rem' }}>
                 <span style={{ fontWeight: 700, color: '#475569' }}>
-                  24h ({recoveryStats?.totalActions ?? 0} thử): {recoveryStats?.succeededCount ?? 0} phục hồi • {recoveryStats?.failedCount ?? 0} chưa
+                  {t('pipeline.branched.verify.statsLine', { total: recoveryStats?.totalActions ?? 0, succeeded: recoveryStats?.succeededCount ?? 0, failed: recoveryStats?.failedCount ?? 0 })}
                 </span>
                 <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: recoveryStats?.successRate != null && recoveryStats.successRate < 50 ? '#DC2626' : '#059669' }}>
                   {recoveryStats?.successRate != null ? `${recoveryStats.successRate}%` : '—'}
@@ -2186,10 +2195,10 @@ export const BranchedPipelineSection = ({
 
               <div onMouseDown={(e) => e.stopPropagation()} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px', paddingTop: '2px' }}>
                 <button type="button" data-testid="d2-verify-recovered-btn" onClick={() => onChangeVerifyOutcome('recovered')} style={{ padding: '5px 6px', borderRadius: '7px', border: `1px solid ${!isUnrecoveredLoop ? '#059669' : '#CBD5E1'}`, backgroundColor: !isUnrecoveredLoop ? '#ECFDF5' : '#FFFFFF', color: !isUnrecoveredLoop ? '#047857' : '#64748B', fontSize: '0.6rem', fontWeight: 800, cursor: 'pointer' }}>
-                  ✓ Đã phục hồi
+                  {t('pipeline.branched.verify.recoveredBtn')}
                 </button>
                 <button type="button" data-testid="d2-verify-unrecovered-btn" onClick={() => onChangeVerifyOutcome('unrecovered')} style={{ padding: '5px 6px', borderRadius: '7px', border: `1px solid ${isUnrecoveredLoop ? '#DC2626' : '#CBD5E1'}`, backgroundColor: isUnrecoveredLoop ? '#FEF2F2' : '#FFFFFF', color: isUnrecoveredLoop ? '#DC2626' : '#64748B', fontSize: '0.6rem', fontWeight: 800, cursor: 'pointer' }}>
-                  ↻ Chưa phục hồi
+                  {t('pipeline.branched.verify.unrecoveredBtn')}
                 </button>
               </div>
 
@@ -2205,14 +2214,14 @@ export const BranchedPipelineSection = ({
       <div style={{ position: 'absolute', left: `${(serviceBottomX + verifyBottomResolveX) / 2 - 220}px`, top: `${FEEDBACK_RESOLVE_Y - 12}px`, transform: 'translateX(-50%)', zIndex: 8, pointerEvents: 'none' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 13px', borderRadius: '999px', backgroundColor: 'rgba(255, 255, 255, 0.96)', border: '1px solid #BAE6FD', color: '#0369A1', fontSize: '0.66rem', fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(15, 23, 42, 0.05)' }}>
           <RefreshCw size={12} />
-          Vòng lặp 1 (Đã phục hồi): Tự đóng sự cố → Giám sát 24/7 trên 00 Service &amp; Cột 01
+          {t('pipeline.branched.verify.loop1Label')}
         </span>
       </div>
 
       <div style={{ position: 'absolute', left: `${(rcaBottomX + verifyBottomEscalateX) / 2}px`, top: `${FEEDBACK_ESCALATE_Y - 12}px`, transform: 'translateX(-50%)', zIndex: 8, pointerEvents: 'none' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 13px', borderRadius: '999px', backgroundColor: isUnrecoveredLoop ? '#FEF2F2' : 'rgba(255, 255, 255, 0.96)', border: `1px solid ${isUnrecoveredLoop ? '#FCA5A5' : '#FECACA'}`, color: '#DC2626', fontSize: '0.66rem', fontWeight: 800, whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(15, 23, 42, 0.05)' }}>
           <RefreshCw size={12} />
-          {isUnrecoveredLoop ? `Vòng lặp 2 (Chưa phục hồi): Hồi tiếp Re-RCA (04B) → Leo thang ${flowState.effectiveDisplayActionObj?.code || 'NO_ACTION'}` : 'Vòng lặp 2 (Nếu Chưa phục hồi): Quay về 04B Re-RCA → Leo thang Action Cấp 2 / Circuit Breaker'}
+          {isUnrecoveredLoop ? t('pipeline.branched.verify.loop2ActiveLabel', { code: flowState.effectiveDisplayActionObj?.code || 'NO_ACTION' }) : t('pipeline.branched.verify.loop2IdleLabel')}
         </span>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../context/DashboardContext';
 import { telemetryService } from '../../../services/telemetryService';
 import { aiService } from '../../../services/aiService';
@@ -30,6 +31,7 @@ import {
 } from 'lucide-react';
 
 export const ApmPage = ({ onNavigate }) => {
+  const { t } = useTranslation('dashMonitoring');
   const { currentOrg, currentEnv } = useDashboard();
 
   const activeClusterId = currentEnv?.clusterId || currentEnv?.id;
@@ -186,10 +188,10 @@ export const ApmPage = ({ onNavigate }) => {
         }
         if (silent && rawSequence.length > 0) {
           setRefreshWarning(
-            `Lần làm mới nền gần nhất không thành công (${err.message || 'Lỗi mạng'}). Đang hiển thị số liệu đã lưu trong bộ nhớ tạm.`
+            t('apm.refreshWarning', { error: err.message || t('apm.networkError') })
           );
         } else {
-          setErrorMessage(err.message || 'Không thể tải chuỗi dữ liệu APM từ máy chủ');
+          setErrorMessage(err.message || t('apm.fetchError'));
           setRawSequence([]);
         }
       } finally {
@@ -198,7 +200,7 @@ export const ApmPage = ({ onNavigate }) => {
         }
       }
     },
-    [selectedService, timeRange, rawSequence.length]
+    [selectedService, timeRange, rawSequence.length, t]
   );
 
   useEffect(() => {
@@ -338,7 +340,7 @@ export const ApmPage = ({ onNavigate }) => {
                   margin: 0,
                 }}
               >
-                Giám Sát Hiệu Năng Ứng Dụng (APM)
+                {t('apm.title')}
               </h1>
               <p
                 style={{
@@ -347,7 +349,7 @@ export const ApmPage = ({ onNavigate }) => {
                   margin: '4px 0 0 0',
                 }}
               >
-                Độ trễ thời gian thực, thông lượng truy vấn &amp; tỷ lệ lỗi ứng dụng
+                {t('apm.subtitle')}
               </p>
             </div>
           </div>
@@ -374,7 +376,7 @@ export const ApmPage = ({ onNavigate }) => {
             }}
           >
             <Server size={14} />
-            <span>Hạ Tầng (Node Metrics)</span>
+            <span>{t('apm.switchToNodes')}</span>
           </button>
           <button
             type="button"
@@ -393,7 +395,7 @@ export const ApmPage = ({ onNavigate }) => {
             }}
           >
             <Zap size={14} />
-            <span>Ứng Dụng (APM)</span>
+            <span>{t('apm.switchToApm')}</span>
           </button>
         </div>
       </div>
@@ -425,7 +427,7 @@ export const ApmPage = ({ onNavigate }) => {
                 color: '#0F172A',
               }}
             >
-              Dịch vụ (Service):
+              {t('apm.serviceLabel')}
             </label>
             <select
               id="apm-service-select"
@@ -446,7 +448,7 @@ export const ApmPage = ({ onNavigate }) => {
               }}
             >
               {servicesList.length === 0 ? (
-                <option value="">{isClusterOnline ? '-- Chưa có dịch vụ nào --' : '-- Cụm chưa kết nối tác tử --'}</option>
+                <option value="">{isClusterOnline ? t('apm.noServicesOption') : t('apm.offlineClusterOption')}</option>
               ) : (
                 servicesList.map((s) => (
                   <option key={s.service_id} value={s.service_id}>
@@ -482,7 +484,7 @@ export const ApmPage = ({ onNavigate }) => {
                   backgroundColor: summary.health.color,
                 }}
               />
-              {summary.health.label}
+              {t(`apm.health.${summary.health.status}`, summary.health.label)}
             </span>
           )}
         </div>
@@ -492,7 +494,7 @@ export const ApmPage = ({ onNavigate }) => {
           {/* Time range preset buttons */}
           <div
             role="group"
-            aria-label="Khoảng thời gian APM"
+            aria-label={t('apm.timeRangeAria')}
             style={{
               display: 'flex',
               backgroundColor: '#F1F5F9',
@@ -503,6 +505,7 @@ export const ApmPage = ({ onNavigate }) => {
           >
             {APM_TIME_RANGE_PRESETS.map((preset) => {
               const active = timeRange === preset.id;
+              const rangeLabel = t(`timeRanges.${preset.id}`, preset.label);
               return (
                 <button
                   key={preset.id}
@@ -510,7 +513,7 @@ export const ApmPage = ({ onNavigate }) => {
                   role="button"
                   tabIndex={0}
                   aria-pressed={active}
-                  aria-label={`Chọn khoảng thời gian ${preset.label}`}
+                  aria-label={t('apm.selectRangeAria', { label: rangeLabel })}
                   data-testid={`apm-range-${preset.id}`}
                   onClick={() => setTimeRange(preset.id)}
                   onKeyDown={(e) => {
@@ -533,7 +536,7 @@ export const ApmPage = ({ onNavigate }) => {
                     outline: 'none',
                   }}
                 >
-                  {preset.label}
+                  {rangeLabel}
                 </button>
               );
             })}
@@ -566,7 +569,7 @@ export const ApmPage = ({ onNavigate }) => {
                 backgroundColor: isAutoRefresh ? '#10B981' : '#94A3B8',
               }}
             />
-            <span>Auto 15s</span>
+            <span>{t('common.auto15s')}</span>
           </button>
 
           {/* Manual Refresh Button */}
@@ -593,7 +596,7 @@ export const ApmPage = ({ onNavigate }) => {
             }}
           >
             <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
+            <span>{t('common.refresh')}</span>
           </button>
         </div>
       </div>
@@ -640,7 +643,7 @@ export const ApmPage = ({ onNavigate }) => {
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-              Thời Gian Phản Hồi (Avg)
+              {t('apm.kpi.responseTime')}
             </span>
             <Clock size={16} color="#0284C7" />
           </div>
@@ -661,11 +664,11 @@ export const ApmPage = ({ onNavigate }) => {
             </span>
             <span>&bull;</span>
             <span>
-              Đỉnh: <strong style={{ fontFamily: 'monospace' }}>{formatLatency(summary?.latency?.max)}</strong>
+              {t('apm.kpi.peak')} <strong style={{ fontFamily: 'monospace' }}>{formatLatency(summary?.latency?.max)}</strong>
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px' }}>
-            Cửa sổ đo: <strong>{presetConfig.label}</strong>
+            {t('apm.kpi.window')} <strong>{t(`timeRanges.${presetConfig.id}`, presetConfig.label)}</strong>
           </div>
         </div>
 
@@ -682,7 +685,7 @@ export const ApmPage = ({ onNavigate }) => {
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-              Lưu Lượng (Throughput)
+              {t('apm.kpi.throughput')}
             </span>
             <TrendingUp size={16} color="#6366F1" />
           </div>
@@ -691,18 +694,18 @@ export const ApmPage = ({ onNavigate }) => {
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px', display: 'flex', gap: '8px' }}>
             <span>
-              Hiện tại: <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{formatRps(summary?.throughput?.current)}</strong>
+              {t('apm.kpi.current')} <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{formatRps(summary?.throughput?.current)}</strong>
             </span>
             <span>&bull;</span>
             <span>
-              Đỉnh:{' '}
+              {t('apm.kpi.peak')}{' '}
               <strong style={{ color: '#4F46E5', fontFamily: 'monospace' }}>
                 {formatRps(summary?.throughput?.max)}
               </strong>
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px' }}>
-            Cửa sổ đo: <strong>{presetConfig.label}</strong>
+            {t('apm.kpi.window')} <strong>{t(`timeRanges.${presetConfig.id}`, presetConfig.label)}</strong>
           </div>
         </div>
 
@@ -719,7 +722,7 @@ export const ApmPage = ({ onNavigate }) => {
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-              Tỷ Lệ Lỗi (HTTP 5xx)
+              {t('apm.kpi.errorRate')}
             </span>
             <ShieldAlert size={16} color={summary?.errorRate?.avg > 0 ? '#EF4444' : '#10B981'} />
           </div>
@@ -736,18 +739,18 @@ export const ApmPage = ({ onNavigate }) => {
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px', display: 'flex', gap: '8px' }}>
             <span>
-              Hiện tại: <strong style={{ fontFamily: 'monospace' }}>{formatErrorRate(summary?.errorRate?.current)}</strong>
+              {t('apm.kpi.current')} <strong style={{ fontFamily: 'monospace' }}>{formatErrorRate(summary?.errorRate?.current)}</strong>
             </span>
             <span>&bull;</span>
             <span>
-              Đỉnh:{' '}
+              {t('apm.kpi.peak')}{' '}
               <strong style={{ color: summary?.errorRate?.max > 0 ? '#DC2626' : '#64748B', fontFamily: 'monospace' }}>
                 {formatErrorRate(summary?.errorRate?.max)}
               </strong>
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px' }}>
-            Cửa sổ đo: <strong>{presetConfig.label}</strong>
+            {t('apm.kpi.window')} <strong>{t(`timeRanges.${presetConfig.id}`, presetConfig.label)}</strong>
           </div>
         </div>
 
@@ -764,7 +767,7 @@ export const ApmPage = ({ onNavigate }) => {
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-              Độ Khả Dụng (Availability)
+              {t('apm.kpi.availability')}
             </span>
             <CheckCircle2 size={16} color="#059669" />
           </div>
@@ -773,15 +776,15 @@ export const ApmPage = ({ onNavigate }) => {
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px', display: 'flex', gap: '8px' }}>
             <span>
-              Replicas: <strong>{summary?.replicas ?? '--'}</strong>
+              {t('apm.kpi.replicas')} <strong>{summary?.replicas ?? '--'}</strong>
             </span>
             <span>&bull;</span>
             <span>
-              Restarts: <strong>{summary?.restarts ?? '--'}</strong>
+              {t('apm.kpi.restarts')} <strong>{summary?.restarts ?? '--'}</strong>
             </span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px' }}>
-            Cửa sổ đo: <strong>{presetConfig.label}</strong>
+            {t('apm.kpi.window')} <strong>{t(`timeRanges.${presetConfig.id}`, presetConfig.label)}</strong>
           </div>
         </div>
       </div>
@@ -791,7 +794,7 @@ export const ApmPage = ({ onNavigate }) => {
         chartModel={chartModel}
         serviceName={selectedService}
         isLoading={isLoading}
-        errorMessage={!isClusterOnline ? 'Cụm Kubernetes chưa kết nối hoặc Tác tử eBPF đang ngoại tuyến tại tổ chức này.' : errorMessage}
+        errorMessage={!isClusterOnline ? t('apm.offlineBanner') : errorMessage}
         onRetry={() => fetchServiceMetrics(false)}
       />
 
@@ -818,10 +821,10 @@ export const ApmPage = ({ onNavigate }) => {
         >
           <div>
             <h2 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Bảng Tổng Hợp Dịch Vụ Vi Mô &amp; Endpoints
+              {t('apm.table.title')}
             </h2>
             <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '4px 0 0 0' }}>
-              Danh sách các vi dịch vụ đang được eBPF Agent giám sát hiệu năng APM trong cụm
+              {t('apm.table.subtitle')}
             </p>
           </div>
 
@@ -829,7 +832,7 @@ export const ApmPage = ({ onNavigate }) => {
             {/* Status Filter */}
             <div
               role="group"
-              aria-label="Lọc trạng thái dịch vụ"
+              aria-label={t('apm.table.statusFilterAria')}
               style={{
                 display: 'flex',
                 backgroundColor: '#F1F5F9',
@@ -839,10 +842,10 @@ export const ApmPage = ({ onNavigate }) => {
               }}
             >
               {[
-                { id: 'ALL', label: 'Tất cả' },
-                { id: 'HEALTHY', label: 'Khỏe mạnh' },
-                { id: 'WARNING', label: 'Cảnh báo' },
-                { id: 'CRITICAL', label: 'Nguy hiểm' },
+                { id: 'ALL', label: t('common.all') },
+                { id: 'HEALTHY', label: t('apm.health.HEALTHY') },
+                { id: 'WARNING', label: t('apm.health.WARNING') },
+                { id: 'CRITICAL', label: t('apm.health.CRITICAL') },
               ].map((btn) => (
                 <button
                   key={btn.id}
@@ -881,7 +884,7 @@ export const ApmPage = ({ onNavigate }) => {
               <input
                 type="text"
                 data-testid="apm-search-input"
-                placeholder="Tìm dịch vụ..."
+                placeholder={t('apm.table.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 style={{
@@ -913,46 +916,46 @@ export const ApmPage = ({ onNavigate }) => {
                   onClick={() => handleSort('service_name')}
                   style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
                 >
-                  Tên Dịch Vụ {sortField === 'service_name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  {t('apm.table.colService')} {sortField === 'service_name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                 </th>
-                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Loại</th>
+                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>{t('apm.table.colType')}</th>
                 <th
                   onClick={() => handleSort('avg_request_rate')}
                   style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
                 >
-                  Lưu Lượng {sortField === 'avg_request_rate' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  {t('apm.table.colThroughput')} {sortField === 'avg_request_rate' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                 </th>
                 <th
                   onClick={() => handleSort('avg_latency_ms')}
                   style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
                 >
-                  Độ Trễ (Avg) {sortField === 'avg_latency_ms' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  {t('apm.table.colAvgLatency')} {sortField === 'avg_latency_ms' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                 </th>
                 <th
                   onClick={() => handleSort('max_latency_ms')}
                   style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
                 >
-                  Đỉnh Trễ (Max) {sortField === 'max_latency_ms' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  {t('apm.table.colMaxLatency')} {sortField === 'max_latency_ms' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                 </th>
                 <th
                   onClick={() => handleSort('avg_error_rate')}
                   style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
                 >
-                  Tỷ Lệ Lỗi {sortField === 'avg_error_rate' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  {t('apm.table.colErrorRate')} {sortField === 'avg_error_rate' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                 </th>
                 <th
                   onClick={() => handleSort('replica_count')}
                   style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
                 >
-                  Bản Sao {sortField === 'replica_count' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  {t('apm.table.colReplicas')} {sortField === 'replica_count' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                 </th>
                 <th
                   onClick={() => handleSort('status')}
                   style={{ padding: '10px 14px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
                 >
-                  Trạng Thái {sortField === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  {t('apm.table.colStatus')} {sortField === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                 </th>
-                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>Hành Động</th>
+                <th style={{ padding: '10px 14px', fontWeight: 700, color: '#475569' }}>{t('apm.table.colAction')}</th>
               </tr>
             </thead>
             <tbody>
@@ -960,8 +963,8 @@ export const ApmPage = ({ onNavigate }) => {
                 <tr>
                   <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: '#94A3B8' }}>
                     {!isClusterOnline
-                      ? 'Chưa có dữ liệu do Cụm Kubernetes chưa kết nối hoặc Tác tử eBPF đang ngoại tuyến tại tổ chức này.'
-                      : 'Không tìm thấy dịch vụ nào phù hợp với tìm kiếm'}
+                      ? t('apm.table.emptyOffline')
+                      : t('apm.table.emptySearch')}
                   </td>
                 </tr>
               ) : (
@@ -1033,7 +1036,7 @@ export const ApmPage = ({ onNavigate }) => {
                             border: `1px solid ${health.border}`,
                           }}
                         >
-                          {health.label}
+                          {t(`apm.health.${health.status}`, health.label)}
                         </span>
                       </td>
                       <td style={{ padding: '12px 14px' }}>
@@ -1055,7 +1058,7 @@ export const ApmPage = ({ onNavigate }) => {
                             cursor: 'pointer',
                           }}
                         >
-                          <span>{isSelected ? 'Đang Xem' : 'Xem Biểu Đồ'}</span>
+                          <span>{isSelected ? t('apm.table.viewing') : t('apm.table.viewChart')}</span>
                           <ArrowRight size={12} />
                         </button>
                       </td>

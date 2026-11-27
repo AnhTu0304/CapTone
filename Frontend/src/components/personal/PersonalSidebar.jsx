@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { personalPortalService } from '../../services/personalPortalService';
 import multiTabSync, { SYNC_EVENTS } from '../../services/multiTabSync';
 import {
@@ -19,6 +20,7 @@ export const PERSONAL_NAV_ITEMS = [
   {
     id: 'dashboard',
     label: 'Bảng Điều Khiển',
+    labelKey: 'sidebar.nav.dashboard',
     path: '/portal',
     icon: LayoutDashboard,
     badge: null,
@@ -26,6 +28,7 @@ export const PERSONAL_NAV_ITEMS = [
   {
     id: 'companies',
     label: 'Công Ty Của Tôi',
+    labelKey: 'sidebar.nav.companies',
     path: '/portal/companies',
     icon: Building2,
     badge: null,
@@ -34,6 +37,7 @@ export const PERSONAL_NAV_ITEMS = [
   {
     id: 'profile',
     label: 'Hồ Sơ Cá Nhân',
+    labelKey: 'sidebar.nav.profile',
     path: '/portal/profile',
     icon: UserCheck,
     badge: null,
@@ -41,6 +45,7 @@ export const PERSONAL_NAV_ITEMS = [
   {
     id: 'security',
     label: 'Bảo Mật Tài Khoản',
+    labelKey: 'sidebar.nav.security',
     path: '/portal/security',
     icon: ShieldCheck,
     badge: '2FA',
@@ -49,6 +54,7 @@ export const PERSONAL_NAV_ITEMS = [
   {
     id: 'preferences',
     label: 'Tùy Chỉnh Cá Nhân',
+    labelKey: 'sidebar.nav.preferences',
     path: '/portal/preferences',
     icon: Sliders,
     badge: null,
@@ -56,6 +62,7 @@ export const PERSONAL_NAV_ITEMS = [
   {
     id: 'notifications',
     label: 'Thông Báo',
+    labelKey: 'sidebar.nav.notifications',
     path: '/portal/notifications',
     icon: Bell,
     badge: null,
@@ -64,6 +71,7 @@ export const PERSONAL_NAV_ITEMS = [
   {
     id: 'activity',
     label: 'Lịch Sử Hoạt Động',
+    labelKey: 'sidebar.nav.activity',
     path: '/portal/activity',
     icon: History,
     badge: null,
@@ -71,6 +79,7 @@ export const PERSONAL_NAV_ITEMS = [
   {
     id: 'help',
     label: 'Trợ Giúp & Hỗ Trợ',
+    labelKey: 'sidebar.nav.help',
     path: '/portal/help',
     icon: LifeBuoy,
     badge: 'FAQ',
@@ -85,6 +94,7 @@ export const PersonalSidebar = ({
   onToggleCollapse,
   companyCount: propCompanyCount,
 }) => {
+  const { t } = useTranslation('portal');
   const [hoveredItem, setHoveredItem] = useState(null);
 
   const [companyCount, setCompanyCount] = useState(() => {
@@ -182,7 +192,7 @@ export const PersonalSidebar = ({
 
   return (
     <aside
-      aria-label="Thanh điều hướng Tầng Cá Nhân"
+      aria-label={t('sidebar.ariaLabel')}
       style={{
         width: isCollapsed ? '72px' : '260px',
         height: '100%',
@@ -250,7 +260,7 @@ export const PersonalSidebar = ({
                 fontWeight: 700,
               }}
             >
-              Trung Tâm Điều Khiển
+              {t('sidebar.centerSubtitle')}
             </div>
           </div>
         )}
@@ -279,7 +289,7 @@ export const PersonalSidebar = ({
               padding: '6px 10px 4px 10px',
             }}
           >
-            Chức Năng Cá Nhân
+            {t('sidebar.sectionTitle')}
           </div>
         )}
 
@@ -288,6 +298,7 @@ export const PersonalSidebar = ({
           const ItemIcon = item.icon;
           const isHovered = hoveredItem === item.id;
           const itemBadge = getItemBadge(item);
+          const itemLabel = item.labelKey ? t(item.labelKey) : item.label;
 
           return (
             <div
@@ -300,8 +311,8 @@ export const PersonalSidebar = ({
                 type="button"
                 onClick={(e) => handleItemClick(e, item.path)}
                 aria-current={active ? 'page' : undefined}
-                aria-label={item.label}
-                title={isCollapsed ? item.label : undefined}
+                aria-label={itemLabel}
+                title={isCollapsed ? itemLabel : undefined}
                 style={{
                   width: '100%',
                   height: '40px',
@@ -365,7 +376,7 @@ export const PersonalSidebar = ({
                       textOverflow: 'ellipsis',
                     }}
                   >
-                    {item.label}
+                    {itemLabel}
                   </span>
                 )}
 
@@ -416,13 +427,13 @@ export const PersonalSidebar = ({
                 fontWeight: 600,
               }}
             >
-              THU GỌN SIDEBAR
+              {t('sidebar.collapseLabel')}
             </span>
           )}
 
           <button
             type="button"
-            aria-label={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+            aria-label={isCollapsed ? t('header.expandSidebar') : t('header.collapseSidebar')}
             onClick={onToggleCollapse}
             style={{
               width: '32px',

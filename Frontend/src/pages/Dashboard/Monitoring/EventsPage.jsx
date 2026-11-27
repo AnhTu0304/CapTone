@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n, { getIntlLocale } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import {
   Bell,
@@ -25,46 +27,28 @@ import {
   translateK8sEventReasonVi,
 } from '../../../components/dashboard/EventDetailModal';
 
-const PRESET_REASONS = [
-  { id: 'all', label: 'Tất cả Lý do' },
-  { id: 'DeploymentRecovered', label: 'DeploymentRecovered (Phục hồi Deployment)' },
-  { id: 'DeploymentRollout', label: 'DeploymentRollout (Triển khai phiên bản mới)' },
-  { id: 'MinimumReplicasUnavailable', label: 'MinimumReplicasUnavailable (Thiếu bản sao khả dụng)' },
-  { id: 'ScalingReplicaSet', label: 'ScalingReplicaSet (Co giãn bản sao)' },
-  { id: 'SuccessfulCreate', label: 'SuccessfulCreate (Khởi tạo Pod mới)' },
-  { id: 'SuccessfulDelete', label: 'SuccessfulDelete (Xóa / Thu hồi Pod)' },
-  { id: 'Scheduled', label: 'Scheduled (Đã lập lịch vào Node)' },
-  { id: 'OOMKilled', label: 'OOMKilled (Hết bộ nhớ RAM)' },
-  { id: 'CrashLoopBackOff', label: 'CrashLoopBackOff (Vòng lặp lỗi khởi động)' },
-  { id: 'BackOff', label: 'BackOff (Chờ khởi động lại)' },
-  { id: 'FailedScheduling', label: 'FailedScheduling (Không thể lập lịch Pod)' },
-  { id: 'Unhealthy', label: 'Unhealthy (Thất bại Probe kiểm tra)' },
-  { id: 'Killing', label: 'Killing (Đang dừng Container)' },
-  { id: 'Error', label: 'Error (Container dừng do lỗi)' },
-  { id: 'NodeReady', label: 'NodeReady (Node sẵn sàng)' },
-  { id: 'Pulled', label: 'Pulled (Đã tải Container Image)' },
-  { id: 'Created', label: 'Created (Đã tạo Container)' },
-  { id: 'Started', label: 'Started (Đã khởi chạy Container)' },
+const PRESET_REASON_IDS = [
+  'DeploymentRecovered',
+  'DeploymentRollout',
+  'MinimumReplicasUnavailable',
+  'ScalingReplicaSet',
+  'SuccessfulCreate',
+  'SuccessfulDelete',
+  'Scheduled',
+  'OOMKilled',
+  'CrashLoopBackOff',
+  'BackOff',
+  'FailedScheduling',
+  'Unhealthy',
+  'Killing',
+  'Error',
+  'NodeReady',
+  'Pulled',
+  'Created',
+  'Started',
 ];
 
-const PRESET_RESOURCE_TYPES = [
-  { id: 'all', label: 'Tất cả Tài nguyên' },
-  { id: 'Pod', label: 'Pod' },
-  { id: 'Node', label: 'Node' },
-  { id: 'Deployment', label: 'Deployment' },
-  { id: 'ReplicaSet', label: 'ReplicaSet' },
-  { id: 'Service', label: 'Service' },
-  { id: 'ConfigMap', label: 'ConfigMap' },
-];
-
-const PRESET_TIME_RANGES = [
-  { id: '15m', label: '15 phút qua', shortLabel: '15m' },
-  { id: '1h', label: '1 giờ qua', shortLabel: '1h' },
-  { id: '6h', label: '6 giờ qua', shortLabel: '6h' },
-  { id: '24h', label: '24 giờ qua', shortLabel: '24h' },
-  { id: '7d', label: '7 ngày qua', shortLabel: '7d' },
-  { id: 'all', label: 'Tất cả thời gian', shortLabel: 'Tất cả' },
-];
+const PRESET_RESOURCE_TYPES = ['Pod', 'Node', 'Deployment', 'ReplicaSet', 'Service', 'ConfigMap'];
 
 export const formatEventAge = (dateStr) => {
   if (!dateStr) return '—';
@@ -73,16 +57,16 @@ export const formatEventAge = (dateStr) => {
 
   const diffMs = Date.now() - d.getTime();
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 0) return 'Vừa xong';
-  if (diffSec < 60) return `${diffSec} giây trước`;
+  if (diffSec < 0) return i18n.t('dashMonitoring:common.justNow');
+  if (diffSec < 60) return i18n.t('dashMonitoring:common.secondsAgo', { count: diffSec });
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} phút trước`;
+  if (diffMin < 60) return i18n.t('dashMonitoring:common.minutesAgo', { count: diffMin });
   const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours} giờ trước`;
+  if (diffHours < 24) return i18n.t('dashMonitoring:common.hoursAgo', { count: diffHours });
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) return `${diffDays} ngày trước`;
+  if (diffDays < 30) return i18n.t('dashMonitoring:common.daysAgo', { count: diffDays });
 
-  return d.toLocaleString('vi-VN', {
+  return d.toLocaleString(getIntlLocale(i18n.language), {
     hour: '2-digit',
     minute: '2-digit',
     day: '2-digit',
@@ -102,6 +86,8 @@ export const getDisplayNamespace = (ev) => {
 };
 
 export const EventsPage = () => {
+  const { t, i18n: activeI18n } = useTranslation('dashMonitoring');
+  const intlLocale = getIntlLocale(activeI18n.language);
   const { currentOrg, currentEnv, selectedCluster } = useDashboard();
   const clusterId = selectedCluster?.id || selectedCluster?.name || currentEnv?.clusterId || currentEnv?.id || currentEnv?.cluster_id || undefined;
 
@@ -173,10 +159,38 @@ export const EventsPage = () => {
     return Array.from(set).sort();
   }, [namespacesList, selectedNamespace]);
 
+  const presetReasons = useMemo(
+    () => [
+      { id: 'all', label: t('events.filters.reasonAll') },
+      ...PRESET_REASON_IDS.map((id) => ({ id, label: t(`events.reasons.${id}`) })),
+    ],
+    [t]
+  );
+
+  const presetResourceTypes = useMemo(
+    () => [
+      { id: 'all', label: t('events.filters.resourceTypeAll') },
+      ...PRESET_RESOURCE_TYPES.map((rt) => ({ id: rt, label: rt })),
+    ],
+    [t]
+  );
+
+  const presetTimeRanges = useMemo(
+    () => [
+      { id: '15m', label: t('timeRanges.15mLong'), shortLabel: t('timeRanges.15mShort') },
+      { id: '1h', label: t('timeRanges.1hLong'), shortLabel: t('timeRanges.1hShort') },
+      { id: '6h', label: t('timeRanges.6hLong'), shortLabel: t('timeRanges.6hShort') },
+      { id: '24h', label: t('timeRanges.24hLong'), shortLabel: t('timeRanges.24hShort') },
+      { id: '7d', label: t('timeRanges.7dLong'), shortLabel: t('timeRanges.7dShort') },
+      { id: 'all', label: t('timeRanges.allLong'), shortLabel: t('timeRanges.all') },
+    ],
+    [t]
+  );
+
   // Bổ sung các lý do (Reason) thực tế xuất hiện trong sự kiện
   const availableReasons = useMemo(() => {
     const map = new Map();
-    PRESET_REASONS.forEach((r) => map.set(r.id, r));
+    presetReasons.forEach((r) => map.set(r.id, r));
     events.forEach((ev) => {
       if (ev.reason && !map.has(ev.reason)) {
         const reasonVi = translateK8sEventReasonVi(ev.reason);
@@ -184,7 +198,7 @@ export const EventsPage = () => {
       }
     });
     return Array.from(map.values());
-  }, [events]);
+  }, [events, presetReasons]);
 
   // Refs for race-condition prevention & abort controller
   const queryTokenRef = useRef(0);
@@ -248,7 +262,7 @@ export const EventsPage = () => {
       } catch (err) {
         if (err?.name === 'AbortError') return;
         if (currentToken === queryTokenRef.current) {
-          setErrorMessage(err.message || 'Không thể tải danh sách sự kiện Kubernetes');
+          setErrorMessage(err.message || t('events.fetchError'));
         }
       } finally {
         if (currentToken === queryTokenRef.current) {
@@ -267,6 +281,7 @@ export const EventsPage = () => {
       selectedRange,
       page,
       pageSize,
+      t,
     ]
   );
 
@@ -324,7 +339,7 @@ export const EventsPage = () => {
   }, [events]);
 
   const activeClusterLabel =
-    selectedCluster?.name || selectedCluster?.id || currentEnv?.cluster || currentEnv?.name || 'Toàn hệ thống';
+    selectedCluster?.name || selectedCluster?.id || currentEnv?.cluster || currentEnv?.name || t('common.systemWide');
 
   const kpiCardStyle = (accent, isSelected = false) => ({
     backgroundColor: '#FFFFFF',
@@ -410,10 +425,10 @@ export const EventsPage = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Sự Kiện Kubernetes
+              {t('events.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Giám sát vòng đời Pod, Node, Deployment &amp; cảnh báo hệ thống từ cụm{' '}
+              {t('events.subtitlePrefix')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
             </p>
           </div>
@@ -427,24 +442,24 @@ export const EventsPage = () => {
             style={actionBtnStyle(isRefreshing || isLoading)}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>{isRefreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
+            <span>{isRefreshing ? t('common.refreshing') : t('common.refresh')}</span>
           </button>
         </div>
       </div>
 
       {/* Hàng KPI Tóm Tắt (đồng bộ 4 thẻ viền màu giống Dashboard & Nhật ký container) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div style={kpiCardStyle('#059669')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG SỰ KIỆN</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('events.kpi.totalEvents')}</span>
             <Activity size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
-              {(pagination.total || 0).toLocaleString('vi-VN')}
+              {(pagination.total || 0).toLocaleString(intlLocale)}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
-              Hiển thị {events.length} mục
+              {t('events.kpi.showingItems', { count: events.length })}
             </span>
           </div>
         </div>
@@ -454,11 +469,11 @@ export const EventsPage = () => {
             setSelectedType((prev) => (prev === 'Warning' ? 'all' : 'Warning'));
             setPage(1);
           }}
-          title="Nhấp để lọc nhanh sự kiện Cảnh báo (Warning)"
+          title={t('events.kpi.warningTooltip')}
           style={{ ...kpiCardStyle('#EF4444', selectedType === 'Warning'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>CẢNH BÁO (WARNING)</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('events.kpi.warningTitle')}</span>
             <AlertTriangle size={14} color="#EF4444" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -472,7 +487,7 @@ export const EventsPage = () => {
             >
               {eventStats.warningCount}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>trong trang hiện tại</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('events.kpi.inCurrentPage')}</span>
           </div>
         </div>
 
@@ -481,32 +496,32 @@ export const EventsPage = () => {
             setSelectedType((prev) => (prev === 'Normal' ? 'all' : 'Normal'));
             setPage(1);
           }}
-          title="Nhấp để lọc nhanh sự kiện Thông thường (Normal)"
+          title={t('events.kpi.normalTooltip')}
           style={{ ...kpiCardStyle('#10B981', selectedType === 'Normal'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>THÔNG THƯỜNG (NORMAL)</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('events.kpi.normalTitle')}</span>
             <CheckCircle2 size={14} color="#10B981" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {eventStats.normalCount}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>trong trang hiện tại</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('events.kpi.inCurrentPage')}</span>
           </div>
         </div>
 
         <div style={kpiCardStyle('#3B82F6')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG LƯỢT LẶP</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('events.kpi.totalRepeats')}</span>
             <Repeat size={14} color="#3B82F6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
-              {eventStats.totalRepeatCount.toLocaleString('vi-VN')}
+              {eventStats.totalRepeatCount.toLocaleString(intlLocale)}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>
-              Trang {pagination.page}/{pagination.totalPages}
+              {t('events.kpi.pageOf', { page: pagination.page, totalPages: pagination.totalPages })}
             </span>
           </div>
         </div>
@@ -546,7 +561,7 @@ export const EventsPage = () => {
               cursor: 'pointer',
             }}
           >
-            Thử lại
+            {t('common.retry')}
           </button>
         </div>
       )}
@@ -568,11 +583,11 @@ export const EventsPage = () => {
         {/* Hàng 1: Tìm kiếm + Loại sự kiện + Khung thời gian */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           {/* Search Query Input */}
-          <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: '380px' }}>
+          <div className="dash-search-box" style={{ position: 'relative', flex: '1 1 260px', maxWidth: '380px' }}>
             <input
               type="text"
               data-testid="events-search-input"
-              placeholder="Tìm kiếm thông điệp, đối tượng, lý do..."
+              placeholder={t('events.filters.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -593,7 +608,7 @@ export const EventsPage = () => {
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                aria-label="Xóa từ khóa tìm kiếm"
+                aria-label={t('events.filters.clearSearchAria')}
                 style={{
                   position: 'absolute',
                   right: '8px',
@@ -623,33 +638,33 @@ export const EventsPage = () => {
             }}
           >
             {[
-              { id: 'all', label: 'Tất cả', color: '#059669', bg: '#ECFDF5' },
-              { id: 'Warning', label: 'Cảnh báo', color: '#DC2626', bg: '#FEF2F2' },
-              { id: 'Normal', label: 'Thông thường', color: '#047857', bg: '#ECFDF5' },
-            ].map((t) => {
-              const active = selectedType === t.id;
+              { id: 'all', label: t('events.filters.typeAll'), color: '#059669', bg: '#ECFDF5' },
+              { id: 'Warning', label: t('events.filters.typeWarning'), color: '#DC2626', bg: '#FEF2F2' },
+              { id: 'Normal', label: t('events.filters.typeNormal'), color: '#047857', bg: '#ECFDF5' },
+            ].map((item) => {
+              const active = selectedType === item.id;
               return (
                 <button
-                  key={t.id}
+                  key={item.id}
                   type="button"
-                  data-testid={`type-filter-${t.id}`}
+                  data-testid={`type-filter-${item.id}`}
                   onClick={() => {
-                    setSelectedType(t.id);
+                    setSelectedType(item.id);
                     setPage(1);
                   }}
                   style={{
                     padding: '4px 11px',
                     borderRadius: '6px',
-                    border: active ? `1px solid ${t.color}55` : '1px solid transparent',
-                    backgroundColor: active ? t.bg : 'transparent',
-                    color: active ? t.color : '#64748B',
+                    border: active ? `1px solid ${item.color}55` : '1px solid transparent',
+                    backgroundColor: active ? item.bg : 'transparent',
+                    color: active ? item.color : '#64748B',
                     fontSize: '0.73rem',
                     fontWeight: 700,
                     cursor: 'pointer',
                     transition: 'all 0.12s ease',
                   }}
                 >
-                  {t.label}
+                  {item.label}
                 </button>
               );
             })}
@@ -667,7 +682,7 @@ export const EventsPage = () => {
               borderRadius: '9px',
             }}
           >
-            {PRESET_TIME_RANGES.map((rng) => {
+            {presetTimeRanges.map((rng) => {
               const active = selectedRange === rng.id;
               return (
                 <button
@@ -701,10 +716,10 @@ export const EventsPage = () => {
                 setSelectedRange(e.target.value);
                 setPage(1);
               }}
-              aria-label="Khung thời gian sự kiện"
+              aria-label={t('events.filters.timeRangeAria')}
               style={{ display: 'none' }}
             >
-              {PRESET_TIME_RANGES.map((rng) => (
+              {presetTimeRanges.map((rng) => (
                 <option key={rng.id} value={rng.id}>
                   {rng.label}
                 </option>
@@ -728,7 +743,7 @@ export const EventsPage = () => {
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
             {/* Namespace Dropdown */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>Namespace</span>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>{t('events.filters.namespaceLabel')}</span>
               <select
                 data-testid="namespace-select"
                 value={selectedNamespace}
@@ -738,7 +753,7 @@ export const EventsPage = () => {
                 }}
                 style={selectControlStyle}
               >
-                <option value="all">Tất cả Namespaces</option>
+                <option value="all">{t('events.filters.namespaceAll')}</option>
                 {allNamespaces.map((ns) => (
                   <option key={ns} value={ns}>
                     {ns}
@@ -749,7 +764,7 @@ export const EventsPage = () => {
 
             {/* Reason Dropdown */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>Lý do</span>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>{t('events.filters.reasonLabel')}</span>
               <select
                 data-testid="reason-select"
                 value={selectedReason}
@@ -769,7 +784,7 @@ export const EventsPage = () => {
 
             {/* Resource Type Dropdown */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>Tài nguyên</span>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B' }}>{t('events.filters.resourceTypeLabel')}</span>
               <select
                 data-testid="resource-type-select"
                 value={selectedResourceType}
@@ -779,7 +794,7 @@ export const EventsPage = () => {
                 }}
                 style={selectControlStyle}
               >
-                {PRESET_RESOURCE_TYPES.map((rt) => (
+                {presetResourceTypes.map((rt) => (
                   <option key={rt.id} value={rt.id}>
                     {rt.label}
                   </option>
@@ -809,12 +824,12 @@ export const EventsPage = () => {
               }}
             >
               <RotateCcw size={12} />
-              <span>Đặt lại</span>
+              <span>{t('common.reset')}</span>
             </button>
           </div>
 
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.73rem', color: '#64748B' }}>
-            Tổng <strong style={{ color: '#0F172A' }}>{(pagination.total || 0).toLocaleString('vi-VN')}</strong> sự kiện &bull; Trang{' '}
+            {t('events.filters.totalLabel')} <strong style={{ color: '#0F172A' }}>{(pagination.total || 0).toLocaleString(intlLocale)}</strong> {t('events.filters.eventsUnit')} &bull; {t('events.filters.pageLabel')}{' '}
             <strong style={{ color: '#0F172A' }}>{pagination.page}</strong>/{pagination.totalPages}
           </div>
         </div>
@@ -837,22 +852,22 @@ export const EventsPage = () => {
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left' }}>
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', width: '125px' }}>
-                  LOẠI
+                  {t('events.table.colType')}
                 </th>
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', width: '175px' }}>
-                  LÝ DO
+                  {t('events.table.colReason')}
                 </th>
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', width: '235px' }}>
-                  ĐỐI TƯỢNG (OBJECT)
+                  {t('events.table.colObject')}
                 </th>
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>
-                  THÔNG ĐIỆP CHI TIẾT
+                  {t('events.table.colMessage')}
                 </th>
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', width: '130px' }}>
-                  THỜI ĐIỂM
+                  {t('events.table.colTime')}
                 </th>
                 <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', width: '98px', textAlign: 'center' }}>
-                  THAO TÁC
+                  {t('events.table.colAction')}
                 </th>
               </tr>
             </thead>
@@ -862,7 +877,7 @@ export const EventsPage = () => {
                   <td colSpan={6} style={{ padding: '56px 20px', textAlign: 'center', color: '#64748B' }}>
                     <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                       <RefreshCw size={22} className="animate-spin" color="#059669" />
-                      <span style={{ fontSize: '0.825rem', fontWeight: 500 }}>Đang truy vấn sự kiện Kubernetes từ hệ thống...</span>
+                      <span style={{ fontSize: '0.825rem', fontWeight: 500 }}>{t('events.table.loading')}</span>
                     </div>
                   </td>
                 </tr>
@@ -885,10 +900,10 @@ export const EventsPage = () => {
                         <Inbox size={24} color="#94A3B8" />
                       </div>
                       <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#334155', marginTop: '4px' }}>
-                        Không tìm thấy sự kiện nào phù hợp với bộ lọc hiện tại
+                        {t('events.table.emptyTitle')}
                       </span>
                       <p style={{ fontSize: '0.78rem', color: '#64748B', margin: 0 }}>
-                        Thử điều chỉnh từ khóa tìm kiếm hoặc mở rộng khung thời gian truy vấn.
+                        {t('events.table.emptyDesc')}
                       </p>
                       <button
                         type="button"
@@ -905,7 +920,7 @@ export const EventsPage = () => {
                           cursor: 'pointer',
                         }}
                       >
-                        Đặt lại toàn bộ bộ lọc
+                        {t('events.table.resetAllFilters')}
                       </button>
                     </div>
                   </td>
@@ -958,7 +973,7 @@ export const EventsPage = () => {
                           )}
                           {ev.source_component && (
                             <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '2px' }}>
-                              bởi {ev.source_component}
+                              {t('events.table.bySource', { source: ev.source_component })}
                             </div>
                           )}
                         </td>
@@ -1013,7 +1028,7 @@ export const EventsPage = () => {
                                   padding: 0,
                                 }}
                               >
-                                {isExpanded ? 'Thu gọn' : 'Xem thêm'}
+                                {isExpanded ? t('events.table.collapse') : t('events.table.expand')}
                               </button>
                             )}
                           </div>
@@ -1036,18 +1051,18 @@ export const EventsPage = () => {
                               }}
                             >
                               <Repeat size={10} />
-                              Lặp lại {ev.count} lần
+                              {t('events.table.repeatCount', { count: ev.count })}
                             </span>
                           )}
                         </td>
 
                         {/* Time */}
                         <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.74rem', color: '#475569', whiteSpace: 'nowrap' }}>
-                          <div style={{ fontWeight: 600, color: '#0F172A' }} title={new Date(ev.last_seen_at).toLocaleString('vi-VN')}>
+                          <div style={{ fontWeight: 600, color: '#0F172A' }} title={new Date(ev.last_seen_at).toLocaleString(intlLocale)}>
                             {formatEventAge(ev.last_seen_at)}
                           </div>
                           <div style={{ fontSize: '0.68rem', color: '#94A3B8', marginTop: '2px' }}>
-                            {new Date(ev.last_seen_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(ev.last_seen_at).toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </td>
 
@@ -1078,7 +1093,7 @@ export const EventsPage = () => {
                             }}
                           >
                             <Eye size={12} />
-                            <span>Chi tiết</span>
+                            <span>{t('common.details')}</span>
                           </button>
                         </td>
                       </tr>
@@ -1121,7 +1136,7 @@ export const EventsPage = () => {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>Hiển thị mỗi trang:</span>
+              <span>{t('events.table.rowsPerPage')}</span>
               <select
                 data-testid="page-size-select"
                 value={pageSize}
@@ -1151,7 +1166,7 @@ export const EventsPage = () => {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span>
-                Trang <strong style={{ color: '#0F172A' }}>{pagination.page}</strong> / {pagination.totalPages}
+                {t('events.table.pageLabel')} <strong style={{ color: '#0F172A' }}>{pagination.page}</strong> / {pagination.totalPages}
               </span>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button
@@ -1176,7 +1191,7 @@ export const EventsPage = () => {
                   }}
                 >
                   <ChevronLeft size={14} />
-                  <span>Trước</span>
+                  <span>{t('common.prev')}</span>
                 </button>
                 <button
                   type="button"
@@ -1199,7 +1214,7 @@ export const EventsPage = () => {
                     opacity: pagination.page >= pagination.totalPages ? 0.55 : 1,
                   }}
                 >
-                  <span>Sau</span>
+                  <span>{t('common.next')}</span>
                   <ChevronRight size={14} />
                 </button>
               </div>

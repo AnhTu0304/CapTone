@@ -1,3 +1,4 @@
+import i18n from '../../../i18n';
 import {
   Activity,
   FileText,
@@ -591,4 +592,50 @@ export const RISK_AGENT_MAP = {
   TRAFFIC_OVERLOAD: ['metrics', 'log', 'k8s_event'],
   SCALE_DOWN_CANDIDATE: ['metrics', 'k8s_event'],
 };
+
+const defaultTranslate = (key, opts) => i18n.t(`dashboard:${key}`, opts);
+
+export const getBranchedContextAgents = (t = defaultTranslate) =>
+  BRANCHED_CONTEXT_AGENTS.map((ag) => ({
+    ...ag,
+    name: t(`branchedCatalog.agents.${ag.id}.name`, { defaultValue: ag.name }),
+    role: t(`branchedCatalog.agents.${ag.id}.role`, { defaultValue: ag.role }),
+    detail: t(`branchedCatalog.agents.${ag.id}.detail`, { defaultValue: ag.detail }),
+  }));
+
+export const getBranchedRootCauses = (t = defaultTranslate) =>
+  BRANCHED_ROOT_CAUSES.map((c) => ({
+    ...c,
+    labelVi: t(`branchedCatalog.causes.${c.code}.label`, { defaultValue: c.labelVi }),
+    shortLabelVi: t(`branchedCatalog.causes.${c.code}.short`, { defaultValue: c.shortLabelVi }),
+    policyReasonVi: t(`branchedCatalog.causes.${c.code}.reason`, { defaultValue: c.policyReasonVi }),
+  }));
+
+export const getBranchedActions = (t = defaultTranslate) =>
+  BRANCHED_ACTIONS.map((a) => ({
+    ...a,
+    labelVi: t(`branchedCatalog.actions.${a.code}.label`, { defaultValue: a.labelVi }),
+    desc: t(`branchedCatalog.actions.${a.code}.desc`, { defaultValue: a.desc }),
+  }));
+
+export const getPolicyBranchMeta = (t = defaultTranslate) => ({
+  AUTO: {
+    ...POLICY_BRANCH_META.AUTO,
+    labelVi: t('branchedCatalog.policyBranches.AUTO.label', { defaultValue: POLICY_BRANCH_META.AUTO.labelVi }),
+    shortVi: t('branchedCatalog.policyBranches.AUTO.short', { defaultValue: POLICY_BRANCH_META.AUTO.shortVi }),
+    badge: t('branchedCatalog.policyBranches.AUTO.short', { defaultValue: POLICY_BRANCH_META.AUTO.shortVi }),
+  },
+  HITL: {
+    ...POLICY_BRANCH_META.HITL,
+    labelVi: t('branchedCatalog.policyBranches.HITL.label', { defaultValue: POLICY_BRANCH_META.HITL.labelVi }),
+    shortVi: t('branchedCatalog.policyBranches.HITL.short', { defaultValue: POLICY_BRANCH_META.HITL.shortVi }),
+    badge: t('branchedCatalog.policyBranches.HITL.short', { defaultValue: POLICY_BRANCH_META.HITL.shortVi }),
+  },
+  AUDIT: {
+    ...POLICY_BRANCH_META.AUDIT,
+    labelVi: t('branchedCatalog.policyBranches.AUDIT.label', { defaultValue: POLICY_BRANCH_META.AUDIT.labelVi }),
+    shortVi: t('branchedCatalog.policyBranches.AUDIT.short', { defaultValue: POLICY_BRANCH_META.AUDIT.shortVi }),
+    badge: t('branchedCatalog.policyBranches.AUDIT.short', { defaultValue: POLICY_BRANCH_META.AUDIT.shortVi }),
+  },
+});
 

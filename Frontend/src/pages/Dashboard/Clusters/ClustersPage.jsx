@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../context/DashboardContext';
 import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import { clusterService } from '../../../services/clusterService';
@@ -23,8 +24,9 @@ import {
 
 
 export const ClustersPage = ({ onNavigate }) => {
+  const { t } = useTranslation('dashMonitoring');
   const { currentOrg, setCurrentOrg, orgList, isRefreshing: isGlobalRefreshing, triggerRefresh: triggerGlobalRefresh } = useDashboard();
-  const [clusters, setClusters] = useState([]);
+  const [rawClusters, setRawClusters] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -47,28 +49,28 @@ export const ClustersPage = ({ onNavigate }) => {
     const isStaging = envRaw.includes('STAGING');
 
     // Lấy trạng thái Agent thật từ CSDL
-    let displayAgentStatus = 'Chưa kết nối Agent';
+    let displayAgentStatus = t('clusters.status.noAgent');
     if (c.agent_status === 'ONLINE') {
-      displayAgentStatus = 'Đang hoạt động (Online)';
+      displayAgentStatus = t('clusters.status.agentOnline');
     } else if (c.agent_status === 'PENDING') {
-      displayAgentStatus = 'Chờ tín hiệu (Pending / Standby)';
+      displayAgentStatus = t('clusters.status.agentPending');
     } else if (c.agent_status === 'OFFLINE') {
-      displayAgentStatus = 'Ngoại tuyến (Offline)';
+      displayAgentStatus = t('clusters.status.agentOffline');
     } else if (c.agent_name) {
-      displayAgentStatus = `${c.agent_name} (${c.agent_status || 'Chờ tín hiệu'})`;
+      displayAgentStatus = `${c.agent_name} (${c.agent_status || t('clusters.status.agentWaiting')})`;
     }
 
     const nodesCount = typeof c.nodes_count === 'number' ? c.nodes_count : (parseInt(c.nodes_count, 10) || 0);
     const podsCount = typeof c.pods_count === 'number' ? c.pods_count : (parseInt(c.pods_count, 10) || 0);
 
     // Tính trạng thái Control Plane thật theo kết nối thực tế
-    let controlPlaneHealth = 'Chờ kiểm tra';
+    let controlPlaneHealth = t('clusters.status.cpWaitingCheck');
     if (c.agent_status === 'ONLINE' && nodesCount > 0) {
-      controlPlaneHealth = 'Healthy (100%)';
+      controlPlaneHealth = t('clusters.status.cpHealthy');
     } else if (c.agent_status === 'PENDING' || nodesCount === 0) {
-      controlPlaneHealth = 'Chờ kết nối (0%)';
+      controlPlaneHealth = t('clusters.status.cpWaitingConn');
     } else if (c.agent_status === 'OFFLINE') {
-      controlPlaneHealth = 'Ngoại tuyến (Offline)';
+      controlPlaneHealth = t('clusters.status.cpOffline');
     } else if (c.status) {
       controlPlaneHealth = c.status;
     }
@@ -78,8 +80,8 @@ export const ClustersPage = ({ onNavigate }) => {
       name: c.name,
       environment: isProd ? 'production' : (isStaging ? 'staging' : 'development'),
       environmentName: c.environment_name || (isProd ? 'Production' : 'Staging'),
-      region: c.provider === 'MINIKUBE' ? 'Minikube (Local Baremetal)' : (c.provider || 'Kubernetes Cluster'),
-      version: c.kubernetes_version || 'Chưa cập nhật',
+      region: c.provider === 'MINIKUBE' ? t('clusters.status.minikubeRegion') : (c.provider || 'Kubernetes Cluster'),
+      version: c.kubernetes_version || t('common.notUpdated'),
       nodes: nodesCount,
       pods: podsCount,
       agentStatus: displayAgentStatus,
@@ -91,7 +93,9 @@ export const ClustersPage = ({ onNavigate }) => {
       createdAt: c.created_at || new Date().toISOString(),
       agentName: c.agent_name,
     };
-  }, []);
+  }, [t]);
+
+  const clusters = useMemo(() => rawClusters.map(normalizeCluster), [rawClusters, normalizeCluster]);
 
   // Tải danh sách cụm Kubernetes từ Database API theo đúng Tổ chức đang chọn
   const fetchClusters = useCallback(async (isSilent = false) => {
@@ -115,20 +119,20 @@ export const ClustersPage = ({ onNavigate }) => {
       if (activeOrgId && !activeOrgId.startsWith('org-')) {
         // Chỉ tải chính xác các cụm K8s thuộc riêng tổ chức này trong Database
         const rawData = await clusterService.getClustersByOrg(activeOrgId);
-        setClusters((rawData || []).map(normalizeCluster));
+        setRawClusters(rawData || []);
       } else {
         // Dữ liệu mẫu ban đầu cho mock organization
-        setClusters([]);
+        setRawClusters([]);
       }
     } catch (err) {
       console.warn('[ClustersPage] Lỗi kết nối API cụm K8s:', err);
-      setError('Không thể kết nối đến máy chủ API Kubernetes.');
-      setClusters([]);
+      setError(t('clusters.apiError'));
+      setRawClusters([]);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [currentOrg?.id, orgList, setCurrentOrg, normalizeCluster]);
+  }, [currentOrg?.id, orgList, setCurrentOrg, t]);
 
   useEffect(() => {
     fetchClusters();
@@ -176,7 +180,7 @@ export const ClustersPage = ({ onNavigate }) => {
         handleOpenCluster(createdCluster.id);
       }
     } catch (err) {
-      alert(`Lỗi đăng ký cụm: ${err.message || 'Không thể tạo mới'}`);
+      alert(t('clusters.createError', { message: err.message || t('clusters.cannotCreate') }));
     } finally {
       setIsSubmitting(false);
     }
@@ -226,11 +230,11 @@ export const ClustersPage = ({ onNavigate }) => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Quản Lý Cụm Kubernetes
+              {t('clusters.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Theo dõi trạng thái hoạt động, tài nguyên &amp; cấu hình các cụm máy chủ trong{' '}
-              <strong style={{ color: '#0F172A' }}>{currentOrg?.name || 'tổ chức'}</strong>
+              {t('clusters.subtitlePrefix')}{' '}
+              <strong style={{ color: '#0F172A' }}>{currentOrg?.name || t('clusters.orgFallback')}</strong>
             </p>
           </div>
         </div>
@@ -257,14 +261,14 @@ export const ClustersPage = ({ onNavigate }) => {
               }}
             >
               <Plus size={15} />
-              <span>Đăng Ký Cụm Mới</span>
+              <span>{t('clusters.addBtn')}</span>
             </button>
           )}
         </div>
       </div>
 
       {/* Hàng 4 Thẻ KPI Tóm Tắt */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div
           style={{
             backgroundColor: '#FFFFFF',
@@ -276,12 +280,12 @@ export const ClustersPage = ({ onNavigate }) => {
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG CỤM K8S</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('clusters.kpi.totalClusters')}</span>
             <Server size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{clusters.length}</span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Cụm đã đăng ký</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('clusters.kpi.registeredSuffix')}</span>
           </div>
         </div>
 
@@ -296,7 +300,7 @@ export const ClustersPage = ({ onNavigate }) => {
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>AGENT TRỰC TUYẾN</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('clusters.kpi.onlineAgents')}</span>
             <Radio size={14} color="#10B981" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -304,7 +308,7 @@ export const ClustersPage = ({ onNavigate }) => {
               {clusters.filter((c) => c.rawAgentStatus === 'ONLINE').length}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
-              / {clusters.length} cụm hoạt động
+              {t('clusters.kpi.activeClustersSuffix', { total: clusters.length })}
             </span>
           </div>
         </div>
@@ -320,14 +324,14 @@ export const ClustersPage = ({ onNavigate }) => {
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG NODES</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('clusters.kpi.totalNodes')}</span>
             <Cpu size={14} color="#3B82F6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {clusters.reduce((acc, c) => acc + (Number(c.nodes) || 0), 0)}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Máy chủ vật lý / VM</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('clusters.kpi.nodesSuffix')}</span>
           </div>
         </div>
 
@@ -342,14 +346,14 @@ export const ClustersPage = ({ onNavigate }) => {
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG PODS</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('clusters.kpi.totalPods')}</span>
             <Layers size={14} color="#8B5CF6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {clusters.reduce((acc, c) => acc + (Number(c.pods) || 0), 0)}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Workloads được giám sát</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('clusters.kpi.podsSuffix')}</span>
           </div>
         </div>
       </div>
@@ -375,7 +379,7 @@ export const ClustersPage = ({ onNavigate }) => {
 
       {/* Loading Skeleton */}
       {isLoading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '14px' }}>
+        <div className="dash-grid-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '14px' }}>
           {[1, 2].map((i) => (
             <div key={i} className="dash-card" style={{ padding: '20px', minHeight: '210px', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -417,10 +421,10 @@ export const ClustersPage = ({ onNavigate }) => {
             <Server size={26} />
           </div>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: '#0F172A' }}>
-            Chưa có Cụm Kubernetes nào được kết nối
+            {t('clusters.empty.title')}
           </h3>
           <p style={{ fontSize: '0.825rem', color: '#64748B', maxWidth: '460px', margin: 0 }}>
-            Tổ chức {currentOrg?.name} chưa liên kết cụm máy chủ Kubernetes nào. Hãy đăng ký cụm mới để kích hoạt tác tử giám sát và tự phục hồi.
+            {t('clusters.empty.description', { orgName: currentOrg?.name || '' })}
           </p>
           {can(PERMISSIONS.ENV_MANAGE) && (
           <button
@@ -440,13 +444,13 @@ export const ClustersPage = ({ onNavigate }) => {
               boxShadow: '0 2px 8px rgba(5, 150, 105, 0.2)',
             }}
           >
-            Đăng Ký Cụm Đầu Tiên
+            {t('clusters.empty.cta')}
           </button>
           )}
         </div>
       ) : (
         /* Clusters Grid */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '14px' }}>
+        <div className="dash-grid-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '14px' }}>
           {clusters.map((cls) => (
             <div
               key={cls.id}
@@ -537,23 +541,23 @@ export const ClustersPage = ({ onNavigate }) => {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Layers size={14} color="#94A3B8" /> Phiên bản K8s:
+                    <Layers size={14} color="#94A3B8" /> {t('clusters.card.version')}
                   </span>
                   <strong style={{ fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{cls.version}</strong>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Cpu size={14} color="#94A3B8" /> Máy chủ &amp; Pods (Thật):
+                    <Cpu size={14} color="#94A3B8" /> {t('clusters.card.nodesPods')}
                   </span>
                   <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
-                    {cls.nodes} Nodes &bull; {cls.pods} Pods
+                    {t('clusters.card.nodesPodsValue', { nodes: cls.nodes, pods: cls.pods })}
                   </strong>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Radio size={14} color="#94A3B8" /> Tác tử eBPF Agent:
+                    <Radio size={14} color="#94A3B8" /> {t('clusters.card.agentLabel')}
                   </span>
                   <span style={{
                     color: cls.rawAgentStatus === 'ONLINE' ? '#059669' : (cls.rawAgentStatus === 'PENDING' ? '#D97706' : '#64748B'),
@@ -611,7 +615,7 @@ export const ClustersPage = ({ onNavigate }) => {
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Activity size={14} />
-                    Xem Chi Tiết Cụm &amp; Agent Giám Sát
+                    {t('clusters.card.openDetail')}
                   </span>
                   <ArrowRight size={14} />
                 </button>
@@ -665,7 +669,7 @@ export const ClustersPage = ({ onNavigate }) => {
                   <Server size={16} color="#059669" />
                 </div>
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>
-                  Đăng Ký Cụm Kubernetes Mới
+                  {t('clusters.addModal.title')}
                 </h3>
               </div>
               <button
@@ -680,7 +684,7 @@ export const ClustersPage = ({ onNavigate }) => {
             <form onSubmit={handleAddCluster} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                  Doanh Nghiệp / Tổ Chức Đăng Ký
+                  {t('clusters.addModal.orgLabel')}
                 </label>
                 <div
                   style={{
@@ -697,18 +701,18 @@ export const ClustersPage = ({ onNavigate }) => {
                   }}
                 >
                   <Building2 size={15} />
-                  <span>{currentOrg?.name || 'Doanh Nghiệp'}</span>
+                  <span>{currentOrg?.name || t('clusters.orgDisplayFallback')}</span>
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                  Tên Cụm Kubernetes
+                  {t('clusters.addModal.nameLabel')}
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="ví dụ: k8s-prod-cluster-02"
+                  placeholder={t('clusters.addModal.namePlaceholder')}
                   value={newClusterName}
                   onChange={(e) => setNewClusterName(e.target.value)}
                   style={{
@@ -727,7 +731,7 @@ export const ClustersPage = ({ onNavigate }) => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                  Môi Trường Vận Hành
+                  {t('clusters.addModal.envLabel')}
                 </label>
                 <select
                   value={newClusterEnv}
@@ -744,15 +748,15 @@ export const ClustersPage = ({ onNavigate }) => {
                     boxSizing: 'border-box',
                   }}
                 >
-                  <option value="PRODUCTION">Production (Sản xuất chính)</option>
-                  <option value="STAGING">Staging (Kiểm thử trước triển khai)</option>
-                  <option value="DEV">Development (Môi trường phát triển)</option>
+                  <option value="PRODUCTION">{t('clusters.addModal.envProd')}</option>
+                  <option value="STAGING">{t('clusters.addModal.envStaging')}</option>
+                  <option value="DEV">{t('clusters.addModal.envDev')}</option>
                 </select>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
-                  Hạ Tầng / Provider
+                  {t('clusters.addModal.providerLabel')}
                 </label>
                 <select
                   value={newClusterRegion}
@@ -769,10 +773,10 @@ export const ClustersPage = ({ onNavigate }) => {
                     boxSizing: 'border-box',
                   }}
                 >
-                  <option value="MINIKUBE">Minikube / Bare-metal cục bộ</option>
-                  <option value="AWS EKS (ap-southeast-1)">AWS EKS (Singapore)</option>
-                  <option value="GCP GKE (asia-southeast1)">GCP GKE (Singapore)</option>
-                  <option value="Azure AKS (Southeast Asia)">Azure AKS (Southeast Asia)</option>
+                  <option value="MINIKUBE">{t('clusters.addModal.providerMinikube')}</option>
+                  <option value="AWS EKS (ap-southeast-1)">{t('clusters.addModal.providerEks')}</option>
+                  <option value="GCP GKE (asia-southeast1)">{t('clusters.addModal.providerGke')}</option>
+                  <option value="Azure AKS (Southeast Asia)">{t('clusters.addModal.providerAks')}</option>
                 </select>
               </div>
 
@@ -792,7 +796,7 @@ export const ClustersPage = ({ onNavigate }) => {
                     cursor: 'pointer',
                   }}
                 >
-                  Hủy
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -810,7 +814,7 @@ export const ClustersPage = ({ onNavigate }) => {
                     cursor: isSubmitting ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {isSubmitting ? 'Đang tạo...' : 'Đăng Ký Cụm'}
+                  {isSubmitting ? t('clusters.addModal.submitting') : t('clusters.addModal.submit')}
                 </button>
               </div>
             </form>
@@ -852,22 +856,22 @@ export const ClustersPage = ({ onNavigate }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#059669' }}>
                 <Key size={20} />
                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-                  Khởi Tạo Cụm &amp; Cấp Token Tác Tử Thành Công
+                  {t('clusters.tokenModal.title')}
                 </h3>
               </div>
               <span style={{ fontSize: '0.67rem', fontWeight: 800, padding: '3px 9px', borderRadius: '999px', backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', whiteSpace: 'nowrap' }}>
-                CHỈ HIỂN THỊ 1 LẦN
+                {t('clusters.tokenModal.oneTimeBadge')}
               </span>
             </div>
 
             <div style={{ padding: '12px 14px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', fontSize: '0.8rem', color: '#92400E', lineHeight: '1.5' }}>
-              ⚠️ Mã Token kết nối dưới đây được sinh tự động cho Cụm <strong>{newlyCreatedClusterToken.clusterName}</strong>. 
-              Vì lý do bảo mật, Backend không lưu trữ raw token và mã này sẽ <strong>không bao giờ hiển thị lại</strong> sau khi đóng cửa sổ này.
+              {t('clusters.tokenModal.warningPrefix')} <strong>{newlyCreatedClusterToken.clusterName}</strong>
+              {t('clusters.tokenModal.warningMiddle')} <strong>{t('clusters.tokenModal.warningStrong')}</strong> {t('clusters.tokenModal.warningSuffix')}
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#64748B', marginBottom: '6px', textTransform: 'uppercase' }}>
-                Mã Token Kết Nối (Secret Key)
+                {t('clusters.tokenModal.secretLabel')}
               </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <input
@@ -912,14 +916,14 @@ export const ClustersPage = ({ onNavigate }) => {
                   }}
                 >
                   {copiedToken ? <Check size={14} /> : <Copy size={14} />}
-                  <span>{copiedToken ? 'Đã chép' : 'Sao chép'}</span>
+                  <span>{copiedToken ? t('common.copiedShort') : t('common.copy')}</span>
                 </button>
               </div>
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#64748B', marginBottom: '6px', textTransform: 'uppercase' }}>
-                Lệnh Cài Đặt Nhanh (Kubernetes Helm / Secret)
+                {t('clusters.tokenModal.quickCmdLabel')}
               </label>
               <div style={{ backgroundColor: '#0F172A', color: '#38BDF8', padding: '12px 14px', borderRadius: '10px', fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem', overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
 {`kubectl create secret generic selfheal-agent-token \\
@@ -950,7 +954,7 @@ export const ClustersPage = ({ onNavigate }) => {
                   cursor: 'pointer',
                 }}
               >
-                Tôi Đã Lưu Token &amp; Đi Đến Chi Tiết Cụm
+                {t('clusters.tokenModal.doneBtn')}
               </button>
             </div>
           </div>

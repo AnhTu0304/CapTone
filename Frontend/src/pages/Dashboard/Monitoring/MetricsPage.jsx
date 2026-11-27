@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../context/DashboardContext';
 import NodeMetricsFlowCanvas from '../../../components/dashboard/NodeMetricsFlowCanvas';
 import { nodeService } from '../../../services/nodeService';
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react';
 
 export const MetricsPage = () => {
+  const { t } = useTranslation('dashMonitoring');
   const { currentOrg, currentEnv, isAgentConnected, isRefreshing, triggerRefresh } = useDashboard();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,7 +55,7 @@ export const MetricsPage = () => {
   const userPickedTimeRangeRef = useRef(false);
 
   const activeClusterId = currentEnv?.clusterId || currentEnv?.id || '';
-  const activeClusterName = currentEnv?.cluster || currentEnv?.name || 'Chưa chọn cụm';
+  const activeClusterName = currentEnv?.cluster || currentEnv?.name || t('common.noCluster');
   const hasValidCluster = Boolean(
     activeClusterId && !activeClusterId.startsWith('org-') && !activeClusterId.startsWith('sandbox-')
   );
@@ -370,7 +372,7 @@ export const MetricsPage = () => {
       } catch (err) {
         if (err?.name === 'AbortError' || err?.isAborted || controller.signal.aborted) return;
         if (currentSeq !== requestSeqRef.current) return;
-        setErrorMessage(err.message || 'Không thể tải dữ liệu Node Metrics từ máy chủ');
+        setErrorMessage(err.message || t('metrics.fetchError'));
         setRawItems([]);
       } finally {
         if (currentSeq === requestSeqRef.current && !controller.signal.aborted) {
@@ -379,7 +381,7 @@ export const MetricsPage = () => {
         }
       }
     },
-    [isNodesReady, hasValidCluster, activeClusterId, currentOrg?.id, selectedNodeKey, timeRange, clusterNodes, updateLatestSnapshots]
+    [isNodesReady, hasValidCluster, activeClusterId, currentOrg?.id, selectedNodeKey, timeRange, clusterNodes, updateLatestSnapshots, t]
   );
 
   useEffect(() => {
@@ -488,17 +490,19 @@ export const MetricsPage = () => {
       const netTx = snap ? formatThroughput(snap.net_tx_bytes_per_sec) : '0 B/s';
 
       const isHighLoad = cpuPercent >= 80 || memPercent >= 85;
+      const isAlert = isHighLoad || nodeMeta?.status === 'NotReady';
       const statusLabel = isHighLoad
-        ? 'Cảnh báo Tải'
+        ? t('nodeStatus.highLoad')
         : nodeMeta?.status === 'NotReady'
-          ? 'NotReady'
-          : 'Sẵn sàng';
+          ? t('nodeStatus.notReady')
+          : t('nodeStatus.ready');
 
       const podsCount = nodePodsCountMap[name] ?? (name === 'minikube' ? 13 : 11);
 
       return {
         name,
         status: statusLabel,
+        isAlert,
         podsCount,
         cpuPercent: Math.round(cpuPercent * 10) / 10,
         cpuCores,
@@ -510,7 +514,7 @@ export const MetricsPage = () => {
         hasTelemetry: Boolean(snap),
       };
     });
-  }, [clusterNodes, latestNodeSnapshots, nodePodsCountMap]);
+  }, [clusterNodes, latestNodeSnapshots, nodePodsCountMap, t]);
 
   const filteredTableRows = useMemo(
     () => allTableRows.filter((n) => n.name.toLowerCase().includes(searchTerm.toLowerCase())),
@@ -557,6 +561,7 @@ export const MetricsPage = () => {
     >
       {/* LỚP NỔI PHÍA TRÊN: 4 THẺ KPI KÍNH MỜ + THANH ĐIỀU KHIỂN GỌN (ĐỒNG BỘ PHONG CÁCH DASHBOARD) */}
       <div
+        className="node-metrics-floating-header"
         style={{
           position: 'absolute',
           top: '8px',
@@ -582,7 +587,7 @@ export const MetricsPage = () => {
           <div data-testid="summary-card-cpu" style={glassCardStyle('#059669')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', whiteSpace: 'nowrap' }}>
-                CPU MÁY CHỦ
+                {t('metrics.kpi.cpuTitle')}
               </span>
               <Cpu size={14} color="#059669" />
             </div>
@@ -594,7 +599,7 @@ export const MetricsPage = () => {
                 {hasData && selectedNodeCores > 0
                   ? `${((summary.cpu.current / 100) * selectedNodeCores).toFixed(2)} / ${selectedNodeCores} vCPUs • `
                   : ''}
-                TB: {formatPercent(summary.cpu.avg, 1)} • Đỉnh: {formatPercent(summary.cpu.max, 1)}
+                {t('metrics.kpi.cpuAvgMax', { avg: formatPercent(summary.cpu.avg, 1), max: formatPercent(summary.cpu.max, 1) })}
               </span>
             </div>
           </div>
@@ -603,7 +608,7 @@ export const MetricsPage = () => {
           <div data-testid="summary-card-ram" style={glassCardStyle('#2563EB')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', whiteSpace: 'nowrap' }}>
-                BỘ NHỚ RAM
+                {t('metrics.kpi.ramTitle')}
               </span>
               <Database size={14} color="#2563EB" />
             </div>
@@ -614,7 +619,7 @@ export const MetricsPage = () => {
               <span style={{ fontSize: '0.68rem', color: '#64748B', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {hasData && summary.ram.totalBytes > 0
                   ? `${formatBytes(summary.ram.usedBytes)} / ${formatBytes(summary.ram.totalBytes)}`
-                  : `Trống: ${formatBytes(summary.ram.availableBytes)}`}
+                  : t('metrics.kpi.freeBytes', { value: formatBytes(summary.ram.availableBytes) })}
               </span>
             </div>
           </div>
@@ -623,7 +628,7 @@ export const MetricsPage = () => {
           <div data-testid="summary-card-disk" style={glassCardStyle('#7C3AED')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', whiteSpace: 'nowrap' }}>
-                Ổ CỨNG (DISK) {selectedMount !== 'ALL' ? `(${selectedMount})` : ''}
+                {t('metrics.kpi.diskTitle')} {selectedMount !== 'ALL' ? `(${selectedMount})` : ''}
               </span>
               <HardDrive size={14} color="#7C3AED" />
             </div>
@@ -632,7 +637,7 @@ export const MetricsPage = () => {
                 {hasData ? formatPercent(summary.disk.currentPercent, 1) : '0%'}
               </span>
               <span style={{ fontSize: '0.68rem', color: '#64748B', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                Trống: {formatBytes(summary.disk.availableBytes)} • Đỉnh: {formatPercent(summary.disk.maxPercent, 1)}
+                {t('metrics.kpi.diskFreeMax', { free: formatBytes(summary.disk.availableBytes), max: formatPercent(summary.disk.maxPercent, 1) })}
               </span>
             </div>
           </div>
@@ -641,7 +646,7 @@ export const MetricsPage = () => {
           <div data-testid="summary-card-network" style={glassCardStyle('#0891B2')}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', whiteSpace: 'nowrap' }}>
-                MẠNG (RX / TX)
+                {t('metrics.kpi.networkTitle')}
               </span>
               <Wifi size={14} color="#0891B2" />
             </div>
@@ -685,7 +690,7 @@ export const MetricsPage = () => {
           >
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: 800, color: '#0F172A' }}>
               <Activity size={14} color="#2563EB" />
-              <span>Node Metrics</span>
+              <span>{t('metrics.controls.title')}</span>
             </div>
 
             <span
@@ -710,7 +715,7 @@ export const MetricsPage = () => {
                   backgroundColor: isClusterOnline ? '#10B981' : '#EF4444',
                 }}
               />
-              {isClusterOnline ? 'Live' : 'Ngoại tuyến'}
+              {isClusterOnline ? t('common.live') : t('common.offline')}
             </span>
 
             <div style={{ width: '1px', height: '16px', backgroundColor: '#E2E8F0' }} />
@@ -737,7 +742,7 @@ export const MetricsPage = () => {
               }}
             >
               {nodeOptions.length === 0 ? (
-                <option value="">Chưa có máy chủ Node</option>
+                <option value="">{t('metrics.controls.noNodeOption')}</option>
               ) : (
                 nodeOptions.map((n) => (
                   <option key={n.key} value={n.key}>
@@ -764,7 +769,7 @@ export const MetricsPage = () => {
                 }}
               >
                 <Boxes size={11} color="#2563EB" />
-                {nodePodsCountMap[selectedNodeKey] ?? (selectedNodeKey === 'minikube' ? 13 : 11)} Pods
+                {t('metrics.controls.podsCount', { count: nodePodsCountMap[selectedNodeKey] ?? (selectedNodeKey === 'minikube' ? 13 : 11) })}
               </span>
             )}
 
@@ -789,7 +794,7 @@ export const MetricsPage = () => {
               >
                 {chartModel.filesystems.map((fs) => (
                   <option key={fs} value={fs}>
-                    {fs === 'ALL' ? 'Đĩa: Tất cả' : `Mount: ${fs}`}
+                    {fs === 'ALL' ? t('metrics.controls.diskAll') : t('metrics.controls.diskMount', { mount: fs })}
                   </option>
                 ))}
               </select>
@@ -835,7 +840,7 @@ export const MetricsPage = () => {
                       cursor: 'pointer',
                     }}
                   >
-                    {preset.label}
+                    {t(`timeRanges.${preset.id}`, preset.label)}
                   </button>
                 );
               })}
@@ -846,7 +851,7 @@ export const MetricsPage = () => {
             <button
               type="button"
               onClick={() => setIsAutoRefresh((v) => !v)}
-              title="Tự động cập nhật mỗi 20 giây"
+              title={t('metrics.controls.autoRefreshTitle')}
               style={{
                 padding: '3px 8px',
                 borderRadius: '6px',
@@ -858,7 +863,7 @@ export const MetricsPage = () => {
                 cursor: 'pointer',
               }}
             >
-              {isAutoRefresh ? 'Auto 20s' : 'Tạm dừng'}
+              {isAutoRefresh ? t('common.auto20s') : t('common.paused')}
             </button>
 
             <button
@@ -883,7 +888,7 @@ export const MetricsPage = () => {
               }}
             >
               <RefreshCw size={12} className={isRefreshing || isSilentRefresh ? 'animate-spin' : ''} />
-              <span>Làm mới</span>
+              <span>{t('common.refresh')}</span>
             </button>
           </div>
         </div>
@@ -893,7 +898,7 @@ export const MetricsPage = () => {
       <NodeMetricsFlowCanvas
         clusterName={activeClusterName}
         isClusterOnline={isClusterOnline}
-        presetLabel={presetConfig.label}
+        presetLabel={t(`timeRanges.${presetConfig.id}`, presetConfig.label)}
         selectedNodeKey={selectedNodeKey}
         onSelectNode={setSelectedNodeKey}
         selectedMount={selectedMount}

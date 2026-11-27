@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../context/DashboardContext';
 import { useToast } from '../../../context/ToastContext';
 import { request } from '../../../services/apiClient';
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 
 export const OrganizationPage = () => {
+  const { t } = useTranslation('dashAdmin');
   const { currentOrg, setCurrentOrg, fetchUserOrgs } = useDashboard();
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -81,7 +83,7 @@ export const OrganizationPage = () => {
     if (!currentOrg?.id) return;
 
     if (!formData.name.trim() || formData.name.trim().length < 2) {
-      if (toastError) toastError('Tên doanh nghiệp phải có ít nhất 2 ký tự');
+      if (toastError) toastError(t('organization.validation.nameMinLength'));
       return;
     }
 
@@ -92,14 +94,14 @@ export const OrganizationPage = () => {
       let normalizedWebsite = formData.website.trim();
       if (normalizedWebsite) {
         if (/^(javascript|data|vbscript):/i.test(normalizedWebsite)) {
-          throw new Error('URL website không hợp lệ');
+          throw new Error(t('organization.validation.invalidWebsite'));
         }
         if (!/^https?:\/\//i.test(normalizedWebsite)) {
           normalizedWebsite = `https://${normalizedWebsite}`;
         }
         const parsedUrl = new URL(normalizedWebsite);
         if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-          throw new Error('URL website chỉ hỗ trợ giao thức http hoặc https');
+          throw new Error(t('organization.validation.invalidProtocol'));
         }
       }
 
@@ -125,7 +127,7 @@ export const OrganizationPage = () => {
         setSaveSuccess(true);
         setIsModalOpen(false);
         if (toastSuccess) {
-          toastSuccess('Thông tin tổ chức doanh nghiệp đã được cập nhật đồng bộ!', 'Thông Tin Tổ Chức');
+          toastSuccess(t('organization.saveSuccessToast'), t('organization.title'));
         }
 
         // Cập nhật lại state context và localStorage để TopHeader & Sidebar hiển thị tên mới ngay lập tức
@@ -145,7 +147,7 @@ export const OrganizationPage = () => {
     } catch (err) {
       console.error('[OrganizationPage] Lỗi khi cập nhật tổ chức:', err);
       if (toastError) {
-        toastError(err?.message || 'Không thể lưu thông tin tổ chức. Vui lòng kiểm tra quyền hạn.');
+        toastError(err?.message || t('organization.validation.saveFailed'));
       }
     } finally {
       setIsSaving(false);
@@ -197,10 +199,10 @@ export const OrganizationPage = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Thông Tin Tổ Chức
+              {t('organization.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Quản lý thông tin định danh doanh nghiệp, tên miền &amp; liên hệ của tổ chức
+              {t('organization.subtitle')}
             </p>
           </div>
         </div>
@@ -228,7 +230,7 @@ export const OrganizationPage = () => {
             }}
           >
             <Edit3 size={14} />
-            <span>Sửa thông tin</span>
+            <span>{t('organization.editBtn')}</span>
           </button>
         </div>
       </div>
@@ -249,15 +251,17 @@ export const OrganizationPage = () => {
           }}
         >
           <CheckCircle2 size={17} color="#059669" />
-          <span>Thông tin tổ chức doanh nghiệp đã được cập nhật đồng bộ vào cơ sở dữ liệu!</span>
+          <span>{t('organization.saveSuccessBanner')}</span>
         </div>
       )}
 
       {/* Hàng 4 Thẻ KPI Tóm Tắt Tổ Chức */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #059669', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>MÃ ĐỊNH DANH SLUG</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('organization.kpis.slug')}
+            </span>
             <Building2 size={14} color="#059669" />
           </div>
           <div style={{ marginTop: '5px', fontSize: '0.96rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -267,20 +271,26 @@ export const OrganizationPage = () => {
 
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #3B82F6', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>THÀNH VIÊN</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('organization.kpis.members')}
+            </span>
             <Users size={14} color="#3B82F6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {orgData?.members_count ?? 2}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>Đang hoạt động</span>
+            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
+              {t('organization.kpis.active')}
+            </span>
           </div>
         </div>
 
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #F59E0B', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>VAI TRÒ CỦA BẠN</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('organization.kpis.yourRole')}
+            </span>
             <Shield size={14} color="#F59E0B" />
           </div>
           <div style={{ marginTop: '6px' }}>
@@ -292,7 +302,9 @@ export const OrganizationPage = () => {
 
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #8B5CF6', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>MÚI GIỜ VẬN HÀNH</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('organization.kpis.timezone')}
+            </span>
             <Clock size={14} color="#8B5CF6" />
           </div>
           <div style={{ marginTop: '5px', fontSize: '0.88rem', fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -308,7 +320,7 @@ export const OrganizationPage = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
             <div style={{ padding: '12px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
               <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                Tên Doanh Nghiệp / Tổ Chức
+                {t('organization.fields.orgName')}
               </span>
               <span style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0F172A' }}>
                 {currentName}
@@ -317,7 +329,7 @@ export const OrganizationPage = () => {
 
             <div style={{ padding: '12px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
               <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                Mã Định Danh Slug (Duy nhất)
+                {t('organization.fields.slugUnique')}
               </span>
               <code
                 style={{
@@ -338,7 +350,7 @@ export const OrganizationPage = () => {
 
             <div style={{ padding: '12px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
               <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                Loại Hình Tổ Chức
+                {t('organization.fields.orgType')}
               </span>
               <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Layers size={14} color="#059669" />
@@ -348,7 +360,7 @@ export const OrganizationPage = () => {
 
             <div style={{ padding: '12px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
               <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                Vai Trò Của Bạn Trong Tổ Chức
+                {t('organization.fields.yourRoleInOrg')}
               </span>
               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '2px 9px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <Shield size={12} />
@@ -360,10 +372,10 @@ export const OrganizationPage = () => {
           {/* Mô tả doanh nghiệp */}
           <div style={{ paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
             <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-              Mô Tả Doanh Nghiệp
+              {t('organization.fields.description')}
             </span>
             <p style={{ fontSize: '0.84rem', color: '#475569', margin: 0, lineHeight: 1.6 }}>
-              {orgData?.description || 'Hạ tầng giám sát viễn trắc và tự phục hồi Kubernetes Proactive Self-Healing.'}
+              {orgData?.description || t('organization.fields.defaultDescription')}
             </p>
           </div>
         </div>
@@ -376,10 +388,10 @@ export const OrganizationPage = () => {
             </div>
             <div>
               <h3 style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Thông Tin Chi Tiết &amp; Liên Hệ Quản Trị
+                {t('organization.contactCard.title')}
               </h3>
               <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                Hồ sơ chi tiết dùng để xác thực hệ thống, gửi thông báo khẩn cấp và báo cáo vận hành định kỳ.
+                {t('organization.contactCard.subtitle')}
               </p>
             </div>
           </div>
@@ -387,7 +399,7 @@ export const OrganizationPage = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', paddingTop: '12px', borderTop: '1px solid #F1F5F9' }}>
             <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
               <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                <Globe size={12} /> Tên Miền (Website / Domain)
+                <Globe size={12} /> {t('organization.contactCard.website')}
               </span>
               <span style={{ fontSize: '0.86rem', fontWeight: 600, color: formData.website ? '#059669' : '#94A3B8' }}>
                 {formData.website && /^https?:\/\//i.test(formData.website.trim()) ? (
@@ -395,32 +407,32 @@ export const OrganizationPage = () => {
                     {formData.website}
                   </a>
                 ) : (
-                  '-- Chưa thiết lập website --'
+                  t('organization.contactCard.websiteEmpty')
                 )}
               </span>
             </div>
 
             <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
               <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                <Mail size={12} /> Email Liên Hệ Quản Trị
+                <Mail size={12} /> {t('organization.contactCard.email')}
               </span>
               <span style={{ fontSize: '0.86rem', fontWeight: 600, color: formData.email ? '#0F172A' : '#94A3B8' }}>
-                {formData.email || '-- Chưa thiết lập email --'}
+                {formData.email || t('organization.contactCard.emailEmpty')}
               </span>
             </div>
 
             <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
               <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                <Phone size={12} /> Số Điện Thoại
+                <Phone size={12} /> {t('organization.contactCard.phone')}
               </span>
               <span style={{ fontSize: '0.86rem', fontWeight: 600, color: formData.phone ? '#0F172A' : '#94A3B8' }}>
-                {formData.phone || '-- Chưa thiết lập --'}
+                {formData.phone || t('organization.contactCard.phoneEmpty')}
               </span>
             </div>
 
             <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
               <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                <MapPin size={12} /> Khu Vực / Thành Phố
+                <MapPin size={12} /> {t('organization.contactCard.location')}
               </span>
               <span style={{ fontSize: '0.86rem', fontWeight: 600, color: '#0F172A' }}>
                 {formData.city || 'Hồ Chí Minh'}, {formData.country || 'Việt Nam'}
@@ -429,7 +441,7 @@ export const OrganizationPage = () => {
 
             <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
               <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                <Clock size={12} /> Múi Giờ Vận Hành
+                <Clock size={12} /> {t('organization.contactCard.timezone')}
               </span>
               <span style={{ fontSize: '0.86rem', fontWeight: 600, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
                 {formData.timezone || 'Asia/Ho_Chi_Minh'} (GMT+7)
@@ -438,10 +450,10 @@ export const OrganizationPage = () => {
 
             <div style={{ padding: '11px 14px', borderRadius: '11px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
               <span style={{ fontSize: '0.68rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                <Users size={12} /> Thành Viên Trong Tổ Chức
+                <Users size={12} /> {t('organization.contactCard.membersInOrg')}
               </span>
               <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#059669' }}>
-                {orgData?.members_count ?? 2} thành viên đang hoạt động
+                {t('organization.contactCard.activeMembersCount', { count: orgData?.members_count ?? 2 })}
               </span>
             </div>
           </div>
@@ -510,10 +522,10 @@ export const OrganizationPage = () => {
                 </div>
                 <div>
                   <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: '#0F172A' }}>
-                    Chỉnh Sửa Thông Tin Tổ Chức
+                    {t('organization.modal.title')}
                   </h3>
                   <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                    Cập nhật thông tin định danh, tên miền và liên hệ của tổ chức
+                    {t('organization.modal.subtitle')}
                   </p>
                 </div>
               </div>
@@ -543,13 +555,13 @@ export const OrganizationPage = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#1E293B', marginBottom: '6px' }}>
-                      Tên Doanh Nghiệp / Tổ Chức <span style={{ color: '#EF4444' }}>*</span>
+                      {t('organization.modal.orgNameLabel')} <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="VD: SME Retail Enterprise"
+                      placeholder={t('organization.modal.orgNamePlaceholder')}
                       style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.875rem' }}
                       required
                     />
@@ -557,14 +569,14 @@ export const OrganizationPage = () => {
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#1E293B', marginBottom: '6px' }}>
-                      Mã Định Danh Slug (Cố định duy nhất)
+                      {t('organization.modal.slugLabel')}
                     </label>
                     <input
                       type="text"
                       value={currentSlug}
                       readOnly
                       disabled
-                      title="Mã định danh slug được gán cố định khi tạo tổ chức để đảm bảo an toàn"
+                      title={t('organization.modal.slugTitle')}
                       style={{
                         width: '100%',
                         padding: '9px 12px',
@@ -581,78 +593,78 @@ export const OrganizationPage = () => {
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#1E293B', marginBottom: '6px' }}>
-                      Loại Hình Tổ Chức
+                      {t('organization.modal.typeLabel')}
                     </label>
                     <input
                       type="text"
                       value={formData.type}
                       onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                      placeholder="VD: Engineering Org, Fintech, SME Retail"
+                      placeholder={t('organization.modal.typePlaceholder')}
                       style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.875rem' }}
                     />
                   </div>
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#1E293B', marginBottom: '6px' }}>
-                      Tên Miền Doanh Nghiệp (Website / Domain)
+                      {t('organization.modal.websiteLabel')}
                     </label>
                     <input
                       type="text"
                       value={formData.website}
                       onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                      placeholder="VD: https://smeretail.com hoặc company.vn"
+                      placeholder={t('organization.modal.websitePlaceholder')}
                       style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.875rem' }}
                     />
                   </div>
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#1E293B', marginBottom: '6px' }}>
-                      Email Liên Hệ Quản Trị
+                      {t('organization.modal.emailLabel')}
                     </label>
                     <input
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      placeholder="VD: contact@smeretail.com"
+                      placeholder={t('organization.modal.emailPlaceholder')}
                       style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.875rem' }}
                     />
                   </div>
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#1E293B', marginBottom: '6px' }}>
-                      Số Điện Thoại Liên Hệ
+                      {t('organization.modal.phoneLabel')}
                     </label>
                     <input
                       type="text"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="VD: +84 901 234 567"
+                      placeholder={t('organization.modal.phonePlaceholder')}
                       style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.875rem' }}
                     />
                   </div>
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#1E293B', marginBottom: '6px' }}>
-                      Thành Phố / Khu Vực
+                      {t('organization.modal.cityLabel')}
                     </label>
                     <input
                       type="text"
                       value={formData.city}
                       onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                      placeholder="VD: Hồ Chí Minh, Hà Nội"
+                      placeholder={t('organization.modal.cityPlaceholder')}
                       style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.875rem' }}
                     />
                   </div>
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#1E293B', marginBottom: '6px' }}>
-                      Múi Giờ Vận Hành
+                      {t('organization.modal.timezoneLabel')}
                     </label>
                     <input
                       type="text"
                       value={formData.timezone}
                       onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                      placeholder="Asia/Ho_Chi_Minh"
+                      placeholder={t('organization.modal.timezonePlaceholder')}
                       style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.875rem' }}
                     />
                   </div>
@@ -660,13 +672,13 @@ export const OrganizationPage = () => {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#1E293B', marginBottom: '6px' }}>
-                    Mô Tả Doanh Nghiệp & Hạ Tầng
+                    {t('organization.modal.descriptionLabel')}
                   </label>
                   <textarea
                     rows={3}
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Mô tả tóm tắt về lĩnh vực hoạt động và quy mô hạ tầng..."
+                    placeholder={t('organization.modal.descriptionPlaceholder')}
                     style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.875rem', resize: 'vertical' }}
                   />
                 </div>
@@ -701,7 +713,7 @@ export const OrganizationPage = () => {
                     cursor: isSaving ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  Hủy Bỏ
+                  {t('organization.modal.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -722,7 +734,7 @@ export const OrganizationPage = () => {
                   }}
                 >
                   {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  <span>{isSaving ? 'Đang Lưu...' : 'Lưu Thay Đổi'}</span>
+                  <span>{isSaving ? t('organization.modal.saving') : t('organization.modal.save')}</span>
                 </button>
               </div>
             </form>

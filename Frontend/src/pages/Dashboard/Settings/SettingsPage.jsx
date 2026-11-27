@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../context/DashboardContext';
 import { useToast } from '../../../context/ToastContext';
 import { aiService } from '../../../services/aiService';
@@ -14,6 +15,7 @@ import {
 const EMAIL_VALIDATION_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const SettingsPage = () => {
+  const { t } = useTranslation('dashAdmin');
   const { currentOrg, currentUserRole } = useDashboard();
   const { success: toastSuccess, warning: toastWarning, error: toastError } = useToast();
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -62,12 +64,12 @@ export const SettingsPage = () => {
     e?.preventDefault();
 
     if (!currentOrg?.id || String(currentOrg.id).startsWith('sandbox-') || currentOrg.id === 'org-empty') {
-      toastWarning('Vui lòng chọn một tổ chức thực tế trước khi lưu cấu hình.', 'Chưa Chọn Tổ Chức');
+      toastWarning(t('settings.toasts.selectRealOrg'), t('settings.toasts.noOrgTitle'));
       return;
     }
 
     if (!canEditAlertSettings) {
-      toastError('Vai trò VIEWER chỉ có quyền xem cấu hình cảnh báo.', 'Không Đủ Thẩm Quyền');
+      toastError(t('settings.toasts.viewerDenied'), t('settings.toasts.insufficientPermTitle'));
       return;
     }
 
@@ -77,13 +79,16 @@ export const SettingsPage = () => {
       .filter(Boolean);
     const invalidEmails = rawList.filter((em) => !EMAIL_VALIDATION_REGEX.test(em));
     if (invalidEmails.length > 0) {
-      toastError(`Địa chỉ email không hợp lệ: ${invalidEmails.join(', ')}`, 'Lỗi Nhập Liệu');
+      toastError(
+        t('settings.toasts.invalidEmails', { emails: invalidEmails.join(', ') }),
+        t('settings.toasts.inputErrorTitle')
+      );
       return;
     }
 
     const parsedCooldown = Number(cooldownMinutes);
     if (!Number.isInteger(parsedCooldown) || parsedCooldown < 1 || parsedCooldown > 1440) {
-      toastError('Thời gian chống spam email phải là số nguyên từ 1 đến 1440 phút.', 'Lỗi Nhập Liệu');
+      toastError(t('settings.toasts.invalidCooldown'), t('settings.toasts.inputErrorTitle'));
       return;
     }
 
@@ -109,10 +114,10 @@ export const SettingsPage = () => {
       }
 
       setSaveSuccess(true);
-      toastSuccess('Đã lưu cấu hình cảnh báo khẩn cấp và đồng bộ cho tổ chức!', 'Cài Đặt Cảnh Báo');
+      toastSuccess(t('settings.toasts.saveSuccess'), t('settings.toasts.saveSuccessTitle'));
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      toastError(err?.message || 'Không thể lưu cấu hình cảnh báo lúc này.', 'Lỗi Lưu Cài Đặt');
+      toastError(err?.message || t('settings.toasts.saveError'), t('settings.toasts.saveErrorTitle'));
     } finally {
       setIsSavingSettings(false);
     }
@@ -141,49 +146,55 @@ export const SettingsPage = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Cài Đặt Hệ Thống &amp; Cảnh Báo
+              {t('settings.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Cấu hình gửi email cảnh báo sự cố khẩn cấp &amp; quy tắc chống spam cho tổ chức
+              {t('settings.subtitle')}
             </p>
           </div>
         </div>
       </div>
 
       {/* Hàng 3 Thẻ KPI Trạng Thái Cấu Hình Cảnh Báo */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: `2.5px solid ${criticalEmailEnabled ? '#10B981' : '#94A3B8'}`, borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>EMAIL CẢNH BÁO KHẨN</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('settings.kpis.criticalEmailLabel')}
+            </span>
             <BellRing size={14} color={criticalEmailEnabled ? '#10B981' : '#94A3B8'} />
           </div>
           <div style={{ marginTop: '6px' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '2px 9px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, backgroundColor: criticalEmailEnabled ? '#ECFDF5' : '#F1F5F9', color: criticalEmailEnabled ? '#047857' : '#64748B', border: `1px solid ${criticalEmailEnabled ? '#A7F3D0' : '#E2E8F0'}` }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: criticalEmailEnabled ? '#10B981' : '#94A3B8' }} />
-              {criticalEmailEnabled ? 'Đang kích hoạt' : 'Đang tạm tắt'}
+              {criticalEmailEnabled ? t('settings.kpis.activeStatus') : t('settings.kpis.pausedStatus')}
             </span>
           </div>
         </div>
 
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #F59E0B', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>CHỐNG SPAM (COOLDOWN)</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('settings.kpis.cooldownLabel')}
+            </span>
             <AlertTriangle size={14} color="#F59E0B" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{cooldownMinutes}</span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>phút / sự cố trùng</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('settings.kpis.cooldownSub')}</span>
           </div>
         </div>
 
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(226, 232, 240, 0.95)', borderTop: '2.5px solid #3B82F6', borderRadius: '12px', padding: '11px 14px', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>NGƯỜI NHẬN RBAC</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>
+              {t('settings.kpis.recipientsLabel')}
+            </span>
             <Users size={14} color="#3B82F6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{defaultRecipients.length}</span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>SME Owner &amp; DevOps</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('settings.kpis.recipientsSub')}</span>
           </div>
         </div>
       </div>
@@ -204,7 +215,7 @@ export const SettingsPage = () => {
           }}
         >
           <CheckCircle2 size={17} color="#059669" />
-          <span>Cấu hình cảnh báo khẩn cấp đã được áp dụng và đồng bộ hóa thành công!</span>
+          <span>{t('settings.saveSuccessBanner')}</span>
         </div>
       )}
 
@@ -217,16 +228,16 @@ export const SettingsPage = () => {
             </div>
             <div>
               <h3 style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Cảnh Báo Sự Cố Khẩn Cấp &amp; Chống Spam Email
+                {t('settings.alertCard.title')}
               </h3>
               <p style={{ fontSize: '0.76rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                Cấu hình gửi email khẩn tự động khi hệ thống gặp sự cố mức độ KHẨN CẤP (bao gồm NO_ACTION, NO_POLICY hoặc Self-Healing thất bại)
+                {t('settings.alertCard.subtitle')}
               </p>
             </div>
           </div>
           {isLoadingSettings && (
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B' }}>
-              Đang tải cấu hình...
+              {t('settings.alertCard.loading')}
             </span>
           )}
         </div>
@@ -247,7 +258,7 @@ export const SettingsPage = () => {
             }}
           >
             <AlertTriangle size={15} color="#D97706" />
-            <span>Vai trò hiện tại (VIEWER) chỉ có quyền xem cấu hình. Chỉ SME_OWNER hoặc DEVOPS mới có thể chỉnh sửa và gửi test.</span>
+            <span>{t('settings.alertCard.viewerWarning')}</span>
           </div>
         )}
 
@@ -274,10 +285,10 @@ export const SettingsPage = () => {
             />
             <div>
               <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>
-                Bật Email Cảnh Báo Khẩn Cấp
+                {t('settings.alertCard.enableTitle')}
               </div>
               <div style={{ fontSize: '0.74rem', color: '#64748B', marginTop: '2px' }}>
-                Công tắc tổng cho cảnh báo email tự động khi có sự cố khẩn cấp.
+                {t('settings.alertCard.enableDesc')}
               </div>
             </div>
           </label>
@@ -304,10 +315,10 @@ export const SettingsPage = () => {
             />
             <div>
               <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>
-                Gửi khi AI khuyến nghị NO_ACTION / Chờ kiểm tra
+                {t('settings.alertCard.noActionTitle')}
               </div>
               <div style={{ fontSize: '0.74rem', color: '#64748B', marginTop: '2px' }}>
-                Báo khẩn ngay khi sự cố khẩn cấp bị dừng tự động (NO_ACTION / NO_POLICY / Circuit Breaker).
+                {t('settings.alertCard.noActionDesc')}
               </div>
             </div>
           </label>
@@ -334,10 +345,10 @@ export const SettingsPage = () => {
             />
             <div>
               <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>
-                Gửi khi Auto-Healing thất bại
+                {t('settings.alertCard.healingFailedTitle')}
               </div>
               <div style={{ fontSize: '0.74rem', color: '#64748B', marginTop: '2px' }}>
-                Báo khẩn lập tức nếu Agent hoặc Dispatcher tự phục hồi sự cố khẩn cấp thất bại.
+                {t('settings.alertCard.healingFailedDesc')}
               </div>
             </div>
           </label>
@@ -347,7 +358,7 @@ export const SettingsPage = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-              Thời Gian Chống Spam Email
+              {t('settings.alertCard.cooldownLabel')}
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               {[5, 15, 30, 60].map((preset) => (
@@ -368,7 +379,7 @@ export const SettingsPage = () => {
                     cursor: canEditAlertSettings ? 'pointer' : 'not-allowed',
                   }}
                 >
-                  {preset} phút
+                  {t('settings.alertCard.minutesUnit', { minutes: preset })}
                 </button>
               ))}
               <input
@@ -393,24 +404,24 @@ export const SettingsPage = () => {
               />
             </div>
             <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '6px', lineHeight: 1.4 }}>
-              Mặc định 15 phút cho cùng 1 dịch vụ + cùng loại lỗi nhằm chống gửi email lặp hàng loạt khi hệ thống tự động cảnh báo.
+              {t('settings.alertCard.cooldownHelper')}
             </div>
           </div>
 
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-              Danh Sách Email Tùy Chỉnh Nhận Cảnh Báo (Phân cách dấu phẩy)
+              {t('settings.alertCard.extraEmailsLabel')}
             </label>
             <input
               type="text"
-              placeholder="oncall-sre@company.vn, cto@company.vn"
+              placeholder={t('settings.alertCard.extraEmailsPlaceholder')}
               value={alertEmails}
               disabled={!canEditAlertSettings}
               onChange={(e) => setAlertEmails(e.target.value)}
               style={{ width: '100%', height: '34px', padding: '0 12px', border: '1px solid #E2E8F0', borderRadius: '10px', backgroundColor: '#F8FAFC', fontSize: '0.82rem', color: '#0F172A' }}
             />
             <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '6px', lineHeight: 1.4 }}>
-              Các địa chỉ này sẽ tự động nhận email cảnh báo cùng SME_OWNER và DEVOPS mỗi khi hệ thống phát hiện sự cố khẩn cấp.
+              {t('settings.alertCard.extraEmailsHelper')}
             </div>
           </div>
         </div>
@@ -419,11 +430,11 @@ export const SettingsPage = () => {
         <div style={{ padding: '12px 14px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '11px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 700, color: '#0F172A', marginBottom: '8px' }}>
             <Users size={15} color="#059669" />
-            <span>Người Nhận Mặc Định Theo Phân Quyền Tổ Chức (SME_OWNER &amp; DEVOPS — Luôn Loại Trừ VIEWER)</span>
+            <span>{t('settings.alertCard.defaultRecipientsTitle')}</span>
           </div>
           {defaultRecipients.length === 0 ? (
             <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-              Chưa tải được hoặc không có thành viên SME_OWNER/DEVOPS đang hoạt động trong tổ chức hiện tại.
+              {t('settings.alertCard.defaultRecipientsEmpty')}
             </div>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -486,7 +497,7 @@ export const SettingsPage = () => {
             }}
           >
             <Save size={14} />
-            <span>{isSavingSettings ? 'Đang lưu...' : 'Lưu Cấu Hình Cảnh Báo'}</span>
+            <span>{isSavingSettings ? t('settings.alertCard.saving') : t('settings.alertCard.saveBtn')}</span>
           </button>
         </div>
       </div>

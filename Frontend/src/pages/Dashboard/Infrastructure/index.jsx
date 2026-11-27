@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../context/DashboardContext';
 import { nodeService } from '../../../services/nodeService';
 import {
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 
 export const InfrastructurePage = () => {
+  const { t } = useTranslation('dashMonitoring');
   const { currentEnv, isRefreshing, triggerRefresh, onNavigate } = useDashboard();
   const [nodes, setNodes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -165,7 +167,7 @@ export const InfrastructurePage = () => {
     } catch (err) {
       console.warn('[InfrastructurePage] Lỗi yêu cầu Drain:', err);
       setDrainStatus(null);
-      alert('Không thể gửi yêu cầu Drain Node: ' + err.message);
+      alert(t('infrastructure.drainErrorAlert', { message: err.message }));
     }
   };
 
@@ -192,10 +194,10 @@ export const InfrastructurePage = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Hạ Tầng Máy Chủ Kubernetes
+              {t('infrastructure.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Quản lý tài nguyên vCPU, RAM &amp; sức chứa Pods của từng Node trên cụm{' '}
+              {t('infrastructure.subtitlePrefix')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{currentEnv?.cluster || currentEnv?.name || 'K8s'}</strong>
             </p>
           </div>
@@ -221,15 +223,15 @@ export const InfrastructurePage = () => {
           }}
         >
           <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-          <span>Làm mới</span>
+          <span>{t('common.refresh')}</span>
         </button>
       </div>
 
       {/* 2. Top Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #059669' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG SỐ NODES</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('infrastructure.kpi.totalNodes')}</span>
             <Layers size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -237,17 +239,17 @@ export const InfrastructurePage = () => {
               {isLoading ? '...' : totalNodesCount}
             </span>
             <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#059669' }}>
-              {cpCount} CP / {workerCount} Workers
+              {t('infrastructure.kpi.cpWorker', { cp: cpCount, worker: workerCount })}
             </span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            {readyPercent}% Sẵn sàng (Ready)
+            {t('infrastructure.kpi.readyPercent', { percent: readyPercent })}
           </div>
         </div>
 
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #3B82F6' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG vCPU KHẢ DỤNG</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('infrastructure.kpi.totalCpu')}</span>
             <Cpu size={14} color="#3B82F6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -257,13 +259,13 @@ export const InfrastructurePage = () => {
             <span style={{ fontSize: '0.7rem', color: '#64748B' }}>vCPUs</span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            Đã phân bổ: {totalAllocatedCpu} vCPUs ({clusterCpuPercent}%)
+            {t('infrastructure.kpi.allocatedCpu', { allocated: totalAllocatedCpu, percent: clusterCpuPercent })}
           </div>
         </div>
 
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #10B981' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG BỘ NHỚ RAM</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('infrastructure.kpi.totalRam')}</span>
             <Database size={14} color="#10B981" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -273,13 +275,13 @@ export const InfrastructurePage = () => {
             <span style={{ fontSize: '0.7rem', color: '#64748B' }}>GB</span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            Đã phân bổ: {totalAllocatedRam.toFixed(1)} GB ({clusterRamPercent}%)
+            {t('infrastructure.kpi.allocatedRam', { allocated: totalAllocatedRam.toFixed(1), percent: clusterRamPercent })}
           </div>
         </div>
 
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #8B5CF6' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>SỨC CHỨA PODS</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('infrastructure.kpi.podsCapacity')}</span>
             <Box size={14} color="#8B5CF6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -291,7 +293,7 @@ export const InfrastructurePage = () => {
             </span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            {totalNodesCount > 0 ? 'Tỷ lệ lấp đầy Pod trên cụm' : 'Chờ kết nối Node'}
+            {totalNodesCount > 0 ? t('infrastructure.kpi.podsDensity') : t('infrastructure.kpi.waitingNode')}
           </div>
         </div>
       </div>
@@ -325,10 +327,10 @@ export const InfrastructurePage = () => {
             <AlertTriangle size={24} />
           </div>
           <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-            Chưa có Node máy chủ nào được phát hiện trong cụm này
+            {t('infrastructure.empty.title')}
           </h3>
           <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--dash-text-secondary)', maxWidth: '560px', lineHeight: '1.5' }}>
-            Cụm <strong style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name}</strong> hiện chưa nhận được dữ liệu đồng bộ từ Kubernetes Agent. Vui lòng kiểm tra tác tử eBPF hoặc cài đặt Agent vào cụm để bắt đầu khám phá Nodes và Pods.
+            {t('infrastructure.empty.descPrefix')} <strong style={{ fontFamily: 'var(--font-mono)' }}>{currentEnv?.name}</strong> {t('infrastructure.empty.descSuffix')}
           </p>
           <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
             <button
@@ -348,7 +350,7 @@ export const InfrastructurePage = () => {
               }}
             >
               <Terminal size={14} />
-              <span>Kiểm Tra Tác Tử Agent</span>
+              <span>{t('infrastructure.empty.checkAgents')}</span>
             </button>
             <button
               onClick={handleRefresh}
@@ -363,7 +365,7 @@ export const InfrastructurePage = () => {
                 cursor: 'pointer',
               }}
             >
-              Thử lại
+              {t('common.retry')}
             </button>
           </div>
         </div>
@@ -373,10 +375,10 @@ export const InfrastructurePage = () => {
       {(isLoading || normalizedNodes.length > 0) && (
         <div className="dash-card" style={{ padding: '16px 18px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
-            <div style={{ position: 'relative', width: '300px', maxWidth: '100%' }}>
+            <div className="dash-search-box" style={{ position: 'relative', width: '300px', maxWidth: '100%' }}>
               <input
                 type="text"
-                placeholder="Tìm theo tên máy chủ hoặc IP..."
+                placeholder={t('infrastructure.filters.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
@@ -395,9 +397,9 @@ export const InfrastructurePage = () => {
 
             <div style={{ display: 'inline-flex', gap: '3px', padding: '3px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
               {[
-                { id: 'ALL', label: 'Tất cả' },
-                { id: 'CP', label: 'Control Plane' },
-                { id: 'WORKER', label: 'Worker Nodes' },
+                { id: 'ALL', label: t('infrastructure.filters.all') },
+                { id: 'CP', label: t('infrastructure.filters.controlPlane') },
+                { id: 'WORKER', label: t('infrastructure.filters.workerNodes') },
               ].map((r) => (
                 <button
                   key={r.id}
@@ -426,27 +428,27 @@ export const InfrastructurePage = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#64748B', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Tên Máy Chủ (Node)</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Vai Trò</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Trạng Thái</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>CPU Đã Cấp</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>RAM Đã Cấp</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Số Lượng Pods</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Hệ Điều Hành / Kubelet</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('infrastructure.table.colNode')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('infrastructure.table.colRole')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('infrastructure.table.colStatus')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('infrastructure.table.colCpu')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('infrastructure.table.colRam')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('infrastructure.table.colPods')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('infrastructure.table.colOs')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700, textAlign: 'right' }}>{t('infrastructure.table.colAction')}</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
                     <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
-                      Đang tải danh sách Nodes từ cụm Kubernetes...
+                      {t('infrastructure.table.loading')}
                     </td>
                   </tr>
                 ) : filteredNodes.length === 0 ? (
                   <tr>
                     <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
-                      Không tìm thấy máy chủ nào khớp với bộ lọc.
+                      {t('infrastructure.table.empty')}
                     </td>
                   </tr>
                 ) : (
@@ -541,7 +543,7 @@ export const InfrastructurePage = () => {
                               cursor: 'pointer',
                             }}
                           >
-                            Chi tiết
+                            {t('common.details')}
                           </button>
                           <button
                             onClick={() => setSelectedNode(node)}
@@ -557,7 +559,7 @@ export const InfrastructurePage = () => {
                               cursor: 'pointer',
                             }}
                           >
-                            Tháo tải (Drain)
+                            {t('infrastructure.table.drainBtn')}
                           </button>
                         </div>
                       </td>
@@ -613,7 +615,7 @@ export const InfrastructurePage = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Server size={18} color="var(--dash-primary)" />
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)' }}>
-                  Máy Chủ: {selectedNode.name}
+                  {t('infrastructure.modal.title', { name: selectedNode.name })}
                 </h3>
               </div>
               <button
@@ -626,45 +628,45 @@ export const InfrastructurePage = () => {
 
             {/* Body */}
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="dash-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ padding: '10px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Vai Trò (Role)</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{t('infrastructure.modal.role')}</div>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
                     {selectedNode.role}
                   </div>
                 </div>
                 <div style={{ padding: '10px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Trạng Thái Kubelet</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{t('infrastructure.modal.kubeletStatus')}</div>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-success)', marginTop: '2px' }}>
                     {selectedNode.status} ({selectedNode.kubeletDisplay})
                   </div>
                 </div>
                 <div style={{ padding: '10px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>vCPU Capacity</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{t('infrastructure.modal.cpuCapacity')}</div>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
-                    {selectedNode.totalCpuCores} vCPUs (Đang cấp: {selectedNode.allocatedCores} vCPUs)
+                    {t('infrastructure.modal.cpuAllocated', { total: selectedNode.totalCpuCores, allocated: selectedNode.allocatedCores })}
                   </div>
                 </div>
                 <div style={{ padding: '10px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Bộ Nhớ RAM</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{t('infrastructure.modal.ramTitle')}</div>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
-                    {selectedNode.totalRamGB} GB (Đang cấp: {selectedNode.allocatedRamGB} GB)
+                    {t('infrastructure.modal.ramAllocated', { total: selectedNode.totalRamGB, allocated: selectedNode.allocatedRamGB })}
                   </div>
                 </div>
               </div>
 
               {/* Disk & Pods */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="dash-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ padding: '10px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Ổ Đĩa Cục Bộ (Disk)</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{t('infrastructure.modal.localDisk')}</div>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary)', marginTop: '2px' }}>
-                    {selectedNode.totalDiskTB ? `${selectedNode.totalDiskTB} TB` : 'Chuẩn Container Runtime'}
+                    {selectedNode.totalDiskTB ? `${selectedNode.totalDiskTB} TB` : t('infrastructure.modal.containerRuntimeDisk')}
                   </div>
                 </div>
                 <div style={{ padding: '10px 12px', backgroundColor: 'var(--dash-bg-canvas)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>Pods Đang Chạy</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted)' }}>{t('infrastructure.modal.runningPods')}</div>
                   <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-primary)', marginTop: '2px' }}>
-                    {selectedNode.podCount} Pods / Max 110
+                    {t('infrastructure.modal.podsMax', { count: selectedNode.podCount })}
                   </div>
                 </div>
               </div>
@@ -672,7 +674,7 @@ export const InfrastructurePage = () => {
               {/* Labels */}
               <div>
                 <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', marginBottom: '6px' }}>
-                  Nhãn Kubernetes (Labels từ Cluster):
+                  {t('infrastructure.modal.labelsTitle')}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '100px', overflowY: 'auto' }}>
                   {Object.entries(selectedNode.labels || {}).map(([key, value]) => (
@@ -709,7 +711,7 @@ export const InfrastructurePage = () => {
               >
                 <Info size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
                 <span>
-                  <strong>Tháo tải an toàn (Safe Drain):</strong> Lệnh này sẽ đánh dấu Node là không nhận thêm Pod mới (Cordon) và di tản có kiểm soát các Pods sang Node khác theo PodDisruptionBudget.
+                  <strong>{t('infrastructure.modal.safeDrainLabel')}</strong> {t('infrastructure.modal.safeDrainDesc')}
                 </span>
               </div>
             </div>
@@ -738,7 +740,7 @@ export const InfrastructurePage = () => {
                   color: 'var(--dash-text-secondary)',
                 }}
               >
-                Đóng
+                {t('common.close')}
               </button>
               <button
                 onClick={() => handleDrainNode(selectedNode)}
@@ -760,15 +762,15 @@ export const InfrastructurePage = () => {
                 {drainStatus === 'DRAINING' ? (
                   <>
                     <RefreshCw size={14} className="animate-spin" />
-                    <span>Đang gửi yêu cầu...</span>
+                    <span>{t('infrastructure.modal.draining')}</span>
                   </>
                 ) : drainStatus === 'SUCCESS' ? (
                   <>
                     <CheckCircle2 size={14} />
-                    <span>Đã chuyển đến MAPE-K!</span>
+                    <span>{t('infrastructure.modal.drainSuccess')}</span>
                   </>
                 ) : (
-                  <span>Tháo tải an toàn (Drain Node)</span>
+                  <span>{t('infrastructure.modal.drainAction')}</span>
                 )}
               </button>
             </div>

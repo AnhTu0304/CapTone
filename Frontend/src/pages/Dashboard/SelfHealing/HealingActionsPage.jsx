@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n, { getIntlLocale } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import { selfHealingService } from '../../../services/selfHealingService';
 import { getWsTicket, getAuthToken, resolveBackendWsHost } from '../../../services/apiClient';
@@ -17,18 +19,9 @@ import {
   X
 } from 'lucide-react';
 
-const ACTION_LABELS_VI = {
-  RESTART_POD: 'Khởi động lại Pod',
-  REPLACE_POD: 'Thay thế Pod',
-  SCALE_REPLICAS: 'Điều chỉnh số lượng bản sao Pod',
-  SCALE_UP: 'Mở rộng bản sao Pod',
-  SCALE_DOWN: 'Thu hẹp bản sao Pod',
-  ROLLBACK_DEPLOYMENT: 'Khôi phục bản phát hành trước',
-  CLEANUP_STORAGE: 'Dọn dẹp lưu trữ',
-  CLEANUP_TEMP_FILES: 'Dọn dẹp tệp tạm',
-  TEMPORARY_IP_BLOCK: 'Chặn tạm thời IP tấn công',
-  BLOCK_IP_TEMP: 'Chặn tạm thời IP tấn công',
-  NO_ACTION: 'Giám sát an toàn',
+const getActionLabel = (code) => {
+  const map = i18n.t('dashHealing:incidentUtils.actions', { returnObjects: true }) || {};
+  return map[code] || code || i18n.t('dashHealing:incidentUtils.actions.DEFAULT');
 };
 
 const formatHealingActionDetails = (item, actionCode, targetName) => {
@@ -39,7 +32,7 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
     (item.error_message?.match(/namespace "([^"]+)"/)?.[1]) ||
     'default';
   const rawMsg = String(item.result?.message || item.error_message || '');
-  const actionVi = ACTION_LABELS_VI[actionCode] || actionCode || 'Tự phục hồi';
+  const actionLabel = getActionLabel(actionCode);
 
   // 1. Parse Kubernetes RBAC 403 Forbidden error
   const rbacMatch = rawMsg.match(
@@ -51,16 +44,16 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
     const resource = rbacMatch ? rbacMatch[3] : 'deployments/scale';
     const targetNs = rbacMatch && rbacMatch[5] ? rbacMatch[5] : ns;
     return {
-      title: `Thực thi ${actionVi} trên dịch vụ "${targetName}" thất bại (Lỗi phân quyền Kubernetes 403 Forbidden)`,
-      detail: `Nguyên nhân cụ thể: ServiceAccount "${saUser}" thiếu quyền RBAC ("${verb}") đối với tài nguyên "${resource}" tại namespace "${targetNs}".`,
+      title: i18n.t('dashHealing:healingActions.details.rbacTitle', { action: actionLabel, target: targetName }),
+      detail: i18n.t('dashHealing:healingActions.details.rbacDetail', { saUser, verb, resource, ns: targetNs }),
     };
   }
 
   // 2. Parse Kubernetes 404 NotFound error
   if (rawMsg.includes('(404)') || /not found/i.test(rawMsg)) {
     return {
-      title: `Thực thi ${actionVi} trên dịch vụ "${targetName}" thất bại (404 Not Found)`,
-      detail: `Nguyên nhân cụ thể: Không tìm thấy đối tượng Deployment/Pod "${targetName}" tại namespace "${ns}" trên cụm Kubernetes.`,
+      title: i18n.t('dashHealing:healingActions.details.notFoundTitle', { action: actionLabel, target: targetName }),
+      detail: i18n.t('dashHealing:healingActions.details.notFoundDetail', { target: targetName, ns }),
     };
   }
 
@@ -68,28 +61,33 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
   const successMatch = rawMsg.match(/Self-healing mitigate action '([^']+)' executed successfully on ([^.]+)\.?/i);
   if (successMatch || item.execution_status === 'COMPLETED' || item.execution_status === 'SUCCEEDED') {
     const code = (successMatch ? successMatch[1] : actionCode || '').toUpperCase();
+    const cleanDetail = String(rawMsg || '')
+      .replace(/\s*\(Post-Action Verification Failed\):?/gi, ':')
+      .replace(/Post-Action Verification Failed:?\s*/gi, '')
+      .trim();
+
     if (code === 'NO_ACTION') {
       return {
-        title: `Giám sát an toàn (NO_ACTION) trên dịch vụ "${targetName}"`,
-        detail: `Hệ thống ghi nhận dịch vụ "${targetName}" (namespace "${ns}") đang trong ngưỡng an toàn hoặc giữ trạng thái bảo vệ, không cần can thiệp trực tiếp lên Pod.`,
+        title: i18n.t('dashHealing:healingActions.details.noActionTitle', { target: targetName }),
+        detail: i18n.t('dashHealing:healingActions.details.noActionDetail', { target: targetName, ns }),
       };
     }
     if (code === 'SCALE_REPLICAS' || code === 'SCALE_UP') {
       return {
-        title: `Đã mở rộng số lượng bản sao (${code}) cho dịch vụ "${targetName}" thành công`,
-        detail: `K8s Agent đã cập nhật cấu hình replicas cho Deployment "${targetName}" tại namespace "${ns}" để phân tải lưu lượng.`,
+        title: i18n.t('dashHealing:healingActions.details.scaleTitle', { code, target: targetName }),
+        detail: i18n.t('dashHealing:healingActions.details.scaleDetail', { target: targetName, ns }),
       };
     }
     if (code === 'REPLACE_POD') {
       return {
-        title: `Đã thay thế và khởi tạo lại Pod mới (REPLACE_POD) cho dịch vụ "${targetName}" thành công`,
-        detail: `K8s Agent đã điều phối thay thế Pod lỗi của dịch vụ "${targetName}" tại namespace "${ns}" và xác nhận Pod mới đạt trạng thái Ready.`,
+        title: i18n.t('dashHealing:healingActions.details.replaceTitle', { target: targetName }),
+        detail: i18n.t('dashHealing:healingActions.details.replaceDetail', { target: targetName, ns }),
       };
     }
     if (code === 'RESTART_POD') {
       return {
-        title: `Đã khởi động lại Pod (RESTART_POD) cho dịch vụ "${targetName}" thành công`,
-        detail: `K8s Agent đã thực thi khởi động lại Pod của dịch vụ "${targetName}" tại namespace "${ns}" để giải phóng tài nguyên bị treo.`,
+        title: i18n.t('dashHealing:healingActions.details.restartTitle', { target: targetName }),
+        detail: i18n.t('dashHealing:healingActions.details.restartDetail', { target: targetName, ns }),
       };
     }
     if (code === 'BLOCK_IP_TEMP' || code === 'TEMPORARY_IP_BLOCK') {
@@ -100,19 +98,19 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
         (rawMsg.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)?.[0]);
       return {
         title: blockedIp
-          ? `Đã chặn địa chỉ IP ${blockedIp} truy cập vào dịch vụ "${targetName}" thành công`
-          : `Đã kích hoạt chặn IP tạm thời cho dịch vụ "${targetName}" thành công`,
-        detail: (cleanDetail && !cleanDetail.includes('Self-healing mitigate action')) ? cleanDetail : `K8s NetworkPolicy đã thiết lập cô lập IP tấn công bảo vệ workload "${targetName}" tại namespace "${ns}".`,
+          ? i18n.t('dashHealing:healingActions.details.blockIpTitle', { ip: blockedIp, target: targetName })
+          : i18n.t('dashHealing:healingActions.details.blockTempTitle', { target: targetName }),
+        detail: (cleanDetail && !cleanDetail.includes('Self-healing mitigate action'))
+          ? cleanDetail
+          : i18n.t('dashHealing:healingActions.details.blockIpDetail', { target: targetName, ns }),
       };
     }
-    const cleanDetail = String(rawMsg || '')
-      .replace(/\s*\(Post-Action Verification Failed\):?/gi, ':')
-      .replace(/Post-Action Verification Failed:?\s*/gi, '')
-      .trim();
 
     return {
-      title: `Đã thực thi thành công ${ACTION_LABELS_VI[code] || code} trên dịch vụ "${targetName}"`,
-      detail: cleanDetail && !cleanDetail.includes('Self-healing mitigate action') ? cleanDetail : `Đã hoàn tất lệnh tự phục hồi trên "${targetName}" (namespace "${ns}").`,
+      title: i18n.t('dashHealing:healingActions.details.genericSuccessTitle', { action: getActionLabel(code), target: targetName }),
+      detail: cleanDetail && !cleanDetail.includes('Self-healing mitigate action')
+        ? cleanDetail
+        : i18n.t('dashHealing:healingActions.details.genericSuccessDetail', { target: targetName, ns }),
     };
   }
 
@@ -120,22 +118,23 @@ const formatHealingActionDetails = (item, actionCode, targetName) => {
   if (rawMsg.includes('HTTPHeaderDict')) {
     const cleanMsg = rawMsg.split('HTTP response headers:')[0].trim();
     return {
-      title: `Thực thi ${actionVi} trên dịch vụ "${targetName}" thất bại`,
-      detail: cleanMsg || 'Lỗi kết nối Kubernetes API khi thực thi lệnh tự phục hồi.',
+      title: i18n.t('dashHealing:healingActions.details.failedTitle', { action: actionLabel, target: targetName }),
+      detail: cleanMsg || i18n.t('dashHealing:healingActions.details.failedApiDetail'),
     };
   }
 
   return {
-    title: rawMsg || `Thực thi ${actionVi} trên dịch vụ "${targetName}"`,
+    title: rawMsg || i18n.t('dashHealing:healingActions.details.fallbackTitle', { action: actionLabel, target: targetName }),
     detail: item.error_message && item.error_message !== rawMsg ? item.error_message : null,
   };
 };
 
 export const HealingActionsPage = ({ onNavigate }) => {
+  const { t, i18n: i18nInstance } = useTranslation('dashHealing');
   const { currentOrg, currentEnv } = useDashboard();
   const { can } = usePermissions();
-  const [runningActions, setRunningActions] = useState([]);
-  const [recentActions, setRecentActions] = useState([]);
+  const [rawRunningActions, setRawRunningActions] = useState([]);
+  const [rawRecentActions, setRawRecentActions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [operatingActionId, setOperatingActionId] = useState(null);
@@ -159,21 +158,21 @@ export const HealingActionsPage = ({ onNavigate }) => {
     const isRunning = item.execution_status === 'RUNNING' || item.execution_status === 'PENDING' || item.execution_status === 'QUEUED';
 
     let progress = 100;
-    let stage = '5. KNOWLEDGE';
+    let stage = t('healingActions.stages.knowledge');
     let status = 'completed';
 
     if (isRunning) {
       status = 'running';
       progress = item.execution_status === 'RUNNING' ? 70 : 30;
-      stage = item.execution_status === 'RUNNING' ? '4. EXECUTE' : '3. PLAN';
+      stage = item.execution_status === 'RUNNING' ? t('healingActions.stages.execute') : t('healingActions.stages.plan');
     } else if (isCancelled) {
       status = 'cancelled';
       progress = 100;
-      stage = 'ĐÃ HỦY BỎ (ABORTED)';
+      stage = t('healingActions.stages.aborted');
     } else if (isFailed) {
       status = 'failed';
       progress = 100;
-      stage = 'THẤT BẠI (FAILED)';
+      stage = t('healingActions.stages.failed');
     }
 
     let computedDurationMs = 0;
@@ -191,11 +190,11 @@ export const HealingActionsPage = ({ onNavigate }) => {
       ? `${(computedDurationMs / 1000).toFixed(1)}s`
       : (item.elapsed_seconds !== undefined && item.elapsed_seconds !== null ? `${item.elapsed_seconds}s` : '0.1s');
 
-    const targetName = item.target_name || item.target_id || 'Chưa xác định';
+    const targetName = item.target_name || item.target_id || t('common.unknown');
     const actionTypeCode = item.action_type_code || item.action_type_name || 'RESTART_POD';
-    const clusterName = item.cluster_name || currentEnv?.name || currentEnv?.cluster || 'Mặc định';
-    const orgName = item.organization_name || currentOrg?.name || 'Tổ chức hiện tại';
-    const policyName = item.policy_name || 'Tự phục hồi trực tiếp (AI Trigger)';
+    const clusterName = item.cluster_name || currentEnv?.name || currentEnv?.cluster || t('common.default');
+    const orgName = item.organization_name || currentOrg?.name || t('common.currentOrg');
+    const policyName = item.policy_name || t('healingActions.details.policyDirect');
     const formattedInfo = formatHealingActionDetails(item, actionTypeCode, targetName);
 
     const resolvedNs = item.result?.details?.namespace ||
@@ -226,7 +225,18 @@ export const HealingActionsPage = ({ onNavigate }) => {
       errorMessage: formattedInfo.detail || null,
       rawItem: item,
     };
-  }, [currentEnv?.cluster, currentEnv?.name, currentOrg?.name]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentEnv?.cluster, currentEnv?.name, currentOrg?.name, t, i18nInstance.language]);
+
+  const runningActions = useMemo(
+    () => rawRunningActions.map(mapBackendActionToUI),
+    [rawRunningActions, mapBackendActionToUI]
+  );
+
+  const recentActions = useMemo(
+    () => rawRecentActions.map(mapBackendActionToUI),
+    [rawRecentActions, mapBackendActionToUI]
+  );
 
   // Dynamic 5-stage MAPE-K Autonomous Loop
   const mapekStages = useMemo(() => {
@@ -236,41 +246,41 @@ export const HealingActionsPage = ({ onNavigate }) => {
     return [
       {
         step: '1. MONITOR',
-        name: 'Giám Sát Viễn Trắc',
-        desc: 'Thu thập tín hiệu eBPF và Kubelet telemetry liên tục mỗi 500ms',
+        name: t('healingActions.mapek.monitorName'),
+        desc: t('healingActions.mapek.monitorDesc'),
         active: true,
         color: '#0284C7',
       },
       {
         step: '2. ANALYZE',
-        name: 'Phân Tích Bất Thường',
-        desc: 'Mô hình AI đối chiếu baseline và nhận diện chỉ số suy biến',
+        name: t('healingActions.mapek.analyzeName'),
+        desc: t('healingActions.mapek.analyzeDesc'),
         active: hasPlanning || hasRunning,
         color: '#2563EB',
       },
       {
         step: '3. PLAN',
-        name: 'Lập Kế Hoạch Vá Lỗi',
-        desc: 'Tính toán blast radius, kiểm tra PDB và chuẩn bị payload',
+        name: t('healingActions.mapek.planName'),
+        desc: t('healingActions.mapek.planDesc'),
         active: hasPlanning,
         color: '#7C3AED',
       },
       {
         step: '4. EXECUTE',
-        name: 'Thực Thi Tự Động',
-        desc: 'Điều phối API Kubernetes qua K8s Agent kết nối trực tiếp',
+        name: t('healingActions.mapek.executeName'),
+        desc: t('healingActions.mapek.executeDesc'),
         active: hasRunning,
         color: '#059669',
       },
       {
         step: '5. KNOWLEDGE',
-        name: 'Cập Nhật Tri Thức',
-        desc: 'Lưu vết MTTR và cập nhật trọng số chính sách vào cơ sở dữ liệu',
+        name: t('healingActions.mapek.knowledgeName'),
+        desc: t('healingActions.mapek.knowledgeDesc'),
         active: !hasRunning && !hasPlanning,
         color: '#0D9488',
       },
     ];
-  }, [runningActions]);
+  }, [runningActions, t]);
 
   const fetchActions = useCallback(async () => {
     setIsLoading(true);
@@ -289,26 +299,26 @@ export const HealingActionsPage = ({ onNavigate }) => {
 
       if (runningRes.status === 'fulfilled') {
         const runningItems = runningRes.value?.items || (Array.isArray(runningRes.value) ? runningRes.value : []);
-        setRunningActions(runningItems.map(mapBackendActionToUI));
+        setRawRunningActions(runningItems);
       } else {
-        setRunningActions([]);
+        setRawRunningActions([]);
       }
 
       if (recentRes.status === 'fulfilled') {
         const recentItems = recentRes.value?.items || (Array.isArray(recentRes.value) ? recentRes.value : []);
-        setRecentActions(recentItems.map(mapBackendActionToUI));
+        setRawRecentActions(recentItems);
       } else {
-        setRecentActions([]);
+        setRawRecentActions([]);
       }
     } catch (err) {
       console.warn('[HealingActionsPage] Lỗi tải action:', err.message);
-      setRunningActions([]);
-      setRecentActions([]);
+      setRawRunningActions([]);
+      setRawRecentActions([]);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [activeClusterId, activeOrgId, mapBackendActionToUI]);
+  }, [activeClusterId, activeOrgId]);
 
   useEffect(() => {
     fetchActions();
@@ -375,23 +385,23 @@ export const HealingActionsPage = ({ onNavigate }) => {
     setConfirmAbortModal({
       isOpen: true,
       action: act,
-      reason: 'Dừng can thiệp thủ công để kiểm tra sự cố',
+      reason: t('healingActions.abortModal.defaultReason'),
     });
   };
 
   const handleConfirmAbort = async () => {
     if (!confirmAbortModal.action) return;
     const actionId = confirmAbortModal.action.rawId;
-    const reason = confirmAbortModal.reason || 'Dừng can thiệp bởi quản trị viên';
+    const reason = confirmAbortModal.reason || t('healingActions.abortModal.adminDefaultReason');
 
     setOperatingActionId(actionId);
     try {
       await selfHealingService.abortAction(actionId, reason);
-      setFeedbackMessage({ type: 'success', text: 'Đã gửi lệnh dừng khẩn cấp hành động thành công!' });
+      setFeedbackMessage({ type: 'success', text: t('healingActions.abortModal.successToast') });
       setConfirmAbortModal({ isOpen: false, action: null, reason: '' });
       await fetchActions();
     } catch (err) {
-      setFeedbackMessage({ type: 'error', text: `Không thể hủy hành động: ${err.message}` });
+      setFeedbackMessage({ type: 'error', text: t('healingActions.abortModal.errorToast', { msg: err.message }) });
     } finally {
       setOperatingActionId(null);
       setTimeout(() => setFeedbackMessage(null), 5000);
@@ -405,7 +415,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
     return runningActions.slice(start, start + RUNNING_PER_PAGE);
   }, [runningActions, safeRunningPage]);
 
-  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || 'Toàn hệ thống';
+  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || t('common.systemWide');
 
   const recentStats = useMemo(() => {
     const total = recentActions.length;
@@ -487,10 +497,10 @@ export const HealingActionsPage = ({ onNavigate }) => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Hành Động Tự Phục Hồi
+              {t('healingActions.header.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Giám sát chu trình tự phục hồi MAPE-K &amp; tiến trình can thiệp trực tiếp trên cụm{' '}
+              {t('healingActions.header.subtitlePrefix')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
             </p>
           </div>
@@ -502,10 +512,10 @@ export const HealingActionsPage = ({ onNavigate }) => {
               type="button"
               onClick={() => onNavigate('/dashboard/self-healing/history')}
               style={actionBtnStyle('emerald', false)}
-              title="Xem lịch sử phục hồi và phân tích MTTR"
+              title={t('healingActions.header.historyTitle')}
             >
               <Clock size={14} />
-              <span>Lịch sử phục hồi &rarr;</span>
+              <span>{t('healingActions.header.historyBtn')}</span>
             </button>
           )}
 
@@ -516,16 +526,16 @@ export const HealingActionsPage = ({ onNavigate }) => {
             style={actionBtnStyle('default', isRefreshing || isLoading)}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>{isRefreshing ? 'Đang đồng bộ...' : 'Làm mới'}</span>
+            <span>{isRefreshing ? t('common.syncing') : t('common.refresh')}</span>
           </button>
         </div>
       </div>
 
       {/* Hàng 4 Thẻ KPI Tóm Tắt */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div style={kpiCardStyle('#3B82F6')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐANG THỰC THI</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('healingActions.kpi.runningTitle')}</span>
             <Activity size={14} color="#3B82F6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -533,14 +543,14 @@ export const HealingActionsPage = ({ onNavigate }) => {
               {runningActions.length}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#64748B' }}>
-              {runningActions.length > 0 ? 'Tiến trình đang chạy' : 'Không có lệnh chờ'}
+              {runningActions.length > 0 ? t('healingActions.kpi.runningActive') : t('healingActions.kpi.runningIdle')}
             </span>
           </div>
         </div>
 
         <div style={kpiCardStyle('#059669')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>HOÀN TẤT GẦN ĐÂY</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('healingActions.kpi.recentTitle')}</span>
             <CheckCircle2 size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -548,14 +558,14 @@ export const HealingActionsPage = ({ onNavigate }) => {
               {recentStats.total}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
-              {recentStats.succeeded} thành công
+              {t('healingActions.kpi.recentSucceeded', { count: recentStats.succeeded })}
             </span>
           </div>
         </div>
 
         <div style={kpiCardStyle(recentStats.failed > 0 ? '#EF4444' : '#10B981')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỶ LỆ THÀNH CÔNG</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('healingActions.kpi.rateTitle')}</span>
             <ShieldCheck size={14} color={recentStats.failed > 0 ? '#EF4444' : '#10B981'} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -563,14 +573,14 @@ export const HealingActionsPage = ({ onNavigate }) => {
               {recentStats.rate}%
             </span>
             <span style={{ fontSize: '0.7rem', color: recentStats.failed > 0 ? '#DC2626' : '#64748B' }}>
-              {recentStats.failed > 0 ? `${recentStats.failed} thất bại` : 'Độ tin cậy cao'}
+              {recentStats.failed > 0 ? t('healingActions.kpi.rateFailed', { count: recentStats.failed }) : t('healingActions.kpi.rateHighReliability')}
             </span>
           </div>
         </div>
 
         <div style={kpiCardStyle('#10B981')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>VÒNG LẶP MAPE-K</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('healingActions.kpi.mapekTitle')}</span>
             <Zap size={14} color="#10B981" />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
@@ -589,7 +599,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
               }}
             >
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
-              Đang hoạt động
+              {t('healingActions.kpi.mapekActive')}
             </span>
           </div>
         </div>
@@ -609,10 +619,10 @@ export const HealingActionsPage = ({ onNavigate }) => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
           <div>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Tiến Trình 5 Giai Đoạn Của Vòng Lặp MAPE-K
+              {t('healingActions.mapek.title')}
             </h3>
             <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Chu trình phản hồi khép kín tự khắc phục sự cố không làm gián đoạn dịch vụ
+              {t('healingActions.mapek.subtitle')}
             </p>
           </div>
           <span
@@ -627,7 +637,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
               border: '1px solid #A7F3D0',
             }}
           >
-            AUTONOMOUS LOOP: HOẠT ĐỘNG
+            {t('healingActions.mapek.badge')}
           </span>
         </div>
 
@@ -696,7 +706,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Activity size={17} color="#059669" />
               <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Các Tiến Trình Can Thiệp Đang Diễn Ra
+                {t('healingActions.running.title')}
               </h3>
               <span
                 style={{
@@ -710,11 +720,11 @@ export const HealingActionsPage = ({ onNavigate }) => {
                   border: runningActions.length > 0 ? '1px solid #BFDBFE' : '1px solid #E2E8F0',
                 }}
               >
-                {runningActions.length} Đang thực thi
+                {t('healingActions.running.badge', { count: runningActions.length })}
               </span>
             </div>
             <p style={{ fontSize: '0.76rem', color: '#64748B', margin: '3px 0 0 0' }}>
-              Lệnh can thiệp tự động đang được áp dụng trực tiếp lên Pods và Kubernetes API của cụm
+              {t('healingActions.running.subtitle')}
             </p>
           </div>
         </div>
@@ -746,11 +756,11 @@ export const HealingActionsPage = ({ onNavigate }) => {
                 <ShieldCheck size={26} color="#059669" />
               </div>
               <div style={{ fontWeight: 800, color: '#0F172A', marginBottom: '4px', fontSize: '0.98rem' }}>
-                Cụm Kubernetes Đang Vận Hành Ổn Định
+                {t('healingActions.running.emptyTitle')}
               </div>
               <p style={{ fontSize: '0.8rem', color: '#64748B', maxWidth: '520px', margin: '0 auto 16px auto', lineHeight: 1.5 }}>
-                Hiện không có can thiệp tự phục hồi nào đang chạy ngầm trên cụm{' '}
-                <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>. Toàn bộ dịch vụ và Pods đều ở trạng thái an toàn.
+                {t('healingActions.running.emptyDescPrefix')}{' '}
+                <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>. {t('healingActions.running.emptyDescSuffix')}
               </p>
 
               {/* Quick Navigation Pills */}
@@ -763,7 +773,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
                       style={actionBtnStyle('default', false)}
                     >
                       <Clock size={14} color="#2563EB" />
-                      <span>Lịch sử phục hồi &amp; MTTR &rarr;</span>
+                      <span>{t('healingActions.running.navHistory')}</span>
                     </button>
 
                     <button
@@ -772,7 +782,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
                       style={actionBtnStyle('default', false)}
                     >
                       <Shield size={14} color="#059669" />
-                      <span>Chính sách tự động &rarr;</span>
+                      <span>{t('healingActions.running.navPolicies')}</span>
                     </button>
 
                     <button
@@ -781,7 +791,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
                       style={actionBtnStyle('default', false)}
                     >
                       <CheckCircle2 size={14} color="#D97706" />
-                      <span>Cổng phê duyệt HITL &rarr;</span>
+                      <span>{t('healingActions.running.navApprovals')}</span>
                     </button>
                   </>
                 )}
@@ -807,7 +817,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
                         {act.id}
                       </span>
                       <span style={{ fontSize: '0.74rem', color: '#64748B' }}>
-                        &bull; Mục tiêu: <strong style={{ color: '#0F172A' }}>{act.service}</strong> ({act.namespace})
+                        &bull; {t('healingActions.running.targetLabel')} <strong style={{ color: '#0F172A' }}>{act.service}</strong> ({act.namespace})
                       </span>
                       <span
                         style={{
@@ -838,10 +848,10 @@ export const HealingActionsPage = ({ onNavigate }) => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: '#2563EB' }}>
-                        TIẾN ĐỘ: {act.progress}%
+                        {t('healingActions.running.progressLabel', { pct: act.progress })}
                       </div>
                       <div style={{ fontSize: '0.68rem', color: '#64748B' }}>
-                        Thời gian: {act.elapsed} &bull; {act.policy}
+                        {t('healingActions.running.durationLabel', { elapsed: act.elapsed, policy: act.policy })}
                       </div>
                     </div>
 
@@ -865,10 +875,10 @@ export const HealingActionsPage = ({ onNavigate }) => {
                           fontWeight: 700,
                           cursor: operatingActionId === act.rawId ? 'not-allowed' : 'pointer',
                         }}
-                        title="Hủy bỏ can thiệp này ngay lập tức"
+                        title={t('healingActions.running.abortTitle')}
                       >
                         <XCircle size={13} />
-                        <span>{operatingActionId === act.rawId ? 'Đang hủy...' : 'Dừng can thiệp'}</span>
+                        <span>{operatingActionId === act.rawId ? t('healingActions.running.aborting') : t('healingActions.running.abortBtn')}</span>
                       </button>
                     )}
                   </div>
@@ -907,7 +917,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Clock size={17} color="#059669" />
               <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Các Can Thiệp Tự Phục Hồi Vừa Hoàn Tất
+                {t('healingActions.recent.title')}
               </h3>
               <span
                 style={{
@@ -921,11 +931,11 @@ export const HealingActionsPage = ({ onNavigate }) => {
                   border: '1px solid #A7F3D0',
                 }}
               >
-                {recentActions.length} mới nhất
+                {t('healingActions.recent.badge', { count: recentActions.length })}
               </span>
             </div>
             <p style={{ fontSize: '0.76rem', color: '#64748B', margin: '3px 0 0 0' }}>
-              Nhật ký các hành động tự phục hồi vừa thực thi xong trên các Pods / Deployments trong cụm
+              {t('healingActions.recent.subtitle')}
             </p>
           </div>
 
@@ -935,7 +945,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
               onClick={() => onNavigate('/dashboard/self-healing/history')}
               style={actionBtnStyle('default', false)}
             >
-              <span>Toàn bộ lịch sử &amp; MTTR</span>
+              <span>{t('healingActions.recent.allHistoryBtn')}</span>
               <ChevronRight size={14} />
             </button>
           )}
@@ -943,7 +953,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
 
         {recentActions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '28px 16px', color: '#64748B', fontSize: '0.825rem', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px dashed #CBD5E1' }}>
-            Chưa ghi nhận hành động tự phục hồi nào trong cơ sở dữ liệu.
+            {t('healingActions.recent.empty')}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -953,7 +963,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
               const badgeBg = isSuccess ? '#ECFDF5' : isFailed ? '#FEF2F2' : '#F1F5F9';
               const badgeColor = isSuccess ? '#047857' : isFailed ? '#DC2626' : '#64748B';
               const badgeBorder = isSuccess ? '#A7F3D0' : isFailed ? '#FECACA' : '#CBD5E1';
-              const badgeText = isSuccess ? 'Thành công' : isFailed ? 'Thất bại' : act.executionStatus;
+              const badgeText = isSuccess ? t('healingActions.recent.succeeded') : isFailed ? t('healingActions.recent.failed') : act.executionStatus;
 
               return (
                 <div
@@ -1005,7 +1015,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
                         {badgeText}
                       </span>
                       <span style={{ fontSize: '0.74rem', color: '#64748B' }}>
-                        Mục tiêu: <strong style={{ color: '#047857', fontFamily: 'var(--font-mono)' }}>{act.service}</strong>{' '}
+                        {t('healingActions.recent.targetLabel')} <strong style={{ color: '#047857', fontFamily: 'var(--font-mono)' }}>{act.service}</strong>{' '}
                         <span style={{ color: '#94A3B8' }}>({act.namespace})</span>
                       </span>
                     </div>
@@ -1021,11 +1031,11 @@ export const HealingActionsPage = ({ onNavigate }) => {
 
                   <div style={{ textAlign: 'right', minWidth: '130px', fontFamily: 'var(--font-mono)' }}>
                     <div style={{ fontSize: '0.74rem', color: '#64748B' }}>
-                      Thời gian: <strong style={{ color: '#0F172A' }}>{act.elapsed}</strong>
+                      {t('healingActions.recent.durationLabel')} <strong style={{ color: '#0F172A' }}>{act.elapsed}</strong>
                     </div>
                     {act.rawItem?.created_at && (
                       <div style={{ fontSize: '0.68rem', color: '#94A3B8', marginTop: '2px' }}>
-                        {new Date(act.rawItem.created_at).toLocaleString('vi-VN')}
+                        {new Date(act.rawItem.created_at).toLocaleString(getIntlLocale(i18nInstance.language))}
                       </div>
                     )}
                   </div>
@@ -1055,10 +1065,10 @@ export const HealingActionsPage = ({ onNavigate }) => {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
             <Activity size={15} color="#2563EB" />
-            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A' }}>1. Hành Động Tự Sửa</span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A' }}>{t('healingActions.guide.card1Title')}</span>
           </div>
           <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-            Theo dõi thời gian thực các can thiệp đang chạy trên cụm K8s và chu trình MAPE-K. Hỗ trợ ngắt dừng khẩn cấp can thiệp.
+            {t('healingActions.guide.card1Desc')}
           </p>
         </div>
 
@@ -1075,10 +1085,10 @@ export const HealingActionsPage = ({ onNavigate }) => {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
             <Clock size={15} color="#059669" />
-            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A' }}>2. Lịch Sử Phục Hồi</span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A' }}>{t('healingActions.guide.card2Title')}</span>
           </div>
           <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-            Toàn bộ nhật ký hành động đã hoàn tất/thất bại, lọc theo ngày/tháng/năm và biểu đồ phân tích thời gian hồi phục MTTR.
+            {t('healingActions.guide.card2Desc')}
           </p>
         </div>
 
@@ -1095,10 +1105,10 @@ export const HealingActionsPage = ({ onNavigate }) => {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
             <CheckCircle2 size={15} color="#D97706" />
-            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A' }}>3. Cổng Phê Duyệt (HITL)</span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A' }}>{t('healingActions.guide.card3Title')}</span>
           </div>
           <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-            Cơ chế bảo vệ Human-in-the-Loop cho phép kỹ sư vận hành phê duyệt các hành động rủi ro cao trước khi áp dụng.
+            {t('healingActions.guide.card3Desc')}
           </p>
         </div>
       </div>
@@ -1162,7 +1172,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#991B1B' }}>
-                    Xác Nhận Dừng Can Thiệp Tự Động
+                    {t('healingActions.abortModal.title')}
                   </h3>
                   <span style={{ fontSize: '0.6875rem', color: '#EF4444', fontFamily: 'var(--font-mono)' }}>
                     {confirmAbortModal.action.id}
@@ -1191,19 +1201,19 @@ export const HealingActionsPage = ({ onNavigate }) => {
             {/* Modal Body */}
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--dash-text-primary)', lineHeight: 1.5 }}>
-                Bạn có chắc chắn muốn dừng khẩn cấp can thiệp tự phục hồi đang chạy trên dịch vụ{' '}
+                {t('healingActions.abortModal.confirmText')}{' '}
                 <strong>&ldquo;{confirmAbortModal.action.service}&rdquo;</strong>?
               </p>
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)', marginBottom: '6px' }}>
-                  Lý do dừng khẩn cấp:
+                  {t('healingActions.abortModal.reasonLabel')}
                 </label>
                 <input
                   type="text"
                   value={confirmAbortModal.reason}
                   onChange={(e) => setConfirmAbortModal((prev) => ({ ...prev, reason: e.target.value }))}
-                  placeholder="Nhập lý do dừng can thiệp..."
+                  placeholder={t('healingActions.abortModal.reasonPlaceholder')}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -1227,7 +1237,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
                   lineHeight: 1.4,
                 }}
               >
-                Hành động sẽ chuyển sang trạng thái <strong>ĐÃ HỦY BỎ (ABORTED)</strong> và ngắt tiến trình can thiệp trên cụm Kubernetes.
+                {t('healingActions.abortModal.warningPrefix')} <strong>{t('healingActions.abortModal.warningStatus')}</strong> {t('healingActions.abortModal.warningSuffix')}
               </div>
             </div>
 
@@ -1256,7 +1266,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
                   cursor: 'pointer',
                 }}
               >
-                Hủy
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -1277,7 +1287,7 @@ export const HealingActionsPage = ({ onNavigate }) => {
                 }}
               >
                 <XCircle size={14} />
-                <span>{operatingActionId === confirmAbortModal.action.rawId ? 'Đang dừng...' : 'Dừng Can Thiệp Ngay'}</span>
+                <span>{operatingActionId === confirmAbortModal.action.rawId ? t('healingActions.abortModal.stopping') : t('healingActions.abortModal.confirmBtn')}</span>
               </button>
             </div>
           </div>

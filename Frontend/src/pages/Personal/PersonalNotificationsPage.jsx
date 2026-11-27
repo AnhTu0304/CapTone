@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Bell,
   CheckCheck,
@@ -15,6 +16,7 @@ import {
   Cpu,
 } from 'lucide-react';
 import { personalPortalService } from '../../services/personalPortalService';
+import { getIntlLocale } from '../../i18n';
 
 const cleanTitle = (title) => {
   if (!title) return '';
@@ -27,42 +29,42 @@ const getServiceName = (item) => {
   return match ? match[1] : null;
 };
 
-const getTypeConfig = (type) => {
+const getTypeConfig = (type, t) => {
   switch (type) {
     case 'INFRASTRUCTURE':
       return {
         bg: '#FEF2F2',
         color: '#DC2626',
         icon: <Server size={18} />,
-        label: 'Sự Cố K8s',
+        label: t('notifications.types.INFRASTRUCTURE'),
       };
     case 'SECURITY':
       return {
         bg: '#FFF7ED',
         color: '#EA580C',
         icon: <ShieldAlert size={18} />,
-        label: 'Bảo Mật',
+        label: t('notifications.types.SECURITY'),
       };
     case 'BROADCAST':
       return {
         bg: '#F5F3FF',
         color: '#7C3AED',
         icon: <Radio size={18} />,
-        label: 'Phát Thanh Admin',
+        label: t('notifications.types.BROADCAST'),
       };
     case 'INVITATION':
       return {
         bg: '#EFF6FF',
         color: '#2563EB',
         icon: <Building2 size={18} />,
-        label: 'Lời Mời Company',
+        label: t('notifications.types.INVITATION'),
       };
     case 'ROLE':
       return {
         bg: '#F0F9FF',
         color: '#0284C7',
         icon: <ShieldCheck size={18} />,
-        label: 'Thay Đổi Vai Trò',
+        label: t('notifications.types.ROLE'),
       };
     case 'SYSTEM':
     default:
@@ -70,18 +72,18 @@ const getTypeConfig = (type) => {
         bg: '#ECFDF5',
         color: '#059669',
         icon: <Cpu size={18} />,
-        label: 'Hệ Thống Nền Tảng',
+        label: t('notifications.types.SYSTEM'),
       };
   }
 };
 
-const formatDisplayTime = (timeStr, fallbackTime) => {
+const formatDisplayTime = (timeStr, fallbackTime, intlLocale = 'vi-VN') => {
   if (fallbackTime && !fallbackTime.includes('T')) return fallbackTime;
   if (!timeStr) return '';
   try {
     const d = new Date(timeStr);
     if (isNaN(d.getTime())) return timeStr;
-    return d.toLocaleString('vi-VN', {
+    return d.toLocaleString(intlLocale, {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
@@ -95,6 +97,8 @@ const formatDisplayTime = (timeStr, fallbackTime) => {
 };
 
 export const PersonalNotificationsPage = ({ onNavigate }) => {
+  const { t, i18n } = useTranslation('portal');
+  const intlLocale = getIntlLocale(i18n.language);
   const [notifications, setNotifications] = useState(() => personalPortalService.getNotifications());
   const [companies, setCompanies] = useState(() => personalPortalService.getMyCompanies());
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'UNREAD' | 'READ'
@@ -175,10 +179,10 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-            Trung Tâm Thông Báo Cá Nhân
+            {t('notifications.title')}
           </h2>
           <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
-            Xem thông báo lời mời Company, cảnh báo đăng nhập và cập nhật hệ thống. Bạn có {unreadCount} tin chưa đọc.
+            {t('notifications.subtitle', { count: unreadCount })}
           </p>
         </div>
 
@@ -202,7 +206,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
               }}
             >
               <CheckCheck size={16} />
-              <span>Đánh Dấu Tất Cả Đã Đọc</span>
+              <span>{t('notifications.markAllRead')}</span>
             </button>
           )}
 
@@ -224,7 +228,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
             }}
           >
             <Settings size={15} />
-            <span>Cài Đặt Nhận Tin</span>
+            <span>{t('notifications.settingsBtn')}</span>
           </button>
         </div>
       </div>
@@ -244,15 +248,15 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
       >
         <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Filter size={15} />
-          <span>Bộ lọc:</span>
+          <span>{t('notifications.filters.label')}</span>
         </span>
 
         {/* Status Filter */}
         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
           {[
-            { id: 'ALL', label: `Tất cả (${notifications.length})` },
-            { id: 'UNREAD', label: `Chưa đọc (${unreadCount})` },
-            { id: 'READ', label: `Đã đọc (${notifications.length - unreadCount})` },
+            { id: 'ALL', label: t('notifications.filters.all', { count: notifications.length }) },
+            { id: 'UNREAD', label: t('notifications.filters.unread', { count: unreadCount }) },
+            { id: 'READ', label: t('notifications.filters.read', { count: notifications.length - unreadCount }) },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -289,20 +293,20 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
             maxWidth: '100%',
           }}
         >
-          <option value="ALL">Tất cả loại thông báo</option>
-          <option value="INFRASTRUCTURE">Sự cố Hạ tầng K8s (Khẩn cấp)</option>
-          <option value="BROADCAST">Phát thanh Quản trị viên</option>
-          <option value="SYSTEM">Hệ thống AI / Nền tảng</option>
-          <option value="SECURITY">Cảnh báo bảo mật</option>
-          <option value="INVITATION">Lời mời Company</option>
-          <option value="ROLE">Thay đổi vai trò</option>
+          <option value="ALL">{t('notifications.filters.typeAll')}</option>
+          <option value="INFRASTRUCTURE">{t('notifications.filters.typeInfrastructure')}</option>
+          <option value="BROADCAST">{t('notifications.filters.typeBroadcast')}</option>
+          <option value="SYSTEM">{t('notifications.filters.typeSystem')}</option>
+          <option value="SECURITY">{t('notifications.filters.typeSecurity')}</option>
+          <option value="INVITATION">{t('notifications.filters.typeInvitation')}</option>
+          <option value="ROLE">{t('notifications.filters.typeRole')}</option>
         </select>
       </div>
 
       {/* Notifications List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {filtered.map((item) => {
-          const typeConf = getTypeConfig(item.type);
+          const typeConf = getTypeConfig(item.type, t);
           return (
               <div
                 key={item.id}
@@ -367,11 +371,11 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
                           color: '#FFFFFF',
                         }}
                       >
-                        MỚI
+                        {t('notifications.item.newBadge')}
                       </span>
                     )}
                     <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                      {formatDisplayTime(item.createdAt, item.time)}
+                      {formatDisplayTime(item.createdAt, item.time, intlLocale)}
                     </span>
                   </div>
 
@@ -396,7 +400,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
                     }}
                   >
                     <Building2 size={13} color="#475569" />
-                    <span>Công ty: <strong style={{ color: '#0F172A' }}>{getOrgName(item)}</strong></span>
+                    <span>{t('notifications.item.companyLabel')} <strong style={{ color: '#0F172A' }}>{getOrgName(item)}</strong></span>
                   </span>
 
                   <span
@@ -414,7 +418,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
                     }}
                   >
                     <Server size={13} color="#2563EB" />
-                    <span>Cụm K8s: <strong style={{ color: '#1E40AF' }}>{getClusterName(item)}</strong></span>
+                    <span>{t('notifications.item.clusterLabel')} <strong style={{ color: '#1E40AF' }}>{getClusterName(item)}</strong></span>
                   </span>
 
                   {getServiceName(item) && (
@@ -433,7 +437,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
                       }}
                     >
                       <Layers size={13} color="#16A34A" />
-                      <span>Dịch vụ: <strong style={{ color: '#14532D' }}>{getServiceName(item)}</strong></span>
+                      <span>{t('notifications.item.serviceLabel')} <strong style={{ color: '#14532D' }}>{getServiceName(item)}</strong></span>
                     </span>
                   )}
 
@@ -455,7 +459,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
                         cursor: 'pointer',
                       }}
                     >
-                      <span>Xem Sự Cố</span>
+                      <span>{t('notifications.item.viewIncident')}</span>
                       <ExternalLink size={12} />
                     </button>
                   )}
@@ -481,7 +485,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
                       gap: '4px',
                     }}
                   >
-                    <span>Xem Lời Mời Tại Company</span>
+                    <span>{t('notifications.item.viewInvitation')}</span>
                     <ExternalLink size={12} />
                   </button>
                 )}
@@ -494,7 +498,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
                 <button
                   type="button"
                   onClick={() => handleMarkAsRead(item.id)}
-                  title="Đánh dấu đã đọc"
+                  title={t('notifications.item.markReadTitle')}
                   style={{
                     padding: '6px',
                     borderRadius: '6px',
@@ -524,9 +528,9 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
             }}
           >
             <Bell size={36} color="#94A3B8" style={{ margin: '0 auto 12px auto' }} />
-            <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>Không có thông báo nào</div>
+            <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>{t('notifications.empty.title')}</div>
             <p style={{ fontSize: '0.8125rem', margin: '4px 0 0 0' }}>
-              Bạn đã xem hết toàn bộ thông báo hoặc không có tin phù hợp với bộ lọc hiện tại.
+              {t('notifications.empty.desc')}
             </p>
           </div>
         )}
@@ -559,7 +563,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Settings size={20} color="#059669" />
                 <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Cài Đặt Nhận Thông Báo
+                  {t('notifications.settingsModal.title')}
                 </h3>
               </div>
               <button
@@ -584,19 +588,19 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
                   marginBottom: '14px',
                 }}
               >
-                Đã lưu cài đặt thông báo thành công!
+                {t('notifications.settingsModal.savedSuccess')}
               </div>
             )}
 
             <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {[
-                  { key: 'webNotify', label: 'Thông báo trên giao diện Website (In-App)' },
-                  { key: 'emailNotify', label: 'Gửi thông báo qua Email đăng ký' },
-                  { key: 'companyInvitations', label: 'Thông báo lời mời tham gia Company mới' },
-                  { key: 'securityAlerts', label: 'Cảnh báo đăng nhập lạ và thay đổi bảo mật' },
-                  { key: 'criticalAlerts', label: 'Cảnh báo sự cố hạ tầng K8s khẩn cấp' },
-                  { key: 'weeklyDigest', label: 'Bản tin tổng kết hoạt động hàng tuần' },
+                  { key: 'webNotify', label: t('notifications.settingsModal.webNotify') },
+                  { key: 'emailNotify', label: t('notifications.settingsModal.emailNotify') },
+                  { key: 'companyInvitations', label: t('notifications.settingsModal.companyInvitations') },
+                  { key: 'securityAlerts', label: t('notifications.settingsModal.securityAlerts') },
+                  { key: 'criticalAlerts', label: t('notifications.settingsModal.criticalAlerts') },
+                  { key: 'weeklyDigest', label: t('notifications.settingsModal.weeklyDigest') },
                 ].map((item) => (
                   <label
                     key={item.key}
@@ -635,7 +639,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
                     cursor: 'pointer',
                   }}
                 >
-                  Đóng
+                  {t('notifications.settingsModal.close')}
                 </button>
                 <button
                   type="submit"
@@ -650,7 +654,7 @@ export const PersonalNotificationsPage = ({ onNavigate }) => {
                     cursor: 'pointer',
                   }}
                 >
-                  Lưu Cài Đặt
+                  {t('notifications.settingsModal.save')}
                 </button>
               </div>
             </form>

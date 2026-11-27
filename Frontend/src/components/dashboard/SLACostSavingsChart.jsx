@@ -1,4 +1,6 @@
 import React, { useState, useRef, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../i18n';
 import {
   TrendingUp,
   Activity,
@@ -41,8 +43,8 @@ function getSmoothCurve(pts) {
  * 3. Kết Quả Action (Thành Công / Lỗi / Hủy): Cột xếp chồng theo thời gian + đường Tỷ lệ Thành Công (%).
  */
 export const SLACostSavingsChart = ({
-  title = 'Cam Kết & Xu Hướng SLA Uptime',
-  subtitle = 'Đối chiếu thời gian hoạt động thực tế với cam kết chuẩn SLA 99.9% và số lượng sự cố tự phục hồi',
+  title: titleProp,
+  subtitle: subtitleProp,
   className = '',
   height = 275,
   trendsData = null,
@@ -51,6 +53,11 @@ export const SLACostSavingsChart = ({
   showSummaryCards = false,
   initialMode = 'SLA',
 }) => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
+  const title = titleProp ?? t('charts.slaChart.title');
+  const subtitle = subtitleProp ?? t('charts.slaChart.subtitle');
+
   const [chartMode, setChartMode] = useState(initialMode); // 'SLA' | 'AUTONOMOUS' | 'ACTIONS'
   const isSlaMode = chartMode === 'SLA';
   const isAutoMode = chartMode === 'AUTONOMOUS';
@@ -62,12 +69,12 @@ export const SLACostSavingsChart = ({
   const slaData = useMemo(() => {
     if (Array.isArray(trendsData) && trendsData.length > 0) return trendsData;
     return [
-      { month: 'Tuần 1', uptime: 100.0, slaTarget: 99.9, preventedIncidents: 0, downtimeAvoidedHours: 0.0, mttrSeconds: 0, autonomousHealingRate: 100.0, totalActions: 0, succeededActions: 0, failedActions: 0, cancelledActions: 0 },
-      { month: 'Tuần 2', uptime: 100.0, slaTarget: 99.9, preventedIncidents: 0, downtimeAvoidedHours: 0.0, mttrSeconds: 0, autonomousHealingRate: 100.0, totalActions: 0, succeededActions: 0, failedActions: 0, cancelledActions: 0 },
-      { month: 'Tuần 3', uptime: 100.0, slaTarget: 99.9, preventedIncidents: 0, downtimeAvoidedHours: 0.0, mttrSeconds: 0, autonomousHealingRate: 100.0, totalActions: 0, succeededActions: 0, failedActions: 0, cancelledActions: 0 },
-      { month: 'Tuần 4', uptime: 100.0, slaTarget: 99.9, preventedIncidents: 0, downtimeAvoidedHours: 0.0, mttrSeconds: 0, autonomousHealingRate: 100.0, totalActions: 0, succeededActions: 0, failedActions: 0, cancelledActions: 0 },
+      { month: t('charts.slaChart.weekLabel', { num: 1 }), uptime: 100.0, slaTarget: 99.9, preventedIncidents: 0, downtimeAvoidedHours: 0.0, mttrSeconds: 0, autonomousHealingRate: 100.0, totalActions: 0, succeededActions: 0, failedActions: 0, cancelledActions: 0 },
+      { month: t('charts.slaChart.weekLabel', { num: 2 }), uptime: 100.0, slaTarget: 99.9, preventedIncidents: 0, downtimeAvoidedHours: 0.0, mttrSeconds: 0, autonomousHealingRate: 100.0, totalActions: 0, succeededActions: 0, failedActions: 0, cancelledActions: 0 },
+      { month: t('charts.slaChart.weekLabel', { num: 3 }), uptime: 100.0, slaTarget: 99.9, preventedIncidents: 0, downtimeAvoidedHours: 0.0, mttrSeconds: 0, autonomousHealingRate: 100.0, totalActions: 0, succeededActions: 0, failedActions: 0, cancelledActions: 0 },
+      { month: t('charts.slaChart.weekLabel', { num: 4 }), uptime: 100.0, slaTarget: 99.9, preventedIncidents: 0, downtimeAvoidedHours: 0.0, mttrSeconds: 0, autonomousHealingRate: 100.0, totalActions: 0, succeededActions: 0, failedActions: 0, cancelledActions: 0 },
     ];
-  }, [trendsData]);
+  }, [trendsData, t]);
 
   const actionsSeries = useMemo(() => {
     if (Array.isArray(actionTrends) && actionTrends.length > 0) {
@@ -165,7 +172,9 @@ export const SLACostSavingsChart = ({
 
   const leftTicks = isSlaMode ? incidentTicks : isAutoMode ? mttrTicks : actionTicks;
   const targetLineY = isSlaMode ? slaTargetY : autoTargetY;
-  const targetLineLabel = isSlaMode ? 'SLA Mục tiêu (99.9%)' : 'Mục tiêu Tự Trị (>95.0%)';
+  const targetLineLabel = isSlaMode
+    ? t('charts.slaChart.targetSla')
+    : t('charts.slaChart.targetAuto');
 
   const points = useMemo(() => {
     return data.map((d, i) => {
@@ -280,16 +289,16 @@ export const SLACostSavingsChart = ({
               {isSlaMode
                 ? title
                 : isAutoMode
-                  ? 'Hiệu Năng AI Tự Trị & Tốc Độ Hồi Sinh MTTR'
-                  : 'Xu Hướng Kết Quả Action (Thành Công / Thất Bại / Bị Hủy)'}
+                  ? t('charts.slaChart.autoTitle')
+                  : t('charts.slaChart.actionsTitle')}
             </h3>
           </div>
           <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '3px 0 0 0', lineHeight: 1.4, maxWidth: '600px' }}>
             {isSlaMode
               ? subtitle
               : isAutoMode
-                ? 'Đánh giá tốc độ phục hồi sự cố trung bình (MTTR giây) và tỷ lệ can thiệp tự động (AUTO)'
-                : 'Theo dõi diễn biến số lượng hành động xử lý theo ngày/tháng và tỷ lệ thành công thực tế (COMPLETED vs FAILED vs CANCELLED)'}
+                ? t('charts.slaChart.autoSubtitle')
+                : t('charts.slaChart.actionsSubtitle')}
           </p>
         </div>
 
@@ -325,7 +334,7 @@ export const SLACostSavingsChart = ({
               }}
             >
               <ShieldCheck size={14} color={isSlaMode ? '#0284C7' : '#64748B'} />
-              <span>1. SLA Uptime</span>
+              <span>{t('charts.slaChart.modeSla')}</span>
             </button>
             <button
               type="button"
@@ -346,7 +355,7 @@ export const SLACostSavingsChart = ({
               }}
             >
               <Activity size={14} color={isAutoMode ? '#7C3AED' : '#64748B'} />
-              <span>2. MTTR & Tự Trị</span>
+              <span>{t('charts.slaChart.modeAuto')}</span>
             </button>
             <button
               type="button"
@@ -367,7 +376,7 @@ export const SLACostSavingsChart = ({
               }}
             >
               <BarChart2 size={14} color={isActionsMode ? '#059669' : '#64748B'} />
-              <span>3. Kết Quả Action</span>
+              <span>{t('charts.slaChart.modeActions')}</span>
             </button>
           </div>
 
@@ -376,19 +385,19 @@ export const SLACostSavingsChart = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.72rem', flexWrap: 'wrap' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#047857', fontWeight: 600 }}>
                 <span style={{ width: '9px', height: '9px', borderRadius: '2px', backgroundColor: '#10B981', display: 'inline-block' }} />
-                Thành công
+                {t('charts.slaChart.legendSuccess')}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#DC2626', fontWeight: 600 }}>
                 <span style={{ width: '9px', height: '9px', borderRadius: '2px', backgroundColor: '#EF4444', display: 'inline-block' }} />
-                Thất bại
+                {t('charts.slaChart.legendFailed')}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#D97706', fontWeight: 600 }}>
                 <span style={{ width: '9px', height: '9px', borderRadius: '2px', backgroundColor: '#F59E0B', display: 'inline-block' }} />
-                Bị hủy / HITL
+                {t('charts.slaChart.legendCancelled')}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#1D4ED8', fontWeight: 600 }}>
                 <span style={{ width: '14px', height: '2.5px', backgroundColor: '#1D4ED8', display: 'inline-block' }} />
-                Tỷ lệ đạt (%)
+                {t('charts.slaChart.legendSuccessRate')}
               </span>
             </div>
           ) : (
@@ -404,7 +413,7 @@ export const SLACostSavingsChart = ({
                   }}
                 />
                 <span style={{ color: '#334155', fontWeight: 500 }}>
-                  {isSlaMode ? 'Sự cố tự phục hồi (vụ)' : 'Tốc độ hồi sinh MTTR (giây)'}
+                  {isSlaMode ? t('charts.slaChart.legendSlaBar') : t('charts.slaChart.legendAutoBar')}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -418,7 +427,7 @@ export const SLACostSavingsChart = ({
                   }}
                 />
                 <span style={{ color: '#334155', fontWeight: 500 }}>
-                  {isSlaMode ? 'Uptime thực tế (%)' : 'Tỷ lệ AI tự phục hồi (%)'}
+                  {isSlaMode ? t('charts.slaChart.legendSlaLine') : t('charts.slaChart.legendAutoLine')}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -653,7 +662,9 @@ export const SLACostSavingsChart = ({
             const barH = isSlaMode
               ? incidentVal > 0 ? baselineY - barTopY : 0
               : mttrVal > 0 ? baselineY - barTopY : 0;
-            const badgeText = isSlaMode ? `${incidentVal} vụ` : `${mttrVal}s`;
+            const badgeText = isSlaMode
+              ? t('charts.slaChart.barBadgeIncident', { count: incidentVal })
+              : `${mttrVal}s`;
             const badgeW = Math.max(34, badgeText.length * 6 + 10);
 
             return (
@@ -794,63 +805,71 @@ export const SLACostSavingsChart = ({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: '4px' }}>
               <span style={{ fontWeight: 700, color: '#38BDF8', fontSize: '0.78rem' }}>
-                Mốc: {hoveredData.month}
+                {t('charts.slaChart.tooltipMilestone', { label: hoveredData.month })}
               </span>
               <span style={{ color: '#94A3B8', fontWeight: 500 }}>
                 {isActionsMode
-                  ? `Đạt ${hoveredData.successRate}%`
+                  ? t('charts.slaChart.tooltipPassRate', { rate: hoveredData.successRate })
                   : isSlaMode
-                    ? `SLA: ${hoveredData.slaTarget}%`
-                    : 'Mục tiêu: >95%'}
+                    ? t('charts.slaChart.tooltipSlaTarget', { target: hoveredData.slaTarget })
+                    : t('charts.slaChart.tooltipAutoTarget')}
               </span>
             </div>
 
             {isActionsMode ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94A3B8' }}>Tổng Action:</span>
-                  <strong>{hoveredData.total} tác vụ</strong>
+                  <span style={{ color: '#94A3B8' }}>{t('charts.slaChart.tooltipTotalAction')}</span>
+                  <strong>{t('charts.slaChart.tooltipTotalTasks', { count: hoveredData.total })}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#34D399' }}>• Thành công (COMPLETED):</span>
+                  <span style={{ color: '#34D399' }}>{t('charts.slaChart.tooltipCompleted')}</span>
                   <strong style={{ color: '#34D399' }}>{hoveredData.succeeded}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#F87171' }}>• Thất bại (FAILED):</span>
+                  <span style={{ color: '#F87171' }}>{t('charts.slaChart.tooltipFailed')}</span>
                   <strong style={{ color: '#F87171' }}>{hoveredData.failed}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#FBBF24' }}>• Bị hủy (CANCELLED):</span>
+                  <span style={{ color: '#FBBF24' }}>{t('charts.slaChart.tooltipCancelled')}</span>
                   <strong style={{ color: '#FBBF24' }}>{hoveredData.cancelled}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '4px', marginTop: '2px' }}>
-                  <span style={{ color: '#94A3B8' }}>Thời gian xử lý TB:</span>
+                  <span style={{ color: '#94A3B8' }}>{t('charts.slaChart.tooltipAvgExec')}</span>
                   <strong>{hoveredData.avgDurationSeconds}s</strong>
                 </div>
               </div>
             ) : isSlaMode ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94A3B8' }}>Uptime Thực Tế:</span>
+                  <span style={{ color: '#94A3B8' }}>{t('charts.slaChart.tooltipActualUptime')}</span>
                   <strong style={{ color: '#38BDF8' }}>{hoveredData.uptime}%</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94A3B8' }}>Sự Cố Tự Phục Hồi:</span>
-                  <strong style={{ color: '#34D399' }}>{hoveredData.preventedIncidents} sự cố</strong>
+                  <span style={{ color: '#94A3B8' }}>{t('charts.slaChart.tooltipSelfHealed')}</span>
+                  <strong style={{ color: '#34D399' }}>
+                    {t('charts.slaChart.tooltipIncidentsCount', { count: hoveredData.preventedIncidents })}
+                  </strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94A3B8' }}>Downtime Tránh Được:</span>
-                  <strong>{hoveredData.downtimeAvoidedHours ?? (Number(hoveredData.preventedIncidents || 0) * 0.3).toFixed(1)} giờ</strong>
+                  <span style={{ color: '#94A3B8' }}>{t('charts.slaChart.tooltipDowntimeAvoided')}</span>
+                  <strong>
+                    {t('charts.slaChart.tooltipHours', {
+                      hours: hoveredData.downtimeAvoidedHours ?? (Number(hoveredData.preventedIncidents || 0) * 0.3).toFixed(1),
+                    })}
+                  </strong>
                 </div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94A3B8' }}>Tốc Độ Hồi Sinh MTTR:</span>
-                  <strong style={{ color: '#C084FC' }}>{hoveredData.mttrSeconds ?? 0} giây</strong>
+                  <span style={{ color: '#94A3B8' }}>{t('charts.slaChart.tooltipMttrSpeed')}</span>
+                  <strong style={{ color: '#C084FC' }}>
+                    {t('charts.slaChart.tooltipSeconds', { sec: hoveredData.mttrSeconds ?? 0 })}
+                  </strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94A3B8' }}>Tỷ Lệ Tự Trị AI:</span>
+                  <span style={{ color: '#94A3B8' }}>{t('charts.slaChart.tooltipAiRate')}</span>
                   <strong style={{ color: '#34D399' }}>{hoveredData.autonomousHealingRate ?? 0}%</strong>
                 </div>
               </div>
@@ -873,9 +892,15 @@ export const SLACostSavingsChart = ({
               <Activity size={22} color="#1D4ED8" strokeWidth={2.2} />
             </div>
             <div>
-              <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700 }}>TỔNG THỜI GIAN VẬN HÀNH</div>
+              <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700 }}>
+                {t('charts.slaChart.summaryOperatingHours')}
+              </div>
               <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '1.25rem' }}>
-                {summary?.totalOperatingHours ? `${summary.totalOperatingHours.toLocaleString('vi-VN')} Giờ` : '720 Giờ'}
+                {summary?.totalOperatingHours
+                  ? t('charts.slaChart.summaryHoursUnit', {
+                      hours: summary.totalOperatingHours.toLocaleString(intlLocale),
+                    })
+                  : t('charts.slaChart.summaryHoursDefault')}
               </div>
             </div>
           </div>
@@ -885,9 +910,11 @@ export const SLACostSavingsChart = ({
               <ShieldCheck size={22} color="#0284C7" strokeWidth={2.2} />
             </div>
             <div>
-              <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700 }}>CAM KẾT THỰC ĐẠT</div>
+              <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700 }}>
+                {t('charts.slaChart.summaryActualUptime')}
+              </div>
               <div style={{ fontWeight: 800, color: '#0284C7', fontSize: '1.25rem' }}>
-                {summary?.actualUptime || '100.00%'} Uptime
+                {t('charts.slaChart.summaryUptimeSuffix', { uptime: summary?.actualUptime || '100.00%' })}
               </div>
             </div>
           </div>
@@ -897,9 +924,13 @@ export const SLACostSavingsChart = ({
               <Wrench size={22} color="#16A34A" strokeWidth={2.2} />
             </div>
             <div>
-              <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700 }}>TỔNG SỰ CỐ ĐÃ XỬ LÝ</div>
+              <div style={{ color: '#64748B', fontSize: '0.75rem', fontWeight: 700 }}>
+                {t('charts.slaChart.summaryTotalResolved')}
+              </div>
               <div style={{ fontWeight: 800, color: '#16A34A', fontSize: '1.25rem' }}>
-                {(summary?.totalIncidentsResolved ?? 0).toLocaleString('vi-VN')} sự cố
+                {t('charts.slaChart.summaryResolvedUnit', {
+                  count: (summary?.totalIncidentsResolved ?? 0).toLocaleString(intlLocale),
+                })}
               </div>
             </div>
           </div>

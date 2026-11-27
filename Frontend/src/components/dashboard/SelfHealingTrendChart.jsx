@@ -1,10 +1,8 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../i18n';
 import {
   Zap,
-  TrendingUp,
-  Clock,
-  CheckCircle2,
-  AlertTriangle
 } from 'lucide-react';
 
 /**
@@ -18,8 +16,8 @@ import {
 export const SelfHealingTrendChart = ({
   actions = [],
   analytics = null,
-  title = 'Xu Hướng Phục Hồi Tự Động & Thời Gian MTTR (24h Qua)',
-  subtitle = 'Hiệu quả khép kín của vòng lặp MAPE-K so sánh với cam kết chuẩn SLA (MTTR < 10 giây)',
+  title: titleProp,
+  subtitle: subtitleProp,
   className = '',
   height = 240,
   timeFilterMode = 'today',
@@ -27,11 +25,20 @@ export const SelfHealingTrendChart = ({
   selectedMonth = null,
   selectedYear = null,
 }) => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
+  const title = titleProp ?? t('charts.healingTrend.title');
+  const subtitle = subtitleProp ?? t('charts.healingTrend.subtitle');
+
   const [hoverIndex, setHoverIndex] = useState(null);
   const svgRef = useRef(null);
 
   // Tính toán các mốc thời gian động (Theo Năm: 12 tháng | Theo Tháng: 6 kỳ | Theo Ngày: 6 khung giờ)
   const data = useMemo(() => {
+    const defaultActionType = t('charts.healingTrend.defaultActionType');
+    const stableSystem = t('charts.healingTrend.stableSystem');
+    const noIncidents = t('charts.healingTrend.noIncidents');
+
     // 1. CHẾ ĐỘ LỌC THEO NĂM: Liệt kê theo 12 THÁNG trong năm
     if (timeFilterMode === 'year' && selectedYear) {
       const yearNum = parseInt(selectedYear, 10);
@@ -57,11 +64,11 @@ export const SelfHealingTrendChart = ({
             ? a.rawItem.attempts[0].duration_ms / 1000
             : (parseFloat(a.elapsed || a.mttr) || a.rawItem?.elapsed_seconds || 1.5);
           totalDurationSec += dur;
-          const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || 'Tự phục hồi';
+          const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || defaultActionType;
           actionTypeCount[typeName] = (actionTypeCount[typeName] || 0) + 1;
         });
 
-        let topAction = 'Hệ thống ổn định';
+        let topAction = stableSystem;
         let maxCount = 0;
         Object.entries(actionTypeCount).forEach(([k, v]) => {
           if (v > maxCount) {
@@ -82,7 +89,7 @@ export const SelfHealingTrendChart = ({
           actions: count,
           avgMttrSeconds: avgMttr,
           successRate,
-          topAction: count > 0 ? topAction : 'Không phát sinh sự cố',
+          topAction: count > 0 ? topAction : noIncidents,
         });
       }
       return months;
@@ -117,11 +124,11 @@ export const SelfHealingTrendChart = ({
             ? a.rawItem.attempts[0].duration_ms / 1000
             : (parseFloat(a.elapsed || a.mttr) || a.rawItem?.elapsed_seconds || 1.5);
           totalDurationSec += dur;
-          const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || 'Tự phục hồi';
+          const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || defaultActionType;
           actionTypeCount[typeName] = (actionTypeCount[typeName] || 0) + 1;
         });
 
-        let topAction = 'Hệ thống ổn định';
+        let topAction = stableSystem;
         let maxCount = 0;
         Object.entries(actionTypeCount).forEach(([k, v]) => {
           if (v > maxCount) {
@@ -142,7 +149,7 @@ export const SelfHealingTrendChart = ({
           actions: count,
           avgMttrSeconds: avgMttr,
           successRate,
-          topAction: count > 0 ? topAction : 'Không phát sinh sự cố',
+          topAction: count > 0 ? topAction : noIncidents,
         });
       }
 
@@ -158,7 +165,7 @@ export const SelfHealingTrendChart = ({
         const mStr = String(d.getMonth() + 1).padStart(2, '0');
         const yNum = d.getFullYear();
         const dayLabel = `${dStr}/${mStr}`;
-        const windowName = `Ngày ${dStr}/${mStr}/${yNum}`;
+        const windowName = t('charts.healingTrend.windowDay', { date: `${dStr}/${mStr}/${yNum}` });
 
         const dayStart = new Date(yNum, d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
         const dayEnd = new Date(yNum, d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
@@ -166,8 +173,8 @@ export const SelfHealingTrendChart = ({
         const dayActions = (actions || []).filter((a) => {
           const itemDate = a.rawItem?.completed_at || a.rawItem?.created_at || a.rawItem?.started_at;
           if (!itemDate) return false;
-          const t = new Date(itemDate).getTime();
-          return t >= dayStart && t <= dayEnd;
+          const tMs = new Date(itemDate).getTime();
+          return tMs >= dayStart && tMs <= dayEnd;
         });
 
         const count = dayActions.length;
@@ -179,11 +186,11 @@ export const SelfHealingTrendChart = ({
             ? a.rawItem.attempts[0].duration_ms / 1000
             : (parseFloat(a.elapsed || a.mttr) || a.rawItem?.elapsed_seconds || 1.5);
           totalDurationSec += dur;
-          const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || 'Tự phục hồi';
+          const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || defaultActionType;
           actionTypeCount[typeName] = (actionTypeCount[typeName] || 0) + 1;
         });
 
-        let topAction = 'Hệ thống ổn định';
+        let topAction = stableSystem;
         let maxCount = 0;
         Object.entries(actionTypeCount).forEach(([k, v]) => {
           if (v > maxCount) {
@@ -204,7 +211,7 @@ export const SelfHealingTrendChart = ({
           actions: count,
           avgMttrSeconds: avgMttr,
           successRate,
-          topAction: count > 0 ? topAction : 'Không phát sinh sự cố',
+          topAction: count > 0 ? topAction : noIncidents,
         });
       }
       return days;
@@ -229,8 +236,8 @@ export const SelfHealingTrendChart = ({
         const windowActions = (actions || []).filter((a) => {
           const itemDate = a.rawItem?.completed_at || a.rawItem?.created_at || a.rawItem?.started_at;
           if (!itemDate) return false;
-          const t = new Date(itemDate).getTime();
-          return t >= startMs && t < endMs;
+          const tMs = new Date(itemDate).getTime();
+          return tMs >= startMs && tMs < endMs;
         });
 
         const count = windowActions.length;
@@ -242,11 +249,11 @@ export const SelfHealingTrendChart = ({
             ? a.rawItem.attempts[0].duration_ms / 1000
             : (parseFloat(a.elapsed || a.mttr) || a.rawItem?.elapsed_seconds || 1.5);
           totalDurationSec += dur;
-          const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || 'Tự phục hồi';
+          const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || defaultActionType;
           actionTypeCount[typeName] = (actionTypeCount[typeName] || 0) + 1;
         });
 
-        let topAction = 'Hệ thống ổn định';
+        let topAction = stableSystem;
         let maxCount = 0;
         Object.entries(actionTypeCount).forEach(([k, v]) => {
           if (v > maxCount) {
@@ -267,7 +274,7 @@ export const SelfHealingTrendChart = ({
           actions: count,
           avgMttrSeconds: avgMttr,
           successRate,
-          topAction: count > 0 ? topAction : 'Không phát sinh sự cố',
+          topAction: count > 0 ? topAction : noIncidents,
         });
       }
       return intervals;
@@ -282,15 +289,18 @@ export const SelfHealingTrendChart = ({
       const end = new Date(now - i * fourHoursMs);
       const start = new Date(now - (i + 1) * fourHoursMs);
 
-      const startLabel = start.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-      const endLabel = i === 0 ? 'Hiện tại' : end.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const startLabel = start.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit' });
+      const endLabel =
+        i === 0
+          ? t('charts.healingTrend.nowLabel')
+          : end.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit' });
       const windowName = `${startLabel} - ${endLabel}`;
 
       const windowActions = (actions || []).filter((a) => {
         const itemDate = a.rawItem?.completed_at || a.rawItem?.created_at || a.rawItem?.started_at;
         if (!itemDate) return false;
-        const t = new Date(itemDate).getTime();
-        return t >= start.getTime() && t <= end.getTime();
+        const tMs = new Date(itemDate).getTime();
+        return tMs >= start.getTime() && tMs <= end.getTime();
       });
 
       const count = windowActions.length;
@@ -302,11 +312,11 @@ export const SelfHealingTrendChart = ({
           ? a.rawItem.attempts[0].duration_ms / 1000
           : (parseFloat(a.elapsed || a.mttr) || a.rawItem?.elapsed_seconds || 1.5);
         totalDurationSec += dur;
-        const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || 'Tự phục hồi';
+        const typeName = a.rawItem?.action_type_name || a.rawItem?.action_type_code || defaultActionType;
         actionTypeCount[typeName] = (actionTypeCount[typeName] || 0) + 1;
       });
 
-      let topAction = 'Hệ thống ổn định';
+      let topAction = stableSystem;
       let maxCount = 0;
       Object.entries(actionTypeCount).forEach(([k, v]) => {
         if (v > maxCount) {
@@ -327,12 +337,12 @@ export const SelfHealingTrendChart = ({
         actions: count,
         avgMttrSeconds: avgMttr,
         successRate,
-        topAction: count > 0 ? topAction : 'Không phát sinh sự cố',
+        topAction: count > 0 ? topAction : noIncidents,
       });
     }
 
     return intervals;
-  }, [actions, timeFilterMode, selectedDate, selectedMonth, selectedYear]);
+  }, [actions, timeFilterMode, selectedDate, selectedMonth, selectedYear, intlLocale, t]);
 
   const padding = { top: 25, right: 35, bottom: 35, left: 45 };
   const width = 760;
@@ -413,11 +423,11 @@ export const SelfHealingTrendChart = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ width: '12px', height: '10px', backgroundColor: 'rgba(5, 150, 105, 0.25)', border: '1px solid #059669' }} />
-            <span style={{ color: 'var(--dash-text-secondary)' }}>Số ca tự phục hồi (Hành động)</span>
+            <span style={{ color: 'var(--dash-text-secondary)' }}>{t('charts.healingTrend.legendCount')}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ width: '12px', height: '2.5px', backgroundColor: '#2563EB', borderRadius: '1px' }} />
-            <span style={{ color: 'var(--dash-text-secondary)' }}>Thời gian MTTR (Giây)</span>
+            <span style={{ color: 'var(--dash-text-secondary)' }}>{t('charts.healingTrend.legendMttr')}</span>
           </div>
         </div>
       </div>
@@ -481,7 +491,7 @@ export const SelfHealingTrendChart = ({
             fontWeight="700"
             fill="#059669"
           >
-            MỤC TIÊU SLA &lt; 3.0s
+            {t('charts.healingTrend.slaTarget')}
           </text>
 
           {/* Action Columns (Bars) */}
@@ -606,27 +616,33 @@ export const SelfHealingTrendChart = ({
                 justifyContent: 'space-between',
               }}
             >
-              <span>{timeFilterMode === "year" ? "THÁNG:" : timeFilterMode === "month" ? "NGÀY:" : "KHUNG GIỜ:"}</span>
+              <span>
+                {timeFilterMode === 'year'
+                  ? t('charts.healingTrend.tooltipMonth')
+                  : timeFilterMode === 'month'
+                  ? t('charts.healingTrend.tooltipDay')
+                  : t('charts.healingTrend.tooltipWindow')}
+              </span>
               <strong style={{ color: '#F8FAFC' }}>{active.window}</strong>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', marginBottom: '4px' }}>
-              <span style={{ color: '#34D399' }}>Số ca phục hồi:</span>
-              <strong>{active.actions} hành động</strong>
+              <span style={{ color: '#34D399' }}>{t('charts.healingTrend.tooltipCountLabel')}</span>
+              <strong>{t('charts.healingTrend.tooltipCountValue', { count: active.actions })}</strong>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', marginBottom: '4px' }}>
-              <span style={{ color: '#60A5FA' }}>MTTR trung bình:</span>
-              <strong>{active.avgMttrSeconds} giây</strong>
+              <span style={{ color: '#60A5FA' }}>{t('charts.healingTrend.tooltipMttrLabel')}</span>
+              <strong>{t('charts.healingTrend.tooltipMttrValue', { sec: active.avgMttrSeconds })}</strong>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: '#CBD5E1', marginBottom: '4px' }}>
-              <span>Tỷ lệ thành công:</span>
+              <span>{t('charts.healingTrend.tooltipSuccessRate')}</span>
               <span style={{ color: '#34D399', fontWeight: 700 }}>{active.successRate}%</span>
             </div>
 
             <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '6px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-              Hành động tiêu biểu: <span style={{ color: '#FFFFFF' }}>{active.topAction}</span>
+              {t('charts.healingTrend.tooltipTopAction')} <span style={{ color: '#FFFFFF' }}>{active.topAction}</span>
             </div>
           </div>
         )}
@@ -645,28 +661,38 @@ export const SelfHealingTrendChart = ({
       >
         <div style={{ padding: '8px 12px', backgroundColor: 'rgba(5, 150, 105, 0.05)', border: '1px solid rgba(5, 150, 105, 0.2)' }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: '#065F46', fontWeight: 700 }}>
-            {timeFilterMode === "year" ? `TỔNG CA PHỤC HỒI (${selectedYear || "NĂM"})` : timeFilterMode === "month" ? "TỔNG CA PHỤC HỒI (THÁNG)" : "TỔNG CA PHỤC HỒI (24H)"}
+            {timeFilterMode === 'year'
+              ? t('charts.healingTrend.footerTotalYear', { year: selectedYear || t('charts.healingTrend.yearFallback') })
+              : timeFilterMode === 'month'
+              ? t('charts.healingTrend.footerTotalMonth')
+              : t('charts.healingTrend.footerTotal24h')}
           </div>
           <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#064E3B' }}>
-            {totalActionsCount} Ca Hoàn Tất <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>({successRateText})</span>
+            {t('charts.healingTrend.completedCases', { count: totalActionsCount })}{' '}
+            <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>({successRateText})</span>
           </div>
         </div>
 
         <div style={{ padding: '8px 12px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: '#1E40AF', fontWeight: 700 }}>
-            THỜI GIAN MTTR TRUNG BÌNH
+            {t('charts.healingTrend.footerAvgMttr')}
           </div>
           <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1E3A8A' }}>
-            {avgRecoveryText} <span style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: 600 }}>(&lt; 10s Chuẩn SME)</span>
+            {avgRecoveryText}{' '}
+            <span style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: 600 }}>
+              {t('charts.healingTrend.slaBenchmark')}
+            </span>
           </div>
         </div>
 
         <div style={{ padding: '8px 12px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--dash-text-muted)', fontWeight: 700 }}>
-            TIẾT KIỆM CHI PHÍ SỰ CỐ
+            {t('charts.healingTrend.footerCostSavings')}
           </div>
           <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
-            {totalActionsCount > 0 ? `~${Math.round(totalActionsCount * 2.5)} Phút Ngừng Máy` : '0 Phút (Hạ tầng ổn định)'}
+            {totalActionsCount > 0
+              ? t('charts.healingTrend.downtimeSaved', { minutes: Math.round(totalActionsCount * 2.5) })
+              : t('charts.healingTrend.zeroDowntime')}
           </div>
         </div>
       </div>

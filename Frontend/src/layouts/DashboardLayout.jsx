@@ -1,10 +1,12 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardProvider, useDashboard } from '../pages/Dashboard/context/DashboardContext';
 import Sidebar from '../components/dashboard/Sidebar';
 import TopHeader from '../components/dashboard/TopHeader';
 import { ChevronRight, Home, X } from 'lucide-react';
 
 const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => {
+  const { t } = useTranslation('dashboard');
   const { isMobileNavOpen, setIsMobileNavOpen, onNavigate, isMobileMode } = useDashboard();
   const cleanPath = (currentPath || '/dashboard').toLowerCase().split('?')[0].split('#')[0];
   const isOverview =
@@ -12,6 +14,25 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
     cleanPath === '/dashboard/' ||
     cleanPath === '' ||
     cleanPath === '/dashboard/monitoring/metrics';
+
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isMobileNavOpen) {
+        setIsMobileNavOpen(false);
+      }
+    };
+    const handleResize = () => {
+      if (window.innerWidth > 860 && isMobileNavOpen) {
+        setIsMobileNavOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isMobileNavOpen, setIsMobileNavOpen]);
 
   return (
     <div
@@ -63,12 +84,16 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
       {/* Mobile Drawer */}
       {isMobileNavOpen && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('layout.mobileNavAria')}
           style={{
             position: 'fixed',
             top: '12px',
             bottom: '12px',
             left: '12px',
-            width: '272px',
+            width: '280px',
+            maxWidth: '85vw',
             backgroundColor: 'rgba(255, 255, 255, 0.98)',
             borderRadius: '18px',
             border: '1px solid rgba(226, 232, 240, 0.95)',
@@ -79,16 +104,21 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
             overflow: 'hidden',
           }}
         >
-          <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'flex-end', borderBottom: '1px solid var(--dash-border)' }}>
+          <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--dash-border)' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              {t('layout.mobileNavTitle')}
+            </span>
             <button
+              type="button"
+              aria-label={t('layout.closeNavAria')}
               onClick={() => setIsMobileNavOpen(false)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--dash-text-muted)' }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--dash-text-muted)', display: 'flex', padding: '4px' }}
             >
               <X size={20} />
             </button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            <Sidebar currentPath={currentPath} isFloating={false} />
+            <Sidebar currentPath={currentPath} isFloating={false} isMobileDrawer={true} />
           </div>
         </div>
       )}
@@ -145,7 +175,7 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
           {/* Optional Breadcrumbs */}
           {!isOverview && breadcrumbs.length > 0 && (
             <nav
-              aria-label="Breadcrumbs"
+              aria-label={t('layout.breadcrumbsAria')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -169,7 +199,7 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
                 }}
               >
                 <Home size={13} />
-                <span>Dashboard</span>
+                <span>{t('layout.breadcrumbHome')}</span>
               </button>
 
               {breadcrumbs.map((crumb, idx) => (
@@ -330,6 +360,40 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
             justify-content: space-between !important;
             box-sizing: border-box !important;
           }
+          .dashboard-overview-main {
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+          }
+          .dashboard-overview-container,
+          .dashboard-metrics-page {
+            height: auto !important;
+            min-height: 100% !important;
+            overflow: visible !important;
+          }
+          .overview-floating-header,
+          .node-metrics-floating-header {
+            position: relative !important;
+            top: auto !important;
+            left: auto !important;
+            right: auto !important;
+            padding: 6px 10px 8px !important;
+            pointer-events: auto !important;
+          }
+          .overview-canvas-wrapper {
+            position: relative !important;
+            inset: auto !important;
+            height: auto !important;
+            flex: none !important;
+            overflow: visible !important;
+            display: block !important;
+          }
+          .node-metrics-controls-left,
+          .node-metrics-controls-right {
+            width: 100% !important;
+            flex-wrap: wrap !important;
+            justify-content: space-between !important;
+            box-sizing: border-box !important;
+          }
         }
 
         /* 2. Áp dụng toàn bộ quy tắc Mobile khi người dùng bật Chế độ Điện thoại (.device-mode-mobile) */
@@ -431,6 +495,40 @@ const DashboardLayoutContent = ({ children, currentPath, breadcrumbs = [] }) => 
         .device-mode-mobile .overview-controls-left,
         .device-mode-mobile .overview-controls-right {
           width: 100% !important;
+          justify-content: space-between !important;
+          box-sizing: border-box !important;
+        }
+        .device-mode-mobile .dashboard-overview-main {
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+        }
+        .device-mode-mobile .dashboard-overview-container,
+        .device-mode-mobile .dashboard-metrics-page {
+          height: auto !important;
+          min-height: 100% !important;
+          overflow: visible !important;
+        }
+        .device-mode-mobile .overview-floating-header,
+        .device-mode-mobile .node-metrics-floating-header {
+          position: relative !important;
+          top: auto !important;
+          left: auto !important;
+          right: auto !important;
+          padding: 6px 10px 8px !important;
+          pointer-events: auto !important;
+        }
+        .device-mode-mobile .overview-canvas-wrapper {
+          position: relative !important;
+          inset: auto !important;
+          height: auto !important;
+          flex: none !important;
+          overflow: visible !important;
+          display: block !important;
+        }
+        .device-mode-mobile .node-metrics-controls-left,
+        .device-mode-mobile .node-metrics-controls-right {
+          width: 100% !important;
+          flex-wrap: wrap !important;
           justify-content: space-between !important;
           box-sizing: border-box !important;
         }

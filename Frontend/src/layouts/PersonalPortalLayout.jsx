@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Shield } from 'lucide-react';
 import PersonalSidebar from '../components/personal/PersonalSidebar';
 import PersonalHeader from '../components/personal/PersonalHeader';
 
 export const PersonalPortalLayout = ({ currentPath, onNavigate, children }) => {
+  const { t } = useTranslation('portal');
   const [isCollapsed, setIsCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth < 1024 && window.innerWidth >= 768;
@@ -85,7 +87,7 @@ export const PersonalPortalLayout = ({ currentPath, onNavigate, children }) => {
       {isMobileDrawerOpen && (
         <div
           role="dialog"
-          aria-label="Menu điều hướng di động"
+          aria-label={t('layout.mobileMenuLabel')}
           style={{
             position: 'fixed',
             top: 0,
@@ -119,7 +121,7 @@ export const PersonalPortalLayout = ({ currentPath, onNavigate, children }) => {
             <button
               type="button"
               onClick={() => setIsMobileDrawerOpen(false)}
-              aria-label="Đóng menu điều hướng"
+              aria-label={t('layout.closeNavMenu')}
               style={{
                 background: 'none',
                 border: 'none',

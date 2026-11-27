@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Cpu,
   Database,
@@ -19,11 +20,13 @@ import {
   Boxes,
 } from 'lucide-react';
 import { LightweightMetricChart } from './NodeMetricsChartsPanel';
+import NodeMetricsMobileVerticalFlow from './NodeMetricsMobileVerticalFlow';
 import { formatBytes, formatThroughput, formatPercent } from '../../utils/nodeMetricsChartUtils';
+import i18n, { getIntlLocale } from '../../i18n';
 
 function formatUnixTime(unixSec) {
   if (typeof unixSec !== 'number' || !Number.isFinite(unixSec)) return '';
-  return new Date(unixSec * 1000).toLocaleTimeString('vi-VN', {
+  return new Date(unixSec * 1000).toLocaleTimeString(getIntlLocale(i18n.language), {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -40,9 +43,9 @@ function formatUnixTime(unixSec) {
  * - Cột 4: Bảng Phân bổ tải theo Máy chủ (có tìm kiếm & chọn nhanh)
  */
 export const NodeMetricsFlowCanvas = ({
-  clusterName = 'Chưa chọn cụm',
+  clusterName = '',
   isClusterOnline = false,
-  presetLabel = '15 phút',
+  presetLabel = '',
   selectedNodeKey = '',
   onSelectNode = null,
   selectedMount = 'ALL',
@@ -72,6 +75,9 @@ export const NodeMetricsFlowCanvas = ({
   onChartResetZoom = null,
   topSafePadding = 126,
 }) => {
+  const { t } = useTranslation('dashMonitoring');
+  const resolvedClusterName = clusterName || t('common.noCluster');
+  const resolvedPresetLabel = presetLabel || t('timeRanges.15m');
   const containerRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(1160);
   const [containerHeight, setContainerHeight] = useState(720);
@@ -83,6 +89,7 @@ export const NodeMetricsFlowCanvas = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isWheelZooming, setIsWheelZooming] = useState(false);
+  const [preferHorizontalOnMobile, setPreferHorizontalOnMobile] = useState(false);
 
   const dragOriginRef = useRef({ x: 0, y: 0 });
   const didDragRef = useRef(false);
@@ -360,15 +367,66 @@ export const NodeMetricsFlowCanvas = ({
   const isFlowAnimated = isClusterOnline && hasData;
   const summary = chartModel?.summary;
 
+  const isMobileViewport = containerWidth <= 860;
+  const isMobileVerticalMode = isMobileViewport && !preferHorizontalOnMobile;
+
+  if (isMobileVerticalMode) {
+    return (
+      <div
+        ref={containerRef}
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: 'auto',
+          backgroundColor: 'transparent',
+        }}
+      >
+        <NodeMetricsMobileVerticalFlow
+          clusterName={resolvedClusterName}
+          isClusterOnline={isClusterOnline}
+          presetLabel={resolvedPresetLabel}
+          selectedNodeKey={selectedNodeKey}
+          onSelectNode={onSelectNode}
+          selectedMount={selectedMount}
+          tableRows={tableRows}
+          allNodesCount={allNodesCount}
+          searchTerm={searchTerm}
+          onSearchTermChange={onSearchTermChange}
+          chartModel={chartModel}
+          activeSample={activeSample}
+          hasData={hasData}
+          isLoading={isLoading}
+          isSilentRefresh={isSilentRefresh}
+          errorMessage={errorMessage}
+          onRetry={onRetry}
+          showNetRx={showNetRx}
+          showNetTx={showNetTx}
+          onToggleNetRx={onToggleNetRx}
+          onToggleNetTx={onToggleNetTx}
+          onHoverTimeChange={onHoverTimeChange}
+          onRangeChange={onRangeChange}
+          onRegisterChart={onRegisterChart}
+          onUnregisterChart={onUnregisterChart}
+          onChartZoomIn={onChartZoomIn}
+          onChartZoomOut={onChartZoomOut}
+          onChartPanLeft={onChartPanLeft}
+          onChartPanRight={onChartPanRight}
+          onChartResetZoom={onChartResetZoom}
+          onSwitchToHorizontal={() => setPreferHorizontalOnMobile(true)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
       style={{
         position: 'relative',
         width: '100%',
-        height: '100%',
-        flex: 1,
-        minHeight: 0,
+        height: isMobileViewport && preferHorizontalOnMobile ? '72vh' : '100%',
+        flex: isMobileViewport && preferHorizontalOnMobile ? 'none' : 1,
+        minHeight: isMobileViewport && preferHorizontalOnMobile ? '460px' : 0,
         backgroundColor: 'transparent',
         overflow: 'hidden',
         userSelect: 'none',
@@ -398,11 +456,34 @@ export const NodeMetricsFlowCanvas = ({
           boxShadow: '0 4px 16px rgba(15, 23, 42, 0.08)',
         }}
       >
+        {isMobileViewport && preferHorizontalOnMobile && (
+          <>
+            <button
+              type="button"
+              data-testid="toggle-mobile-layout-mode"
+              onClick={() => setPreferHorizontalOnMobile(false)}
+              style={{
+                padding: '4px 9px',
+                borderRadius: '7px',
+                border: '1px solid #059669',
+                backgroundColor: '#ECFDF5',
+                color: '#047857',
+                fontSize: '0.6875rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {t('nodeFlow.viewModes.vertical')}
+            </button>
+            <div style={{ width: '1px', height: '16px', backgroundColor: '#E2E8F0', margin: '0 2px' }} />
+          </>
+        )}
         {[
-          { id: 'overview', label: 'Sơ đồ & Biểu đồ' },
-          { id: 'topology', label: '1. Sơ đồ Node' },
-          { id: 'charts', label: '2. Biểu đồ Live' },
-          { id: 'all', label: 'Toàn cảnh' },
+          { id: 'overview', label: t('nodeFlow.viewModes.overview') },
+          { id: 'topology', label: t('nodeFlow.viewModes.topology') },
+          { id: 'charts', label: t('nodeFlow.viewModes.charts') },
+          { id: 'all', label: t('nodeFlow.viewModes.all') },
         ].map((tab) => {
           const isSelected = activeViewMode === tab.id;
           return (
@@ -446,7 +527,7 @@ export const NodeMetricsFlowCanvas = ({
         <button
           type="button"
           onClick={handleZoomIn}
-          title="Phóng to (+)"
+          title={t('nodeFlow.canvasToolbar.zoomInTitle')}
           style={{
             background: 'none',
             border: 'none',
@@ -464,7 +545,7 @@ export const NodeMetricsFlowCanvas = ({
         <button
           type="button"
           onClick={handleZoomOut}
-          title="Thu nhỏ (-)"
+          title={t('nodeFlow.canvasToolbar.zoomOutTitle')}
           style={{
             background: 'none',
             border: 'none',
@@ -482,7 +563,7 @@ export const NodeMetricsFlowCanvas = ({
         <button
           type="button"
           onClick={handleReset}
-          title="Đặt lại góc nhìn mặc định (Reset)"
+          title={t('nodeFlow.canvasToolbar.resetTitle')}
           style={{
             background: 'none',
             border: 'none',
@@ -607,7 +688,7 @@ export const NodeMetricsFlowCanvas = ({
             letterSpacing: '0.04em',
           }}
         >
-          01 • NGUỒN THU THẬP eBPF
+          {t('nodeFlow.stages.ebpfSource')}
         </div>
 
         <div
@@ -625,7 +706,7 @@ export const NodeMetricsFlowCanvas = ({
             letterSpacing: '0.04em',
           }}
         >
-          02 • MÁY CHỦ K8S ({allNodesCount || visibleNodeCards.length} NODES)
+          {t('nodeFlow.stages.k8sNodes', { count: allNodesCount || visibleNodeCards.length })}
         </div>
 
         <div
@@ -651,7 +732,7 @@ export const NodeMetricsFlowCanvas = ({
               letterSpacing: '0.04em',
             }}
           >
-            03 • BIỂU ĐỒ VIỄN TRẮC ĐỒNG BỘ (CPU • RAM • DISK • NETWORK)
+            {t('nodeFlow.stages.telemetryCharts')}
           </span>
 
           {/* Thanh điều khiển trục thời gian đồng bộ của 4 biểu đồ */}
@@ -669,12 +750,12 @@ export const NodeMetricsFlowCanvas = ({
           >
             <Clock size={12} color="#64748B" />
             <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#475569', marginRight: '4px' }}>
-              Trục thời gian:
+              {t('nodeFlow.timeAxis.label')}
             </span>
             <button
               type="button"
               onClick={onChartPanLeft}
-              title="Trượt biểu đồ sang trái"
+              title={t('nodeFlow.timeAxis.panLeftTitle')}
               style={{
                 border: '1px solid #E2E8F0',
                 backgroundColor: '#FFFFFF',
@@ -691,7 +772,7 @@ export const NodeMetricsFlowCanvas = ({
             <button
               type="button"
               onClick={onChartZoomIn}
-              title="Phóng to trục thời gian biểu đồ"
+              title={t('nodeFlow.timeAxis.zoomInTitle')}
               style={{
                 border: '1px solid #E2E8F0',
                 backgroundColor: '#FFFFFF',
@@ -708,7 +789,7 @@ export const NodeMetricsFlowCanvas = ({
             <button
               type="button"
               onClick={onChartZoomOut}
-              title="Thu nhỏ trục thời gian biểu đồ"
+              title={t('nodeFlow.timeAxis.zoomOutTitle')}
               style={{
                 border: '1px solid #E2E8F0',
                 backgroundColor: '#FFFFFF',
@@ -725,7 +806,7 @@ export const NodeMetricsFlowCanvas = ({
             <button
               type="button"
               onClick={onChartPanRight}
-              title="Trượt biểu đồ sang phải"
+              title={t('nodeFlow.timeAxis.panRightTitle')}
               style={{
                 border: '1px solid #E2E8F0',
                 backgroundColor: '#FFFFFF',
@@ -742,7 +823,7 @@ export const NodeMetricsFlowCanvas = ({
             <button
               type="button"
               onClick={onChartResetZoom}
-              title="Đặt lại trục thời gian vừa khít"
+              title={t('nodeFlow.timeAxis.resetTitle')}
               style={{
                 border: '1px solid #E2E8F0',
                 backgroundColor: '#FFFFFF',
@@ -754,7 +835,7 @@ export const NodeMetricsFlowCanvas = ({
                 color: '#334155',
               }}
             >
-              Vừa khít
+              {t('nodeFlow.timeAxis.fit')}
             </button>
           </div>
         </div>
@@ -799,12 +880,12 @@ export const NodeMetricsFlowCanvas = ({
                 border: isClusterOnline ? '1px solid #6EE7B7' : '1px solid #FECACA',
               }}
             >
-              {isClusterOnline ? 'LIVE' : 'OFFLINE'}
+              {isClusterOnline ? t('common.liveUpper') : t('common.offlineUpper')}
             </span>
           </div>
 
           <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-            Cụm Kubernetes
+            {t('nodeFlow.clusterCard.title')}
           </div>
           <div
             style={{
@@ -817,9 +898,9 @@ export const NodeMetricsFlowCanvas = ({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
             }}
-            title={clusterName}
+            title={resolvedClusterName}
           >
-            {clusterName}
+            {resolvedClusterName}
           </div>
 
           <div
@@ -834,37 +915,37 @@ export const NodeMetricsFlowCanvas = ({
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#64748B' }}>Node đang xem</span>
+              <span style={{ color: '#64748B' }}>{t('nodeFlow.clusterCard.activeNode')}</span>
               <span style={{ fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)', maxWidth: '112px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {selectedNodeKey || '—'}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#64748B' }}>Pods trên Node</span>
+              <span style={{ color: '#64748B' }}>{t('nodeFlow.clusterCard.podsOnNode')}</span>
               <span style={{ fontWeight: 700, color: '#1D4ED8', fontFamily: 'var(--font-mono)' }}>
-                {visibleNodeCards.find((n) => n.name === selectedNodeKey)?.podsCount ?? (selectedNodeKey === 'minikube' ? 13 : 11)} Pods
+                {t('metrics.controls.podsCount', { count: visibleNodeCards.find((n) => n.name === selectedNodeKey)?.podsCount ?? (selectedNodeKey === 'minikube' ? 13 : 11) })}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#64748B' }}>Tổng máy chủ</span>
+              <span style={{ color: '#64748B' }}>{t('nodeFlow.clusterCard.totalNodes')}</span>
               <span style={{ fontWeight: 700, color: '#059669', fontFamily: 'var(--font-mono)' }}>
-                {allNodesCount || visibleNodeCards.length} Node
+                {t('nodeFlow.clusterCard.nodeCount', { count: allNodesCount || visibleNodeCards.length })}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#64748B' }}>Cửa sổ mẫu</span>
-              <span style={{ fontWeight: 700, color: '#334155', fontFamily: 'var(--font-mono)' }}>{presetLabel}</span>
+              <span style={{ color: '#64748B' }}>{t('nodeFlow.clusterCard.sampleWindow')}</span>
+              <span style={{ fontWeight: 700, color: '#334155', fontFamily: 'var(--font-mono)' }}>{resolvedPresetLabel}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#64748B' }}>Điểm dữ liệu</span>
+              <span style={{ color: '#64748B' }}>{t('nodeFlow.clusterCard.dataPoints')}</span>
               <span style={{ fontWeight: 700, color: '#2563EB', fontFamily: 'var(--font-mono)' }}>
-                {chartModel?.samples?.length || 0} mẫu
+                {t('nodeFlow.clusterCard.samplesCount', { count: chartModel?.samples?.length || 0 })}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#64748B' }}>Phân vùng đĩa</span>
+              <span style={{ color: '#64748B' }}>{t('nodeFlow.clusterCard.diskPartition')}</span>
               <span style={{ fontWeight: 700, color: '#7C3AED', fontFamily: 'var(--font-mono)' }}>
-                {selectedMount === 'ALL' ? 'Tổng hợp' : selectedMount}
+                {selectedMount === 'ALL' ? t('nodeFlow.clusterCard.diskAllSummary') : selectedMount}
               </span>
             </div>
           </div>
@@ -881,7 +962,7 @@ export const NodeMetricsFlowCanvas = ({
               lineHeight: 1.4,
             }}
           >
-            Nhấp chọn thẻ <strong>Node</strong> ở cột bên cạnh để chuyển luồng biểu đồ thời gian thực.
+            {t('nodeFlow.clusterCard.hintPrefix')} <strong>{t('nodeFlow.clusterCard.hintNode')}</strong> {t('nodeFlow.clusterCard.hintSuffix')}
           </div>
         </div>
 
@@ -902,16 +983,16 @@ export const NodeMetricsFlowCanvas = ({
             }}
           >
             <Server size={24} style={{ opacity: 0.5, marginBottom: '6px' }} />
-            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#334155' }}>Chưa có máy chủ Node</div>
+            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#334155' }}>{t('nodeFlow.emptyNodes.title')}</div>
             <div style={{ fontSize: '0.72rem', marginTop: '4px' }}>
-              Kết nối Agent hoặc chọn cụm đang hoạt động để theo dõi tài nguyên từng Node.
+              {t('nodeFlow.emptyNodes.description')}
             </div>
           </div>
         ) : (
           visibleNodeCards.map((node, idx) => {
             const topY = nodeStackStartY + idx * (nodeCardH + nodeCardGap);
             const isSelected = node.name === selectedNodeKey || (!selectedNodeKey && idx === 0);
-            const isAlert = node.status !== 'Sẵn sàng';
+            const isAlert = node.isAlert ?? (node.status !== 'Sẵn sàng' && node.status !== 'Ready');
 
             return (
               <div
@@ -1061,7 +1142,7 @@ export const NodeMetricsFlowCanvas = ({
           >
             <AlertCircle size={36} color="#DC2626" />
             <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#991B1B' }}>
-              Không thể tải biểu đồ Node Metrics
+              {t('nodeFlow.error.title')}
             </h3>
             <p style={{ margin: 0, fontSize: '0.85rem', color: '#7F1D1D', maxWidth: '480px' }}>{errorMessage}</p>
             {onRetry && (
@@ -1079,7 +1160,7 @@ export const NodeMetricsFlowCanvas = ({
                   cursor: 'pointer',
                 }}
               >
-                Thử lại
+                {t('common.retry')}
               </button>
             )}
           </div>
@@ -1106,12 +1187,11 @@ export const NodeMetricsFlowCanvas = ({
           >
             <Activity size={36} color="#64748B" />
             <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1E293B' }}>
-              Chưa có dữ liệu Node Metrics trong khoảng thời gian đã chọn
+              {t('nodeFlow.emptyCharts.title')}
             </h3>
             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748B', maxWidth: '520px', lineHeight: 1.5 }}>
-              Hệ thống không ghi nhận mẫu dữ liệu nào cho máy chủ <strong>{selectedNodeKey || 'đang chọn'}</strong>{' '}
-              trong cửa sổ <strong>{presetLabel}</strong>. Hãy mở rộng khoảng thời gian (6 giờ, 24 giờ, 7 ngày) hoặc
-              kiểm tra kết nối của Agent.
+              {t('nodeFlow.emptyCharts.descriptionPrefix')} <strong>{selectedNodeKey || t('nodeFlow.emptyCharts.selectedNodeFallback')}</strong>{' '}
+              {t('nodeFlow.emptyCharts.descriptionMiddle')} <strong>{resolvedPresetLabel}</strong>{t('nodeFlow.emptyCharts.descriptionSuffix')}
             </p>
           </div>
         ) : (
@@ -1139,10 +1219,10 @@ export const NodeMetricsFlowCanvas = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Cpu size={15} color="#059669" />
                     <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0F172A' }}>
-                      Mức Sử Dụng CPU (%)
+                      {t('nodeFlow.charts.cpuTitle')}
                     </h4>
                   </div>
-                  <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Tải xử lý CPU thời gian thực (0–100%)</span>
+                  <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('nodeFlow.charts.cpuSubtitle')}</span>
                 </div>
                 {activeSample && (
                   <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>
@@ -1194,10 +1274,10 @@ export const NodeMetricsFlowCanvas = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Database size={15} color="#2563EB" />
                     <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0F172A' }}>
-                      Mức Sử Dụng Bộ Nhớ RAM (%)
+                      {t('nodeFlow.charts.ramTitle')}
                     </h4>
                   </div>
-                  <span style={{ fontSize: '0.7rem', color: '#64748B' }}>RAM đang dùng và dung lượng còn trống</span>
+                  <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('nodeFlow.charts.ramSubtitle')}</span>
                 </div>
                 {activeSample && (
                   <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>
@@ -1205,7 +1285,7 @@ export const NodeMetricsFlowCanvas = ({
                       {formatPercent(activeSample.ram_usage_percent, 1)} ({formatBytes(activeSample.ram_used_bytes)})
                     </div>
                     <div style={{ color: '#94A3B8', fontSize: '0.65rem' }}>
-                      Trống: {formatBytes(activeSample.ram_available_bytes)}
+                      {t('nodeFlow.charts.freeLabel', { value: formatBytes(activeSample.ram_available_bytes) })}
                     </div>
                   </div>
                 )}
@@ -1251,10 +1331,10 @@ export const NodeMetricsFlowCanvas = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <HardDrive size={15} color="#7C3AED" />
                     <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0F172A' }}>
-                      Dung Lượng Ổ Đĩa (%) {selectedMount !== 'ALL' ? `[${selectedMount}]` : ''}
+                      {t('nodeFlow.charts.diskTitle')} {selectedMount !== 'ALL' ? `[${selectedMount}]` : ''}
                     </h4>
                   </div>
-                  <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Không gian lưu trữ đã dùng &amp; còn trống</span>
+                  <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('nodeFlow.charts.diskSubtitle')}</span>
                 </div>
                 {activeSample && (
                   <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>
@@ -1262,7 +1342,7 @@ export const NodeMetricsFlowCanvas = ({
                       {formatPercent(activeSample.disk_usage_percent, 1)} ({formatBytes(activeSample.disk_used_bytes)})
                     </div>
                     <div style={{ color: '#94A3B8', fontSize: '0.65rem' }}>
-                      Trống: {formatBytes(activeSample.disk_available_bytes)}
+                      {t('nodeFlow.charts.freeLabel', { value: formatBytes(activeSample.disk_available_bytes) })}
                     </div>
                   </div>
                 )}
@@ -1308,10 +1388,10 @@ export const NodeMetricsFlowCanvas = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Wifi size={15} color="#0891B2" />
                     <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 800, color: '#0F172A' }}>
-                      Tốc Độ Mạng (RX / TX)
+                      {t('nodeFlow.charts.networkTitle')}
                     </h4>
                   </div>
-                  <span style={{ fontSize: '0.7rem', color: '#64748B' }}>Lưu lượng mạng truyền nhận mỗi giây</span>
+                  <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('nodeFlow.charts.networkSubtitle')}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <button

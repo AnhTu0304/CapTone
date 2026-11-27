@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../i18n';
 import { AlertOctagon, Filter, XCircle, Ban } from 'lucide-react';
 
 /**
@@ -10,6 +12,8 @@ export const ActionFailureReasonsChart = ({
   onSelectStatusReason = null,
   className = '',
 }) => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
   const [tab, setTab] = useState('ALL'); // 'ALL' | 'FAILED' | 'CANCELLED'
 
   const filtered = useMemo(() => {
@@ -48,11 +52,11 @@ export const ActionFailureReasonsChart = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <AlertOctagon size={19} color="#DC2626" />
             <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: '#0F172A' }}>
-              Nguyên Nhân Action Thất Bại (FAILED) & Bị Hủy (CANCELLED)
+              {t('charts.failureReasons.title')}
             </h3>
           </div>
           <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '4px 0 0 0' }}>
-            Phân tích nguyên nhân gốc khiến tác vụ tự phục hồi không thực thi được (404 Not Found, Agent Offline, 403 RBAC, HITL từ chối/quá hạn)
+            {t('charts.failureReasons.subtitle')}
           </p>
         </div>
 
@@ -68,27 +72,27 @@ export const ActionFailureReasonsChart = ({
           }}
         >
           {[
-            { key: 'ALL', label: `Tất cả (${countsByStatus.total.toLocaleString('vi-VN')})` },
-            { key: 'FAILED', label: `Thất bại (${countsByStatus.failed.toLocaleString('vi-VN')})` },
-            { key: 'CANCELLED', label: `Bị hủy / HITL (${countsByStatus.cancelled.toLocaleString('vi-VN')})` },
-          ].map((t) => (
+            { key: 'ALL', label: t('charts.failureReasons.tabAll', { count: countsByStatus.total.toLocaleString(intlLocale) }) },
+            { key: 'FAILED', label: t('charts.failureReasons.tabFailed', { count: countsByStatus.failed.toLocaleString(intlLocale) }) },
+            { key: 'CANCELLED', label: t('charts.failureReasons.tabCancelled', { count: countsByStatus.cancelled.toLocaleString(intlLocale) }) },
+          ].map((tItem) => (
             <button
-              key={t.key}
+              key={tItem.key}
               type="button"
-              onClick={() => setTab(t.key)}
+              onClick={() => setTab(tItem.key)}
               style={{
                 padding: '5px 10px',
                 fontSize: '0.75rem',
-                fontWeight: tab === t.key ? 700 : 500,
-                backgroundColor: tab === t.key ? '#FFFFFF' : 'transparent',
-                color: tab === t.key ? (t.key === 'FAILED' ? '#DC2626' : t.key === 'CANCELLED' ? '#D97706' : '#0F172A') : '#64748B',
+                fontWeight: tab === tItem.key ? 700 : 500,
+                backgroundColor: tab === tItem.key ? '#FFFFFF' : 'transparent',
+                color: tab === tItem.key ? (tItem.key === 'FAILED' ? '#DC2626' : tItem.key === 'CANCELLED' ? '#D97706' : '#0F172A') : '#64748B',
                 border: 'none',
                 borderRadius: '6px',
-                boxShadow: tab === t.key ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                boxShadow: tab === tItem.key ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
                 cursor: 'pointer',
               }}
             >
-              {t.label}
+              {tItem.label}
             </button>
           ))}
         </div>
@@ -96,7 +100,7 @@ export const ActionFailureReasonsChart = ({
 
       {filtered.length === 0 ? (
         <div style={{ padding: '28px 16px', textAlign: 'center', backgroundColor: '#F0FDF4', borderRadius: '10px', color: '#065F46', fontSize: '0.8125rem', fontWeight: 600 }}>
-          Không có bản ghi lỗi hoặc bị hủy nào thuộc nhóm đang chọn trong chu kỳ này.
+          {t('charts.failureReasons.empty')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -148,14 +152,17 @@ export const ActionFailureReasonsChart = ({
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 800, color: '#0F172A' }}>
-                      {Number(item.count).toLocaleString('vi-VN')} lần ({item.percentOfStatus}%)
+                      {t('charts.failureReasons.timesPct', {
+                        count: Number(item.count).toLocaleString(intlLocale),
+                        pct: item.percentOfStatus,
+                      })}
                     </span>
                     {onSelectStatusReason && (
                       <button
                         type="button"
                         className="no-print"
                         onClick={() => onSelectStatusReason(item.status)}
-                        title={`Lọc bảng truy vết theo trạng thái ${item.status}`}
+                        title={t('charts.failureReasons.filterTitle', { status: item.status })}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -171,7 +178,7 @@ export const ActionFailureReasonsChart = ({
                         }}
                       >
                         <Filter size={11} />
-                        <span>Xem log</span>
+                        <span>{t('charts.failureReasons.viewLog')}</span>
                       </button>
                     )}
                   </div>
@@ -192,7 +199,7 @@ export const ActionFailureReasonsChart = ({
 
                 {item.sampleRawReason && (
                   <div style={{ fontSize: '0.72rem', color: '#64748B', fontFamily: 'var(--font-mono)', wordBreak: 'break-word' }}>
-                    Mẫu chi tiết: {item.sampleRawReason}
+                    {t('charts.failureReasons.sampleReason', { reason: item.sampleRawReason })}
                   </div>
                 )}
               </div>

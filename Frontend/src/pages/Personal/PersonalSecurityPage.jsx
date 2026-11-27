@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   KeyRound,
   Smartphone,
@@ -28,6 +29,7 @@ const resolveHasPassword = (authUser, storedProfile) => {
 };
 
 export const PersonalSecurityPage = () => {
+  const { t } = useTranslation('portal');
   const { user } = useAuth() || {};
   const [hasPassword, setHasPassword] = useState(() =>
     resolveHasPassword(user, personalPortalService.getProfile?.())
@@ -154,24 +156,24 @@ export const PersonalSecurityPage = () => {
     setPasswordStatus({ success: false, message: '' });
 
     if (newPassword !== confirmPassword) {
-      setPasswordStatus({ success: false, message: 'Mật khẩu xác nhận không trùng khớp!' });
+      setPasswordStatus({ success: false, message: t('security.password.mismatch') });
       return;
     }
     if (newPassword.length < 8) {
-      setPasswordStatus({ success: false, message: 'Mật khẩu mới phải có ít nhất 8 ký tự!' });
+      setPasswordStatus({ success: false, message: t('security.password.tooShort') });
       return;
     }
 
     setIsChangingPassword(true);
     try {
       await personalPortalService.changePassword({ oldPassword, newPassword });
-      setPasswordStatus({ success: true, message: 'Đổi mật khẩu thành công! Hãy lưu lại mật khẩu mới.' });
+      setPasswordStatus({ success: true, message: t('security.password.success') });
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setTimeout(() => setPasswordStatus({ success: false, message: '' }), 4000);
     } catch (err) {
-      setPasswordStatus({ success: false, message: err.message || 'Lỗi khi đổi mật khẩu' });
+      setPasswordStatus({ success: false, message: err.message || t('security.password.failed') });
     } finally {
       setIsChangingPassword(false);
     }
@@ -191,8 +193,8 @@ export const PersonalSecurityPage = () => {
         setTwoFactorEnabled(true);
       }
     } catch (err) {
-      setSetupError(err?.message || 'Không thể khởi tạo mã QR xác thực');
-      alert(err?.message || 'Không thể khởi tạo mã QR xác thực');
+      setSetupError(err?.message || t('security.twoFactor.errors.setupInit'));
+      alert(err?.message || t('security.twoFactor.errors.setupInit'));
     } finally {
       setIsSettingUp(false);
     }
@@ -202,7 +204,7 @@ export const PersonalSecurityPage = () => {
   const handleConfirm2FA = async (e) => {
     e.preventDefault();
     if (!setupOtp || setupOtp.trim().length !== 6) {
-      setSetupError('Vui lòng nhập đầy đủ 6 chữ số OTP từ ứng dụng');
+      setSetupError(t('security.twoFactor.errors.otpLength'));
       return;
     }
     setIsSettingUp(true);
@@ -219,7 +221,7 @@ export const PersonalSecurityPage = () => {
       setShowBackupModal(true);
       setSetupOtp('');
     } catch (err) {
-      setSetupError(err?.message || 'Mã xác thực 2FA không chính xác hoặc đã hết hạn');
+      setSetupError(err?.message || t('security.twoFactor.errors.otpInvalid'));
     } finally {
       setIsSettingUp(false);
     }
@@ -240,7 +242,7 @@ export const PersonalSecurityPage = () => {
       setShowDisableModal(false);
       setDisablePassword('');
     } catch (err) {
-      setDisableError(err?.message || 'Không thể vô hiệu hóa 2FA');
+      setDisableError(err?.message || t('security.twoFactor.errors.disableFailed'));
     } finally {
       setIsDisabling(false);
     }
@@ -261,29 +263,29 @@ export const PersonalSecurityPage = () => {
   const handleRevokeOtherSessions = () => {
     const otherSessions = sessions.filter((s) => !s.isCurrent);
     if (otherSessions.length === 0) {
-      setSessionMessage('Tài khoản của bạn chỉ đang đăng nhập duy nhất trên thiết bị này, không có phiên đăng nhập lạ nào khác.');
+      setSessionMessage(t('security.sessions.noOtherSessions'));
       setTimeout(() => setSessionMessage(''), 3500);
       return;
     }
     const remaining = personalPortalService.revokeOtherSessions();
     setSessions(remaining);
-    setSessionMessage('Đã đăng xuất thành công khỏi tất cả các thiết bị khác!');
+    setSessionMessage(t('security.sessions.revokedSuccess'));
     setTimeout(() => setSessionMessage(''), 3500);
   };
 
   // Password strength checker
   const getPasswordStrength = (pass) => {
-    if (!pass) return { score: 0, label: 'Trống', color: '#94A3B8' };
+    if (!pass) return { score: 0, label: t('security.password.strengthEmpty'), color: '#94A3B8' };
     let score = 0;
     if (pass.length >= 8) score++;
     if (/[A-Z]/.test(pass)) score++;
     if (/[0-9]/.test(pass)) score++;
     if (/[^A-Za-z0-9]/.test(pass)) score++;
 
-    if (score <= 1) return { score: 1, label: 'Yếu', color: '#EF4444' };
-    if (score === 2) return { score: 2, label: 'Trung bình', color: '#F59E0B' };
-    if (score === 3) return { score: 3, label: 'Khá', color: '#3B82F6' };
-    return { score: 4, label: 'Mạnh (Tốt nhất)', color: '#059669' };
+    if (score <= 1) return { score: 1, label: t('security.password.strengthWeak'), color: '#EF4444' };
+    if (score === 2) return { score: 2, label: t('security.password.strengthFair'), color: '#F59E0B' };
+    if (score === 3) return { score: 3, label: t('security.password.strengthGood'), color: '#3B82F6' };
+    return { score: 4, label: t('security.password.strengthStrong'), color: '#059669' };
   };
 
   const strength = getPasswordStrength(newPassword);
@@ -296,10 +298,10 @@ export const PersonalSecurityPage = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div>
         <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-          Bảo Mật Tài Khoản
+          {t('security.title')}
         </h2>
         <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '3px 0 0 0' }}>
-          Thiết lập mật khẩu mạnh, kích hoạt xác thực hai yếu tố và quản lý các phiên đăng nhập đang hoạt động.
+          {t('security.subtitle')}
         </p>
       </div>
 
@@ -355,10 +357,10 @@ export const PersonalSecurityPage = () => {
             </div>
             <div>
               <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Đổi Mật Khẩu Đăng Nhập
+                {t('security.password.title')}
               </h3>
               <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                {hasPassword ? 'Khuyến nghị đổi mật khẩu tối thiểu 90 ngày một lần' : 'Phương thức xác thực qua Google OAuth'}
+                {hasPassword ? t('security.password.subHasPassword') : t('security.password.subGoogleOAuth')}
               </p>
             </div>
           </div>
@@ -399,7 +401,7 @@ export const PersonalSecurityPage = () => {
                 </span>
                 <div>
                   <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
-                    Tài khoản được đăng nhập bằng Google
+                    {t('security.password.googleTitle')}
                   </div>
                   {user?.email && (
                     <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '1px' }}>
@@ -409,7 +411,7 @@ export const PersonalSecurityPage = () => {
                 </div>
               </div>
               <p style={{ fontSize: '0.8125rem', color: '#475569', lineHeight: 1.55, margin: 0 }}>
-                Tài khoản của bạn đang được xác thực trực tiếp qua Google OAuth nên chưa thiết lập mật khẩu đăng nhập cục bộ. Vui lòng quản lý mật khẩu và bảo mật đăng nhập tại Cài đặt Tài khoản Google của bạn.
+                {t('security.password.googleDesc')}
               </p>
             </div>
           ) : (
@@ -434,14 +436,14 @@ export const PersonalSecurityPage = () => {
             {/* Old Password */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Mật Khẩu Hiện Tại *
+                {t('security.password.oldLabel')}
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showOldPass ? 'text' : 'password'}
                   value={oldPassword}
                   onChange={(e) => setOldPassword(e.target.value)}
-                  placeholder="Nhập mật khẩu cũ của bạn"
+                  placeholder={t('security.password.oldPlaceholder')}
                   required
                   style={{
                     width: '100%',
@@ -474,14 +476,14 @@ export const PersonalSecurityPage = () => {
             {/* New Password */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Mật Khẩu Mới (Tối thiểu 8 ký tự) *
+                {t('security.password.newLabel')}
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showNewPass ? 'text' : 'password'}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Nhập mật khẩu mới an toàn"
+                  placeholder={t('security.password.newPlaceholder')}
                   required
                   style={{
                     width: '100%',
@@ -514,7 +516,7 @@ export const PersonalSecurityPage = () => {
               {newPassword && (
                 <div style={{ marginTop: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', marginBottom: '3px' }}>
-                    <span style={{ color: '#64748B' }}>Độ mạnh mật khẩu:</span>
+                    <span style={{ color: '#64748B' }}>{t('security.password.strengthLabel')}</span>
                     <strong style={{ color: strength.color }}>{strength.label}</strong>
                   </div>
                   <div style={{ height: '4px', backgroundColor: '#E2E8F0', borderRadius: '2px', overflow: 'hidden' }}>
@@ -534,13 +536,13 @@ export const PersonalSecurityPage = () => {
             {/* Confirm Password */}
             <div>
               <label style={{ display: 'block', fontSize: '0.78125rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                Xác Nhận Mật Khẩu Mới *
+                {t('security.password.confirmLabel')}
               </label>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Nhập lại mật khẩu mới"
+                placeholder={t('security.password.confirmPlaceholder')}
                 required
                 style={{
                   width: '100%',
@@ -574,7 +576,7 @@ export const PersonalSecurityPage = () => {
               }}
             >
               <Lock size={15} />
-              <span>{isChangingPassword ? 'Đang cập nhật...' : 'Cập Nhật Mật Khẩu'}</span>
+              <span>{isChangingPassword ? t('security.password.updating') : t('security.password.submit')}</span>
             </button>
           </form>
             </>
@@ -613,10 +615,10 @@ export const PersonalSecurityPage = () => {
               </div>
               <div>
                 <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Xác Thực Hai Yếu Tố (2FA)
+                  {t('security.twoFactor.title')}
                 </h3>
                 <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                  Bảo vệ tài khoản qua ứng dụng Google Authenticator hoặc OTP
+                  {t('security.twoFactor.subtitle')}
                 </p>
               </div>
             </div>
@@ -635,12 +637,12 @@ export const PersonalSecurityPage = () => {
             >
               <div>
                 <div style={{ fontSize: '0.875rem', fontWeight: 800, color: twoFactorEnabled ? '#166534' : '#991B1B' }}>
-                  {twoFactorEnabled ? '2FA Đang Được Bật' : '2FA Đang Bị Tắt'}
+                  {twoFactorEnabled ? t('security.twoFactor.enabledTitle') : t('security.twoFactor.disabledTitle')}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: twoFactorEnabled ? '#15803D' : '#B91C1C', marginTop: '2px' }}>
                   {twoFactorEnabled
-                    ? 'Mỗi lần đăng nhập đều yêu cầu mã xác thực OTP 6 số'
-                    : 'Tài khoản chưa có lớp bảo vệ thứ 2, có nguy cơ bị xâm nhập'}
+                    ? t('security.twoFactor.enabledDesc')
+                    : t('security.twoFactor.disabledDesc')}
                 </div>
               </div>
 
@@ -654,12 +656,12 @@ export const PersonalSecurityPage = () => {
                   color: '#FFFFFF',
                 }}
               >
-                {twoFactorEnabled ? 'BẢO VỆ TỐI ĐA' : 'NGUY HIỂM'}
+                {twoFactorEnabled ? t('security.twoFactor.badgeProtected') : t('security.twoFactor.badgeRisk')}
               </span>
             </div>
 
             <p style={{ fontSize: '0.8125rem', color: '#475569', lineHeight: 1.5, margin: 0 }}>
-              Khi kích hoạt 2FA, bên cạnh mật khẩu bạn sẽ cần nhập thêm mã số từ ứng dụng xác thực trên điện thoại (Google Authenticator, Microsoft Authenticator hoặc Authy).
+              {t('security.twoFactor.info')}
             </p>
           </div>
 
@@ -680,7 +682,7 @@ export const PersonalSecurityPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                Vô Hiệu Hóa 2FA
+                {t('security.twoFactor.disableBtn')}
               </button>
             ) : (
               <button
@@ -698,7 +700,7 @@ export const PersonalSecurityPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                Kích Hoạt 2FA Ngay
+                {t('security.twoFactor.enableBtn')}
               </button>
             )}
           </div>
@@ -722,7 +724,7 @@ export const PersonalSecurityPage = () => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Các Phiên Đăng Nhập Đang Hoạt Động
+                {t('security.sessions.title')}
               </h3>
               <span
                 style={{
@@ -739,13 +741,13 @@ export const PersonalSecurityPage = () => {
                 }}
               >
                 <ShieldCheck size={12} />
-                <span>{safeSessions.length} phiên đang kết nối</span>
+                <span>{t('security.sessions.connectedBadge', { count: safeSessions.length })}</span>
               </span>
             </div>
             <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '4px 0 0 0' }}>
               {otherSessions.length === 0
-                ? 'Bảo vệ an toàn: Tài khoản hiện chỉ duy trì 1 phiên đăng nhập duy nhất từ thiết bị bạn đang sử dụng.'
-                : 'Danh sách các thiết bị và trình duyệt đang lưu phiên đăng nhập của tài khoản bạn.'}
+                ? t('security.sessions.singleSessionDesc')
+                : t('security.sessions.multiSessionDesc')}
             </p>
           </div>
 
@@ -769,7 +771,7 @@ export const PersonalSecurityPage = () => {
           >
             <LogOut size={14} />
             <span>
-              Đăng Xuất Khỏi Thiết Bị Khác ({otherSessions.length})
+              {t('security.sessions.revokeOthersBtn', { count: otherSessions.length })}
             </span>
           </button>
         </div>
@@ -820,7 +822,7 @@ export const PersonalSecurityPage = () => {
                           color: '#FFFFFF',
                         }}
                       >
-                        Thiết bị này
+                        {t('security.sessions.currentDeviceBadge')}
                       </span>
                     )}
                   </div>
@@ -854,24 +856,24 @@ export const PersonalSecurityPage = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Lịch Sử Đăng Nhập Gần Đây
+              {t('security.loginHistory.title')}
             </h3>
             <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Ghi nhận chi tiết thời gian, địa chỉ IP và trạng thái đăng nhập từ cơ sở dữ liệu kiểm toán hệ thống
+              {t('security.loginHistory.subtitle')}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {isLoadingLogins && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#64748B' }}>
                 <Loader2 size={13} className="animate-spin" color="#059669" />
-                <span>Đang đồng bộ...</span>
+                <span>{t('security.loginHistory.syncing')}</span>
               </div>
             )}
             <button
               type="button"
               onClick={handleRefreshLoginHistory}
               disabled={isLoadingLogins}
-              title="Làm mới lịch sử từ cơ sở dữ liệu"
+              title={t('security.loginHistory.refreshTitle')}
               style={{
                 padding: '6px 12px',
                 borderRadius: '8px',
@@ -888,7 +890,7 @@ export const PersonalSecurityPage = () => {
               }}
             >
               <RefreshCw size={13} className={isLoadingLogins ? 'animate-spin' : ''} />
-              <span>Làm Mới</span>
+              <span>{t('security.loginHistory.refresh')}</span>
             </button>
           </div>
         </div>
@@ -897,12 +899,12 @@ export const PersonalSecurityPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #E2E8F0', color: '#64748B' }}>
-                <th style={{ padding: '8px 12px', fontWeight: 700 }}>Thời Gian</th>
-                <th style={{ padding: '8px 12px', fontWeight: 700 }}>Phương Thức</th>
-                <th style={{ padding: '8px 12px', fontWeight: 700 }}>Địa Chỉ IP</th>
-                <th style={{ padding: '8px 12px', fontWeight: 700 }}>Vị Trí Ước Tính</th>
-                <th style={{ padding: '8px 12px', fontWeight: 700 }}>Thiết Bị</th>
-                <th style={{ padding: '8px 12px', fontWeight: 700, textAlign: 'right' }}>Trạng Thái</th>
+                <th style={{ padding: '8px 12px', fontWeight: 700 }}>{t('security.loginHistory.colTime')}</th>
+                <th style={{ padding: '8px 12px', fontWeight: 700 }}>{t('security.loginHistory.colMethod')}</th>
+                <th style={{ padding: '8px 12px', fontWeight: 700 }}>{t('security.loginHistory.colIp')}</th>
+                <th style={{ padding: '8px 12px', fontWeight: 700 }}>{t('security.loginHistory.colLocation')}</th>
+                <th style={{ padding: '8px 12px', fontWeight: 700 }}>{t('security.loginHistory.colDevice')}</th>
+                <th style={{ padding: '8px 12px', fontWeight: 700, textAlign: 'right' }}>{t('security.loginHistory.colStatus')}</th>
               </tr>
             </thead>
             <tbody>
@@ -910,8 +912,8 @@ export const PersonalSecurityPage = () => {
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: '36px 16px', color: '#94A3B8' }}>
                     {isLoadingLogins
-                      ? 'Đang đồng bộ lịch sử đăng nhập từ cơ sở dữ liệu...'
-                      : 'Chưa có bản ghi lịch sử đăng nhập nào được ghi nhận.'}
+                      ? t('security.loginHistory.loadingRow')
+                      : t('security.loginHistory.emptyRow')}
                   </td>
                 </tr>
               ) : (
@@ -935,7 +937,7 @@ export const PersonalSecurityPage = () => {
                           color: item.status === 'SUCCESS' ? '#059669' : '#DC2626',
                         }}
                       >
-                        {item.status === 'SUCCESS' ? 'Thành công' : 'Thất bại'}
+                        {item.status === 'SUCCESS' ? t('security.loginHistory.statusSuccess') : t('security.loginHistory.statusFailed')}
                       </span>
                     </td>
                   </tr>
@@ -961,9 +963,9 @@ export const PersonalSecurityPage = () => {
         >
           {/* Cụm trái: Hiển thị mỗi trang */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>Hiển thị mỗi trang:</span>
+            <span>{t('security.loginHistory.perPageLabel')}</span>
             <select
-              aria-label="Hiển thị mỗi trang"
+              aria-label={t('security.loginHistory.perPageAria')}
               value={loginPageSize}
               onChange={(e) => handlePageSizeChange(Number(e.target.value))}
               style={{
@@ -988,7 +990,7 @@ export const PersonalSecurityPage = () => {
           {/* Cụm phải: Số trang và nút Trước / Sau */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span>
-              Trang {loginCurrentPage} trên tổng {totalLoginPages}
+              {t('security.loginHistory.pageInfo', { current: loginCurrentPage, total: totalLoginPages })}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <button
@@ -1010,7 +1012,7 @@ export const PersonalSecurityPage = () => {
                   transition: 'all 0.15s ease',
                 }}
               >
-                &lsaquo; Trước
+                {t('security.loginHistory.prev')}
               </button>
               <button
                 type="button"
@@ -1031,7 +1033,7 @@ export const PersonalSecurityPage = () => {
                   transition: 'all 0.15s ease',
                 }}
               >
-                Sau &rsaquo;
+                {t('security.loginHistory.next')}
               </button>
             </div>
           </div>
@@ -1083,7 +1085,7 @@ export const PersonalSecurityPage = () => {
                   <ShieldCheck size={20} />
                 </div>
                 <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Kích Hoạt Xác Thực 2FA
+                  {t('security.setupModal.title')}
                 </h3>
               </div>
               <button
@@ -1102,7 +1104,7 @@ export const PersonalSecurityPage = () => {
             </div>
 
             <p style={{ fontSize: '0.8125rem', color: '#64748B', lineHeight: 1.5, margin: '0 0 16px 0' }}>
-              Mở ứng dụng <strong>Google Authenticator</strong> hoặc <strong>Authy</strong> trên điện thoại, quét mã QR dưới đây để thêm tài khoản:
+              {t('security.setupModal.descPrefix')} <strong>Google Authenticator</strong> {t('security.setupModal.descOr')} <strong>Authy</strong> {t('security.setupModal.descSuffix')}
             </p>
 
             {/* QR Code Container */}
@@ -1141,7 +1143,7 @@ export const PersonalSecurityPage = () => {
             >
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>
-                  Khóa thiết lập thủ công
+                  {t('security.setupModal.manualKeyLabel')}
                 </div>
                 <div style={{ fontSize: '0.8125rem', fontWeight: 700, fontFamily: 'monospace', color: '#0F172A', letterSpacing: '1px', wordBreak: 'break-all' }}>
                   {setupData.secret}
@@ -1169,7 +1171,7 @@ export const PersonalSecurityPage = () => {
                 }}
               >
                 {copiedSecret ? <Check size={14} /> : <Copy size={14} />}
-                {copiedSecret ? 'Đã chép' : 'Sao chép'}
+                {copiedSecret ? t('security.setupModal.copied') : t('security.setupModal.copy')}
               </button>
             </div>
 
@@ -1177,7 +1179,7 @@ export const PersonalSecurityPage = () => {
             <form onSubmit={handleConfirm2FA}>
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
-                  Nhập mã 6 số từ ứng dụng xác thực
+                  {t('security.setupModal.otpLabel')}
                 </label>
                 <input
                   type="text"
@@ -1233,7 +1235,7 @@ export const PersonalSecurityPage = () => {
                     cursor: 'pointer',
                   }}
                 >
-                  Hủy bỏ
+                  {t('security.setupModal.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -1255,7 +1257,7 @@ export const PersonalSecurityPage = () => {
                     gap: '6px',
                   }}
                 >
-                  {isSettingUp ? <Loader2 size={16} className="animate-spin" /> : 'Xác Nhận & Kích Hoạt'}
+                  {isSettingUp ? <Loader2 size={16} className="animate-spin" /> : t('security.setupModal.confirm')}
                 </button>
               </div>
             </form>
@@ -1305,10 +1307,10 @@ export const PersonalSecurityPage = () => {
                 <CheckCircle2 size={28} />
               </div>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
-                Kích Hoạt 2FA Thành Công!
+                {t('security.backupModal.title')}
               </h3>
               <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-                Hãy lưu lại 8 mã dự phòng dưới đây. Mỗi mã có thể dùng 1 lần để đăng nhập khi bạn không mang theo điện thoại.
+                {t('security.backupModal.desc')}
               </p>
             </div>
 
@@ -1370,7 +1372,7 @@ export const PersonalSecurityPage = () => {
                 }}
               >
                 {copiedBackup ? <Check size={16} /> : <Copy size={16} />}
-                {copiedBackup ? 'Đã sao chép tất cả' : 'Sao chép 8 mã'}
+                {copiedBackup ? t('security.backupModal.copiedAll') : t('security.backupModal.copyAll')}
               </button>
               <button
                 type="button"
@@ -1387,7 +1389,7 @@ export const PersonalSecurityPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                Đã Lưu & Hoàn Tất
+                {t('security.backupModal.done')}
               </button>
             </div>
           </div>
@@ -1435,14 +1437,14 @@ export const PersonalSecurityPage = () => {
                 <AlertTriangle size={20} />
               </div>
               <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Vô Hiệu Hóa 2FA
+                {t('security.disableModal.title')}
               </h3>
             </div>
 
             <p style={{ fontSize: '0.8125rem', color: '#64748B', lineHeight: 1.5, margin: '0 0 14px 0' }}>
               {hasPassword
-                ? 'Bạn có chắc chắn muốn tắt Xác thực 2 Yếu tố? Tài khoản của bạn sẽ chỉ được bảo vệ bởi mật khẩu thông thường.'
-                : 'Bạn có chắc chắn muốn tắt Xác thực 2 Yếu tố? Tài khoản của bạn sẽ chỉ được bảo vệ bởi xác thực Google.'}
+                ? t('security.disableModal.descPassword')
+                : t('security.disableModal.descGoogle')}
             </p>
 
             <div style={{ marginBottom: '16px' }}>
@@ -1456,7 +1458,7 @@ export const PersonalSecurityPage = () => {
                   marginBottom: '6px',
                 }}
               >
-                {hasPassword ? 'Mật khẩu tài khoản hoặc Mã OTP 2FA (6 số)' : 'Mã OTP 2FA (6 số)'}
+                {hasPassword ? t('security.disableModal.labelPasswordOrOtp') : t('security.disableModal.labelOtpOnly')}
               </label>
               <input
                 id="disable-2fa-credential"
@@ -1471,7 +1473,7 @@ export const PersonalSecurityPage = () => {
                     handleConfirmDisable2FA(e);
                   }
                 }}
-                placeholder={hasPassword ? 'Nhập mật khẩu hoặc mã OTP 6 số...' : 'Nhập mã OTP 6 số từ ứng dụng xác thực...'}
+                placeholder={hasPassword ? t('security.disableModal.placeholderPasswordOrOtp') : t('security.disableModal.placeholderOtpOnly')}
                 autoFocus
                 style={{
                   width: '100%',
@@ -1518,7 +1520,7 @@ export const PersonalSecurityPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                Hủy bỏ
+                {t('security.disableModal.cancel')}
               </button>
               <button
                 type="button"
@@ -1541,7 +1543,7 @@ export const PersonalSecurityPage = () => {
                   gap: '6px',
                 }}
               >
-                {isDisabling ? <Loader2 size={16} className="animate-spin" /> : 'Xác Nhận Tắt 2FA'}
+                {isDisabling ? <Loader2 size={16} className="animate-spin" /> : t('security.disableModal.confirm')}
               </button>
             </div>
           </div>

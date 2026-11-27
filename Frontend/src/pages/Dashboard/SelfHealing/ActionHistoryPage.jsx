@@ -1,8 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import { selfHealingService } from '../../../services/selfHealingService';
 import { aiService } from '../../../services/aiService';
 import { extractActiveK8sServices } from '../../../utils/k8sServiceFilter';
+import { translateActionMessageToVi } from '../Incidents/incidentUtils';
 import SelfHealingTrendChart from '../../../components/dashboard/SelfHealingTrendChart';
 import ActionDetailModal from './ActionDetailModal';
 import {
@@ -20,24 +23,23 @@ import {
   ChevronDown,
   RotateCcw,
   Server,
-  Zap,
   Filter,
   BarChart2,
   AlertTriangle,
   X,
 } from 'lucide-react';
 
-const CANONICAL_ACTION_TYPES = [
-  { code: 'RESTART_POD', label: 'Khởi động lại Pod (RESTART_POD)' },
-  { code: 'SCALE_REPLICAS', label: 'Mở rộng Replicas (SCALE_REPLICAS)' },
-  { code: 'ROLLBACK_DEPLOYMENT', label: 'Hoàn nguyên Deployment (ROLLBACK_DEPLOYMENT)' },
-  { code: 'REPLACE_POD', label: 'Thay thế Pod lỗi (REPLACE_POD)' },
-  { code: 'CLEANUP_TEMP_FILES', label: 'Dọn dẹp lưu trữ tạm (CLEANUP_STORAGE)' },
-  { code: 'RESTART_DEPLOYMENT', label: 'Khởi động lại Deployment (RESTART_DEPLOYMENT)' },
-  { code: 'ADJUST_RESOURCE_LIMITS', label: 'Điều chỉnh hạn mức CPU/RAM (ADJUST_LIMITS)' },
-  { code: 'DRAIN_NODE', label: 'Di tản Pod khỏi Node (DRAIN_NODE)' },
-  { code: 'BLOCK_IP_TEMP', label: 'Chặn IP bất thường (TEMPORARY_IP_BLOCK)' },
-  { code: 'NO_ACTION', label: 'Giám sát an toàn (NO_ACTION)' },
+const CANONICAL_ACTION_CODES = [
+  'RESTART_POD',
+  'SCALE_REPLICAS',
+  'ROLLBACK_DEPLOYMENT',
+  'REPLACE_POD',
+  'CLEANUP_TEMP_FILES',
+  'RESTART_DEPLOYMENT',
+  'ADJUST_RESOURCE_LIMITS',
+  'DRAIN_NODE',
+  'BLOCK_IP_TEMP',
+  'NO_ACTION',
 ];
 
 // Helpers định dạng ngày tháng cục bộ an toàn theo múi giờ client
@@ -61,12 +63,13 @@ const getThisYearStr = () => {
 };
 
 export const ActionHistoryPage = ({ onNavigate }) => {
+  const { t, i18n: i18nInstance } = useTranslation('dashHealing');
   const { currentOrg, currentEnv } = useDashboard();
   const [searchTerm, setSearchTerm] = useState('');
-  const [actions, setActions] = useState([]);
-  const [analytics, setAnalytics] = useState(null);
+  const [rawActions, setRawActions] = useState([]);
+  const [, setAnalytics] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isUsingLiveDb, setIsUsingLiveDb] = useState(true);
+  const [, setIsUsingLiveDb] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedAction, setSelectedAction] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -108,25 +111,26 @@ export const ActionHistoryPage = ({ onNavigate }) => {
   const currentFilterLabel = useMemo(() => {
     if (timeFilterMode === 'today') {
       const parts = getTodayStr().split('-');
-      return `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})`;
+      return t('incidents.calendar.todayLabel', { date: `${parts[2]}/${parts[1]}/${parts[0]}` });
     }
     if (timeFilterMode === 'date') {
-      if (!selectedDate) return 'Chọn ngày';
+      if (!selectedDate) return t('common.selectDate');
       const parts = selectedDate.split('-');
       const isToday = selectedDate === getTodayStr();
-      return isToday ? `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})` : `${parts[2]}/${parts[1]}/${parts[0]}`;
+      const dFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return isToday ? t('incidents.calendar.todayLabel', { date: dFormatted }) : dFormatted;
     }
     if (timeFilterMode === 'month') {
-      if (!selectedMonth) return 'Chọn tháng';
+      if (!selectedMonth) return t('common.selectMonth');
       const parts = selectedMonth.split('-');
-      return `Tháng ${parts[1]}/${parts[0]}`;
+      return t('incidents.calendar.monthLabel', { month: `${parts[1]}/${parts[0]}` });
     }
     if (timeFilterMode === 'year') {
-      return `Năm ${selectedYear}`;
+      return t('incidents.calendar.yearLabel', { year: selectedYear });
     }
     const parts = getTodayStr().split('-');
-    return `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})`;
-  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear]);
+    return t('incidents.calendar.todayLabel', { date: `${parts[2]}/${parts[1]}/${parts[0]}` });
+  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear, t]);
 
   const activeClusterId = useMemo(() => {
     return currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster || '';
@@ -136,188 +140,17 @@ export const ActionHistoryPage = ({ onNavigate }) => {
     return currentOrg?.id || '';
   }, [currentOrg?.id]);
 
-  const formatRelativeTime = (dateStr) => {
-    if (!dateStr) return 'Vừa xong';
+  const formatRelativeTime = useCallback((dateStr) => {
+    if (!dateStr) return t('common.justNow');
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Vừa xong';
-    if (mins < 60) return `${mins} phút trước`;
+    if (mins < 1) return t('common.justNow');
+    if (mins < 60) return t('common.minutesAgo', { count: mins });
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} giờ trước`;
+    if (hours < 24) return t('common.hoursAgo', { count: hours });
     const days = Math.floor(hours / 24);
-    return `${days} ngày trước`;
-  };
-
-const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName = 'Tự phục hồi', resolvedNs = 'default') => {
-  if (!rawMsg) return `Đã thực thi ${actionFriendlyName} trên dịch vụ "${targetName}"`;
-
-  let text = String(rawMsg).trim();
-
-  // 0. Safety Guard Blocked namespace
-  if (text.includes('Safety Guard Blocked') || text.includes('protected Kubernetes system namespace')) {
-    const nsMatch = text.match(/Namespace '([^']+)'/i);
-    const ns = nsMatch ? nsMatch[1] : (resolvedNs || 'hệ thống');
-    return `Thực thi ${actionFriendlyName} trên "${targetName}" bị chặn: Namespace "${ns}" là hạ tầng hệ thống cốt lõi của Kubernetes, không được phép can thiệp tự động`;
-  }
-
-  // 1. RBAC 403 Forbidden
-  const rbacMatch = text.match(
-    /User\??\s*"([^"\\]+)\??"\s+cannot\s+(\w+)\s+resource\s+\??"([^"\\]+)\??"(?:\s+in API group\s+\??"([^"\\]*)\??")?(?:\s+in the namespace\s+\??"([^"\\]+)\??")?/i
-  ) || text.match(
-    /User\s+"([^"]+)"\s+cannot\s+(\w+)\s+resource\s+"([^"]+)"(?:\s+in API group\s+"([^"]*)")?(?:\s+in the namespace\s+"([^"]+)")?/i
-  );
-  if (rbacMatch || text.includes('(403)') || text.includes('Forbidden')) {
-    const saUser = rbacMatch ? rbacMatch[1].replace('system:serviceaccount:', '') : 'selfheal-system:selfheal-agent-sa';
-    const verb = rbacMatch ? rbacMatch[2] : 'patch';
-    const resource = rbacMatch ? rbacMatch[3] : 'deployments/scale';
-    const targetNs = rbacMatch && rbacMatch[5] ? rbacMatch[5] : resolvedNs;
-    return `Thực thi ${actionFriendlyName} trên "${targetName}" thất bại [Lỗi 403 Forbidden]: ServiceAccount "${saUser}" thiếu quyền "${verb}" tài nguyên "${resource}" tại namespace "${targetNs}"`;
-  }
-
-  // 2. HTTP response headers dump
-  if (text.includes('HTTPHeaderDict') || text.includes('HTTP response headers:')) {
-    text = text.split('HTTP response headers:')[0].trim();
-  }
-
-  // 3. Scaling: "deployment/sme-order-service scaled (scale_up) successfully from 5 to 5 replicas in 'default'"
-  const scaleMatch = text.match(
-    /(?:[a-z0-9_-]+\/)?([a-z0-9_-]+)\s+scaled\s+\((scale_up|scale_down)\)\s+successfully\s+from\s+(\w+)\s+to\s+(\d+)\s+replicas(?:\s+in\s+'([^']+)')?/i
-  );
-  if (scaleMatch) {
-    const sTarget = scaleMatch[1] || targetName;
-    const sDir = scaleMatch[2].toLowerCase() === 'scale_up' ? 'mở rộng' : 'thu hẹp';
-    const sFrom = scaleMatch[3];
-    const sTo = scaleMatch[4];
-    const sNs = scaleMatch[5] || resolvedNs;
-    const fromText = sFrom === 'unknown' ? 'số lượng hiện tại' : sFrom;
-    return `Đã điều chỉnh quy mô (${sDir}) thành công cho Deployment "${sTarget}" từ ${fromText} lên ${sTo} bản sao trong namespace "${sNs}".`;
-  }
-
-  // 4. Scale skipped at minimum
-  const scaleMinMatch = text.match(
-    /Workload\s+(?:[a-z0-9_-]+\/)?([a-z0-9_-]+)\s+currently at minimum\s+(\d+)\s+replica(?:\s+in\s+'([^']+)')?,\s+scale down skipped safely/i
-  );
-  if (scaleMinMatch) {
-    const sTarget = scaleMinMatch[1] || targetName;
-    const sNs = scaleMinMatch[3] || resolvedNs;
-    return `Dịch vụ "${sTarget}" hiện đang ở mức tối thiểu 1 bản sao trong namespace "${sNs}", đã bỏ qua thu hẹp để bảo toàn tính sẵn sàng.`;
-  }
-
-  // 5. Rolling restart
-  const restartMatch = text.match(
-    /Zero-downtime rolling restart patched successfully on (?:[a-z0-9_-]+\/)?([a-z0-9_-]+)(?:\s+in namespace\s+'([^']+)')?/i
-  );
-  if (restartMatch) {
-    const rTarget = restartMatch[1] || targetName;
-    const rNs = restartMatch[2] || resolvedNs;
-    return `Đã khởi động lại Pod (Rolling Restart) không gián đoạn cho dịch vụ "${rTarget}" tại namespace "${rNs}".`;
-  }
-
-  // 6. Terminate & replace pod
-  const replacePodMatch = text.match(
-    /Specific unhealthy pod '([^']+)' terminated and successfully replaced by ReplicaSet(?:\s+in\s+'([^']+)')?/i
-  );
-  if (replacePodMatch) {
-    const pName = replacePodMatch[1];
-    const pNs = replacePodMatch[2] || resolvedNs;
-    return `Đã chấm điểm, cô lập và xóa Pod lỗi "${pName}"; ReplicaSet tại namespace "${pNs}" đã tự động khởi tạo Pod mới thay thế thành công.`;
-  }
-
-  // 7. Replaced pod via rolling restart
-  const replaceRollingMatch = text.match(
-    /Replaced pod via rolling restart on (?:[a-z0-9_-]+\/)?([a-z0-9_-]+)(?:\s+in\s+'([^']+)')?/i
-  );
-  if (replaceRollingMatch) {
-    const rTarget = replaceRollingMatch[1] || targetName;
-    const rNs = replaceRollingMatch[2] || resolvedNs;
-    return `Đã thay thế Pod qua cơ chế rolling restart trên dịch vụ "${rTarget}" tại namespace "${rNs}".`;
-  }
-
-  // 8. Rollback
-  const rollbackMatch = text.match(
-    /True Rollback executed:\s*Restored Deployment '([^']+)' from Revision (\d+) back to Revision (\d+)(?:[^\n\r]*)(?:\s+in\s+'([^']+)')?/i
-  );
-  if (rollbackMatch) {
-    const rbTarget = rollbackMatch[1] || targetName;
-    const fromRev = rollbackMatch[2];
-    const toRev = rollbackMatch[3];
-    const rbNs = rollbackMatch[4] || resolvedNs;
-    return `Đã hoàn nguyên (Rollback) thành công Deployment "${rbTarget}" từ bản Revision ${fromRev} về bản Revision ${toRev} trong namespace "${rbNs}".`;
-  }
-
-  // 9. Storage cleanup
-  const storageMatch = text.match(
-    /Ephemeral disk cleanup and emptyDir reclamation executed successfully on ([^' ]+)(?:\s+in\s+'([^']+)')?/i
-  );
-  if (storageMatch) {
-    const sTarget = storageMatch[1] || targetName;
-    const sNs = storageMatch[2] || resolvedNs;
-    return `Đã dọn dẹp bộ nhớ tạm và thu hồi ổ đĩa trống (emptyDir) thành công cho dịch vụ "${sTarget}" tại namespace "${sNs}".`;
-  }
-
-  // 10. Limits adjusted
-  const limitsMatch = text.match(
-    /Adjusted CPU\/RAM resource limits and applied rolling update on (?:[a-z0-9_-]+\/)?([a-z0-9_-]+)(?:\s+in\s+'([^']+)')?/i
-  );
-  if (limitsMatch) {
-    const lTarget = limitsMatch[1] || targetName;
-    const lNs = limitsMatch[2] || resolvedNs;
-    return `Đã điều chỉnh định mức CPU/RAM và cập nhật rolling update cho dịch vụ "${lTarget}" tại namespace "${lNs}".`;
-  }
-
-  // 11. Node cordon
-  const cordonMatch = text.match(
-    /Cordoned degraded node '([^']+)' and rescheduled pods(?:[^\n\r]*)to healthy node '([^']+)'/i
-  );
-  if (cordonMatch) {
-    const cNode = cordonMatch[1];
-    const hNode = cordonMatch[2];
-    return `Đã khóa lập lịch Node suy biến "${cNode}" và di tản Pod an toàn sang Node ổn định "${hNode}".`;
-  }
-
-  // 12. Single-node guard
-  if (text.includes('Single-node cluster guard')) {
-    return `Bảo vệ cụm đơn node: Bỏ qua khóa Node và khởi tạo lại Pod an toàn trên dịch vụ "${targetName}".`;
-  }
-
-  // 13. NetworkPolicy block IP
-  const netBlockMatch = text.match(
-    /NetworkPolicy '([^']+)' (?:deployed|updated) successfully:\s*IP '([^']+)' blocked from accessing ([^' ]+)(?:\s+in namespace\s+'([^']+)')?/i
-  );
-  if (netBlockMatch) {
-    const npPolicy = netBlockMatch[1];
-    const npIp = netBlockMatch[2];
-    const npTarget = netBlockMatch[3] || targetName;
-    const npNs = netBlockMatch[4] || resolvedNs;
-    return `Đã áp dụng chính sách mạng "${npPolicy}": Chặn IP "${npIp}" truy cập vào dịch vụ "${npTarget}" tại namespace "${npNs}".`;
-  }
-
-  // 14. NetworkPolicy unblock
-  const netUnblockMatch = text.match(
-    /NetworkPolicy '([^']+)' removed:\s*IP '([^']+)' unblocked successfully(?:\s+in namespace\s+'([^']+)')?/i
-  );
-  if (netUnblockMatch) {
-    const npIp = netUnblockMatch[2];
-    const npNs = netUnblockMatch[3] || resolvedNs;
-    return `Đã gỡ bỏ chính sách NetworkPolicy: Mở chặn IP "${npIp}" truy cập dịch vụ tại namespace "${npNs}".`;
-  }
-
-  // 15. NO_ACTION telemetry verified
-  if (text.includes('Zero-downtime preserved') || text.includes('NO_ACTION applied')) {
-    return `Giám sát an toàn: Viễn trắc ghi nhận dịch vụ "${targetName}" ổn định, giữ nguyên trạng thái an toàn.`;
-  }
-
-  // 16. Self-healing mitigate action
-  if (text.includes('Self-healing mitigate action')) {
-    return `Đã thực thi thành công ${actionFriendlyName} trên dịch vụ "${targetName}".`;
-  }
-
-  // Clean English verification tag if present
-  text = text.replace(/\s*\(Post-Action Verification Failed\):?/gi, ':');
-  text = text.replace(/Post-Action Verification Failed:?\s*/gi, '');
-
-  return text;
-};
+    return t('common.daysAgo', { count: days });
+  }, [t]);
 
   const mapBackendActionToUI = useCallback((item) => {
     const shortId = item.id && item.id.length > 8 ? `ACT-${item.id.slice(0, 8).toUpperCase()}` : (item.id || 'N/A');
@@ -335,10 +168,10 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
     }
     const mttrSec = computedDurationMs > 0
       ? `${(computedDurationMs / 1000).toFixed(1)}s`
-      : (item.execution_status === 'RUNNING' ? 'Đang chạy' : (item.execution_status === 'PENDING' ? 'Đang chờ' : '0.1s'));
+      : (item.execution_status === 'RUNNING' ? t('actionHistory.mapped.running') : (item.execution_status === 'PENDING' ? t('actionHistory.mapped.pending') : '0.1s'));
 
     // Strip WORKLOAD/ or any other prefix from target name
-    const rawTarget = item.target_name || item.target_id || 'Chưa xác định';
+    const rawTarget = item.target_name || item.target_id || t('common.unknown');
     let targetName = String(rawTarget).replace(/^[A-Za-z0-9_-]+\//i, '').trim();
     const lTarget = targetName.toLowerCase();
     if (lTarget === 'otel-collector-opentelemetry-collector') targetName = 'opentelemetry-collector';
@@ -354,16 +187,16 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
       (item.error_message?.match(/namespace "([^"]+)"/)?.[1]) ||
       'default';
 
-    const rawActionCode = item.action_type_code || item.action_type_name || 'Tự phục hồi';
+    const rawActionCode = item.action_type_code || item.action_type_name || t('incidentUtils.actions.DEFAULT');
     let actionFriendlyName = rawActionCode;
     const upperCode = String(rawActionCode).toUpperCase();
-    if (upperCode.includes('DRAIN')) actionFriendlyName = 'Di tản & Cô lập Node (Drain Node)';
-    else if (upperCode.includes('CORDON')) actionFriendlyName = 'Khóa lập lịch Node (Cordon Node)';
-    else if (upperCode.includes('SCALE')) actionFriendlyName = 'Điều chỉnh số lượng bản sao Pod';
-    else if (upperCode.includes('RESTART')) actionFriendlyName = 'Khởi động lại Pod';
-    else if (upperCode.includes('REPLACE')) actionFriendlyName = 'Thay thế Pod';
-    else if (upperCode.includes('ROLLBACK')) actionFriendlyName = 'Khôi phục bản phát hành trước';
-    else if (upperCode.includes('CLEANUP')) actionFriendlyName = 'Dọn dẹp tài nguyên';
+    if (upperCode.includes('DRAIN')) actionFriendlyName = t('actionHistory.mapped.drain');
+    else if (upperCode.includes('CORDON')) actionFriendlyName = t('actionHistory.mapped.cordon');
+    else if (upperCode.includes('SCALE')) actionFriendlyName = t('actionHistory.mapped.scale');
+    else if (upperCode.includes('RESTART')) actionFriendlyName = t('actionHistory.mapped.restart');
+    else if (upperCode.includes('REPLACE')) actionFriendlyName = t('actionHistory.mapped.replace');
+    else if (upperCode.includes('ROLLBACK')) actionFriendlyName = t('actionHistory.mapped.rollback');
+    else if (upperCode.includes('CLEANUP')) actionFriendlyName = t('actionHistory.mapped.cleanup');
     else if (upperCode.includes('BLOCK')) {
       const blockedIp =
         item.result?.details?.blocked_ip ||
@@ -373,13 +206,13 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
         item.params?.source_ip ||
         (item.result?.message && item.result.message.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)?.[0]) ||
         (item.incident_title && item.incident_title.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)?.[0]);
-      actionFriendlyName = blockedIp ? `Chặn IP (${blockedIp})` : 'Chặn IP bất thường';
+      actionFriendlyName = blockedIp ? t('actionHistory.mapped.blockIpVal', { ip: blockedIp }) : t('actionHistory.mapped.blockIp');
     }
-    else if (upperCode.includes('NO_ACTION')) actionFriendlyName = 'Giám sát an toàn';
+    else if (upperCode.includes('NO_ACTION')) actionFriendlyName = t('actionHistory.mapped.noAction');
 
     const rawMsg = String(item.result?.message || item.error_message || '');
     let title = translateActionMessageToVi(rawMsg, targetName, actionFriendlyName, resolvedNs);
-    const policyName = item.policy_name || 'Tự phục hồi trực tiếp (AI Trigger)';
+    const policyName = item.policy_name || t('actionHistory.mapped.policyDefault');
 
     const isWaitingApproval =
       item.execution_status !== 'COMPLETED' &&
@@ -388,32 +221,33 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
       item.execution_status !== 'CANCELLED' &&
       (item.approval_status === 'PENDING' ||
        item.execution_status === 'PENDING' ||
-       rawMsg.toLowerCase().includes('chờ phê duyệt'));
+       rawMsg.toLowerCase().includes('chờ phê duyệt') ||
+       rawMsg.toLowerCase().includes('awaiting hitl'));
 
-    let resultText = 'Thành công (100%)';
+    let resultText = t('actionHistory.mapped.resultSuccess');
     let verified = '';
     let effectiveMttr = mttrSec;
     let effectiveStatus = item.execution_status || 'COMPLETED';
 
     if (isWaitingApproval) {
-      resultText = 'Chờ duyệt HITL';
+      resultText = t('actionHistory.mapped.resultPending');
       verified = '';
-      effectiveMttr = 'Đang chờ';
+      effectiveMttr = t('actionHistory.mapped.pending');
       effectiveStatus = 'PENDING';
-      if (!title || title.includes('Thực thi')) {
-        title = `Hành động ${actionFriendlyName} trên "${targetName}" đang chờ phê duyệt tại Cổng HITL`;
+      if (!title || title.includes('Thực thi') || title.includes('Executed')) {
+        title = t('actionHistory.mapped.pendingTitle', { action: actionFriendlyName, target: targetName });
       }
     } else if (item.execution_status === 'RUNNING') {
-      resultText = 'Đang thực thi...';
-      verified = 'Đang xử lý';
-      effectiveMttr = 'Đang chạy';
+      resultText = t('actionHistory.mapped.resultRunning');
+      verified = t('actionHistory.mapped.verifiedProcessing');
+      effectiveMttr = t('actionHistory.mapped.running');
       effectiveStatus = 'RUNNING';
     } else if (item.execution_status === 'FAILED') {
-      resultText = 'Thất bại';
-      verified = item.verification?.verification_type ? 'Kiểm tra thất bại' : '';
+      resultText = t('actionHistory.mapped.resultFailed');
+      verified = item.verification?.verification_type ? t('actionHistory.mapped.verifiedFailedCheck') : '';
       effectiveStatus = 'FAILED';
     } else if (item.execution_status === 'CANCELLED') {
-      resultText = 'Đã hủy bỏ';
+      resultText = t('actionHistory.mapped.resultCancelled');
       verified = '';
       effectiveMttr = '-';
       effectiveStatus = 'CANCELLED';
@@ -424,18 +258,18 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
         String(item.result?.message || '').toLowerCase().includes('hậu kiểm thất bại');
 
       if (hasVerificationFailed) {
-        resultText = 'Hậu kiểm vi phạm';
+        resultText = t('actionHistory.mapped.resultVerifFailed');
         verified = item.verification?.verification_type === 'K8S_POST_HEALING_PROBE'
-          ? 'Probe K8s phát hiện bất thường'
-          : 'Hậu kiểm SLO chưa đạt';
+          ? t('actionHistory.mapped.verifiedProbeAbnormal')
+          : t('actionHistory.mapped.verifiedSloNotMet');
         effectiveStatus = 'VERIFICATION_FAILED';
       } else {
-        resultText = 'Thành công (100%)';
+        resultText = t('actionHistory.mapped.resultSuccess');
         const rawVer = item.verification?.verification_type || '';
-        verified = rawVer === 'K8S_POST_HEALING_PROBE' ? 'Đã xác thực K8s Probe' : (rawVer || 'Đã xác thực an toàn');
+        verified = rawVer === 'K8S_POST_HEALING_PROBE' ? t('actionHistory.mapped.verifiedProbeOk') : (rawVer || t('actionHistory.mapped.verifiedSafe'));
         effectiveStatus = 'COMPLETED';
-        if (title.toLowerCase().includes('chờ phê duyệt')) {
-          title = `Đã thực thi thành công ${actionFriendlyName} trên dịch vụ "${targetName}"`;
+        if (title.toLowerCase().includes('chờ phê duyệt') || title.toLowerCase().includes('awaiting hitl')) {
+          title = t('actionHistory.mapped.completedTitle', { action: actionFriendlyName, target: targetName });
         }
       }
     }
@@ -454,11 +288,11 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
       if (cleanErr.includes('Safety Guard Blocked') || cleanErr.includes('protected Kubernetes system namespace')) {
         const nsMatch = cleanErr.match(/Namespace '([^']+)'/i);
         const ns = nsMatch ? nsMatch[1] : (resolvedNs || 'selfheal-system');
-        cleanErr = `Rào chắn an toàn K8s đã chặn: Namespace '${ns}' là phân vùng hệ thống được bảo vệ, nghiêm cấm AI can thiệp tự động.`;
+        cleanErr = t('actionHistory.mapped.errSafetyGuard', { ns });
       } else if (cleanErr.includes('Auto-recovered') || cleanErr.includes('tự phục hồi ổn định')) {
-        cleanErr = `Hệ thống tự động hủy: Dịch vụ đã tự phục hồi ổn định.`;
+        cleanErr = t('actionHistory.mapped.errAutoRecovered');
       } else if (cleanErr.includes('User') && (cleanErr.includes('cannot') || cleanErr.includes('Forbidden') || cleanErr.includes('(403)'))) {
-        cleanErr = `Lỗi phân quyền RBAC 403 Forbidden: ServiceAccount không đủ thẩm quyền can thiệp tài nguyên.`;
+        cleanErr = t('actionHistory.mapped.errRbac403');
       }
     }
 
@@ -478,7 +312,13 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
       errorMessage: cleanErr,
       rawItem: item,
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, formatRelativeTime, i18nInstance.language]);
+
+  const actions = useMemo(
+    () => rawActions.map(mapBackendActionToUI),
+    [rawActions, mapBackendActionToUI]
+  );
 
   const fetchActions = useCallback(async () => {
     setIsLoading(true);
@@ -496,18 +336,18 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
       });
 
       const items = res?.items || (Array.isArray(res) ? res : []);
-      setActions(items.map(mapBackendActionToUI));
+      setRawActions(items);
       setAnalytics(analyticsRes);
       setIsUsingLiveDb(true);
     } catch (err) {
       console.warn('[ActionHistoryPage] Lỗi tải lịch sử:', err.message);
-      setActions([]);
+      setRawActions([]);
       setIsUsingLiveDb(true);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [activeClusterId, activeOrgId, mapBackendActionToUI]);
+  }, [activeClusterId, activeOrgId]);
 
   // Load danh mục Action Types từ Database
   useEffect(() => {
@@ -550,20 +390,22 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
   // Danh sách Action Types chuẩn hóa
   const allActionTypes = useMemo(() => {
     const map = new Map();
-    CANONICAL_ACTION_TYPES.forEach((c) => map.set(c.code, c));
-    dbActionTypes.forEach((t) => {
-      const code = t.code || t.name;
+    CANONICAL_ACTION_CODES.forEach((code) => {
+      map.set(code, { code, label: t(`actionHistory.actionTypes.${code}`, code) });
+    });
+    dbActionTypes.forEach((item) => {
+      const code = item.code || item.name;
       if (code) {
         const existing = map.get(code);
         map.set(code, {
           code,
-          label: existing?.label || `${t.name || code} (${code})`,
-          description: t.description || existing?.description,
+          label: existing?.label || `${item.name || code} (${code})`,
+          description: item.description || existing?.description,
         });
       }
     });
     return Array.from(map.values());
-  }, [dbActionTypes]);
+  }, [dbActionTypes, t]);
 
   // Danh sách Dịch vụ K8s đang hoạt động thực tế (từ GET /api/v1/ai/workloads, tuyệt đối không lấy dịch vụ cũ đã xóa)
   const uniqueServices = useMemo(() => {
@@ -627,7 +469,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
       // 3. Status filter
       if (selectedStatus !== 'ALL') {
         if (selectedStatus === 'PENDING') {
-          if (item.status !== 'PENDING' && !item.result?.includes('Chờ duyệt')) return false;
+          if (item.status !== 'PENDING') return false;
         } else if (selectedStatus === 'SUCCEEDED' || selectedStatus === 'COMPLETED') {
           if (item.status !== 'SUCCEEDED' && item.status !== 'COMPLETED') return false;
         } else if (item.status !== selectedStatus) {
@@ -699,7 +541,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
     let finishedCount = 0;
     let pendingCount = 0;
     filteredHistory.forEach((a) => {
-      if (a.status === 'PENDING' || a.executionStatus === 'PENDING' || (a.result && a.result.includes('Chờ duyệt'))) {
+      if (a.status === 'PENDING' || a.executionStatus === 'PENDING') {
         pendingCount++;
         return;
       }
@@ -779,8 +621,8 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
         }}
       >
         <div style={{ color: '#64748B' }}>
-          Hiển thị <strong style={{ color: '#0F172A' }}>{startIdx}–{endIdx}</strong> /{' '}
-          <strong style={{ color: '#0F172A' }}>{totalItems}</strong> bản ghi
+          {t('actionHistory.pagination.showing')} <strong style={{ color: '#0F172A' }}>{startIdx}–{endIdx}</strong> /{' '}
+          <strong style={{ color: '#0F172A' }}>{totalItems}</strong> {t('actionHistory.pagination.records')}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -801,7 +643,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
               opacity: currPage <= 1 ? 0.55 : 1,
             }}
           >
-            &laquo; Trước
+            &laquo; {t('common.prevShort')}
           </button>
 
           {pages.map((p, idx) =>
@@ -850,14 +692,14 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
               opacity: currPage >= totalPg ? 0.55 : 1,
             }}
           >
-            Sau &raquo;
+            {t('common.nextShort')} &raquo;
           </button>
         </div>
       </div>
     );
   };
 
-  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || 'Toàn hệ thống';
+  const activeClusterLabel = currentEnv?.cluster || currentEnv?.name || t('common.systemWide');
 
   const kpiCardStyle = (accent, isSelected = false) => ({
     backgroundColor: '#FFFFFF',
@@ -941,10 +783,10 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Lịch Sử Tự Phục Hồi &amp; MTTR
+              {t('actionHistory.header.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Nhật ký thực thi, thời gian hồi phục trung bình MTTR &amp; đối soát SLA trên cụm{' '}
+              {t('actionHistory.header.subtitlePrefix')}{' '}
               <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{activeClusterLabel}</strong>
             </p>
           </div>
@@ -955,10 +797,10 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
             type="button"
             onClick={() => setShowTrendChart((prev) => !prev)}
             style={actionBtnStyle(showTrendChart, false)}
-            title={showTrendChart ? 'Thu gọn biểu đồ MTTR' : 'Mở biểu đồ xu hướng MTTR'}
+            title={showTrendChart ? t('actionHistory.header.hideChartTitle') : t('actionHistory.header.showChartTitle')}
           >
             <BarChart2 size={14} />
-            <span>{showTrendChart ? 'Ẩn biểu đồ MTTR' : 'Biểu đồ MTTR'}</span>
+            <span>{showTrendChart ? t('actionHistory.header.hideChart') : t('actionHistory.header.showChart')}</span>
           </button>
 
           <button
@@ -968,69 +810,69 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
             style={actionBtnStyle(false, isRefreshing || isLoading)}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>{isRefreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
+            <span>{isRefreshing ? t('common.refreshing') : t('common.refresh')}</span>
           </button>
         </div>
       </div>
 
       {/* Hàng 4 Thẻ KPI Tóm Tắt */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div
           onClick={() => setSelectedStatus('ALL')}
-          title="Hiển thị tất cả hành động"
+          title={t('actionHistory.kpi.totalTooltip')}
           style={{ ...kpiCardStyle('#059669'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG HÀNH ĐỘNG</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('actionHistory.kpi.totalTitle')}</span>
             <Activity size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
-              {(dynamicAnalytics.totalActions || 0).toLocaleString('vi-VN')}
+              {(dynamicAnalytics.totalActions || 0).toLocaleString(getIntlLocale(i18nInstance.language))}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 600 }}>
-              {dynamicAnalytics.finishedCount || 0} đã hoàn tất
+              {t('actionHistory.kpi.finishedCount', { count: dynamicAnalytics.finishedCount || 0 })}
             </span>
           </div>
         </div>
 
         <div
           onClick={() => setSelectedStatus((prev) => (prev === 'SUCCEEDED' ? 'ALL' : 'SUCCEEDED'))}
-          title="Nhấp để lọc nhanh hành động thành công"
+          title={t('actionHistory.kpi.rateTooltip')}
           style={{ ...kpiCardStyle('#10B981', selectedStatus === 'SUCCEEDED'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỶ LỆ THÀNH CÔNG</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('actionHistory.kpi.rateTitle')}</span>
             <CheckCircle2 size={14} color="#10B981" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#059669' }}>
               {dynamicAnalytics.successRate}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>theo bộ lọc hiện tại</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('actionHistory.kpi.rateSub')}</span>
           </div>
         </div>
 
         <div style={kpiCardStyle('#3B82F6')}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>MTTR TRUNG BÌNH</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('actionHistory.kpi.mttrTitle')}</span>
             <Clock size={14} color="#3B82F6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
               {dynamicAnalytics.averageRecoveryTime}
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>thời gian khôi phục</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748B' }}>{t('actionHistory.kpi.mttrSub')}</span>
           </div>
         </div>
 
         <div
           onClick={() => setSelectedStatus((prev) => (prev === 'PENDING' ? 'ALL' : 'PENDING'))}
-          title="Nhấp để lọc nhanh hành động chờ duyệt HITL"
+          title={t('actionHistory.kpi.pendingTooltip')}
           style={{ ...kpiCardStyle('#F59E0B', selectedStatus === 'PENDING'), cursor: 'pointer' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>CHỜ DUYỆT HITL</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('actionHistory.kpi.pendingTitle')}</span>
             <ShieldCheck size={14} color="#F59E0B" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -1045,7 +887,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
               {dynamicAnalytics.pendingCount || 0}
             </span>
             <span style={{ fontSize: '0.7rem', color: '#64748B' }}>
-              {dynamicAnalytics.pendingCount > 0 ? 'cần kỹ sư ký duyệt' : 'không có yêu cầu chờ'}
+              {dynamicAnalytics.pendingCount > 0 ? t('actionHistory.kpi.pendingNeed') : t('actionHistory.kpi.pendingNone')}
             </span>
           </div>
         </div>
@@ -1068,10 +910,10 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
         {/* Hàng 1: Tìm kiếm + Pill Trạng thái + Lịch */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
           {/* Search Box */}
-          <div style={{ position: 'relative', flex: '1 1 250px', maxWidth: '360px' }}>
+          <div className="dash-search-box" style={{ position: 'relative', flex: '1 1 250px', maxWidth: '360px' }}>
             <input
               type="text"
-              placeholder="Tìm kiếm mã bản ghi, hành động, đối tượng..."
+              placeholder={t('actionHistory.filters.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -1092,7 +934,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                aria-label="Xóa từ khóa tìm kiếm"
+                aria-label={t('actionHistory.filters.clearSearchAria')}
                 style={{
                   position: 'absolute',
                   right: '8px',
@@ -1122,11 +964,11 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
             }}
           >
             {[
-              { id: 'ALL', label: 'Tất cả', color: '#059669', bg: '#ECFDF5' },
-              { id: 'SUCCEEDED', label: 'Thành công', color: '#047857', bg: '#ECFDF5' },
-              { id: 'PENDING', label: 'Chờ duyệt', color: '#D97706', bg: '#FFFBEB' },
-              { id: 'FAILED', label: 'Thất bại', color: '#DC2626', bg: '#FEF2F2' },
-              { id: 'CANCELLED', label: 'Đã hủy', color: '#475569', bg: '#F1F5F9' },
+              { id: 'ALL', label: t('actionHistory.filters.statusAll'), color: '#059669', bg: '#ECFDF5' },
+              { id: 'SUCCEEDED', label: t('actionHistory.filters.statusSucceeded'), color: '#047857', bg: '#ECFDF5' },
+              { id: 'PENDING', label: t('actionHistory.filters.statusPending'), color: '#D97706', bg: '#FFFBEB' },
+              { id: 'FAILED', label: t('actionHistory.filters.statusFailed'), color: '#DC2626', bg: '#FEF2F2' },
+              { id: 'CANCELLED', label: t('actionHistory.filters.statusCancelled'), color: '#475569', bg: '#F1F5F9' },
             ].map((st) => {
               const active = selectedStatus === st.id;
               return (
@@ -1172,7 +1014,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}
-              title="Mở bảng lịch chọn ngày, tháng hoặc năm"
+              title={t('incidents.calendar.buttonTitle')}
             >
               <Calendar size={14} color={isCalendarOpen ? '#059669' : '#64748B'} />
               <span>{currentFilterLabel}</span>
@@ -1187,6 +1029,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                   right: '0',
                   zIndex: 100,
                   width: '326px',
+                  maxWidth: 'calc(100vw - 32px)',
                   backgroundColor: '#FFFFFF',
                   borderRadius: '12px',
                   border: '1px solid #E2E8F0',
@@ -1213,7 +1056,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                       cursor: 'pointer',
                     }}
                   >
-                    Ngày
+                    {t('common.day')}
                   </button>
                   <button
                     type="button"
@@ -1230,7 +1073,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                       cursor: 'pointer',
                     }}
                   >
-                    Tháng
+                    {t('common.month')}
                   </button>
                   <button
                     type="button"
@@ -1247,14 +1090,14 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                       cursor: 'pointer',
                     }}
                   >
-                    Năm
+                    {t('common.year')}
                   </button>
                 </div>
 
                 {(timeFilterMode === 'date' || timeFilterMode === 'today' || timeFilterMode === 'all') && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                      Chọn ngày cụ thể:
+                      {t('incidents.calendar.pickExactDate')}
                     </label>
                     <input
                       type="date"
@@ -1280,7 +1123,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
 
                     <div style={{ marginTop: '10px' }}>
                       <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
-                        7 ngày gần nhất:
+                        {t('actionHistory.calendar.last7Days')}
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                         {Array.from({ length: 7 }, (_, i) => {
@@ -1310,7 +1153,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                                 cursor: 'pointer',
                               }}
                             >
-                              {isToday ? `Hôm nay (${dParts[2]}/${dParts[1]})` : `${dParts[2]}/${dParts[1]}`}
+                              {isToday ? t('incidents.calendar.todayChip', { date: `${dParts[2]}/${dParts[1]}` }) : `${dParts[2]}/${dParts[1]}`}
                             </button>
                           );
                         })}
@@ -1322,7 +1165,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                 {timeFilterMode === 'month' && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                      Chọn tháng &amp; năm:
+                      {t('incidents.calendar.pickMonthYear')}
                     </label>
                     <input
                       type="month"
@@ -1345,7 +1188,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                     />
 
                     <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
-                      Các tháng trong năm {selectedMonth?.split('-')[0] || '2026'}:
+                      {t('incidents.calendar.monthsInYear', { year: selectedMonth?.split('-')[0] || '2026' })}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((mNum) => {
@@ -1371,7 +1214,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                               textAlign: 'center',
                             }}
                           >
-                            Tháng {mNum}
+                            {t('incidents.calendar.monthItem', { num: mNum })}
                           </button>
                         );
                       })}
@@ -1382,7 +1225,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                 {timeFilterMode === 'year' && (
                   <div>
                     <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '6px' }}>
-                      Chọn năm khảo sát:
+                      {t('incidents.calendar.pickSurveyYear')}
                     </label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                       {availableYears.map((yr) => {
@@ -1407,7 +1250,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                               textAlign: 'center',
                             }}
                           >
-                            Năm {yr}
+                            {t('incidents.calendar.yearItem', { year: yr })}
                           </button>
                         );
                       })}
@@ -1434,7 +1277,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                         padding: 0,
                       }}
                     >
-                      Hôm nay
+                      {t('common.today')}
                     </button>
                     <button
                       type="button"
@@ -1452,7 +1295,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                         padding: 0,
                       }}
                     >
-                      Tất cả
+                      {t('common.all')}
                     </button>
                   </div>
                   <button
@@ -1469,7 +1312,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                       cursor: 'pointer',
                     }}
                   >
-                    Áp dụng
+                    {t('common.apply')}
                   </button>
                 </div>
               </div>
@@ -1497,9 +1340,9 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                 onChange={(e) => setSelectedService(e.target.value)}
                 style={selectControlStyle}
               >
-                <option value="ALL">Tất cả dịch vụ ({uniqueServices.length})</option>
+                <option value="ALL">{t('actionHistory.filters.serviceAll', { count: uniqueServices.length })}</option>
                 {uniqueServices.map((svc) => (
-                  <option key={svc} value={svc}>Dịch vụ: {svc}</option>
+                  <option key={svc} value={svc}>{t('actionHistory.filters.serviceOption', { name: svc })}</option>
                 ))}
               </select>
             </div>
@@ -1511,9 +1354,9 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                 onChange={(e) => setSelectedActionType(e.target.value)}
                 style={{ ...selectControlStyle, maxWidth: '240px' }}
               >
-                <option value="ALL">Tất cả loại hành động</option>
-                {allActionTypes.map((t) => (
-                  <option key={t.code} value={t.code}>{t.label}</option>
+                <option value="ALL">{t('actionHistory.filters.actionTypeAll')}</option>
+                {allActionTypes.map((at) => (
+                  <option key={at.code} value={at.code}>{at.label}</option>
                 ))}
               </select>
             </div>
@@ -1537,12 +1380,12 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
               }}
             >
               <RotateCcw size={12} />
-              <span>Đặt lại</span>
+              <span>{t('common.reset')}</span>
             </button>
           </div>
 
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.73rem', color: '#64748B' }}>
-            Tổng <strong style={{ color: '#0F172A' }}>{filteredHistory.length}</strong> bản ghi &bull; Trang{' '}
+            {t('actionHistory.filters.totalRecords')} <strong style={{ color: '#0F172A' }}>{filteredHistory.length}</strong> {t('actionHistory.filters.recordsUnit')} &bull; {t('common.page')}{' '}
             <strong style={{ color: '#0F172A' }}>{safePage}</strong>/{totalPages}
           </div>
         </div>
@@ -1554,7 +1397,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
           actions={filteredHistory}
           analytics={dynamicAnalytics}
           height={180}
-          title={`Xu Hướng Phục Hồi Tự Động & Thời Gian MTTR (${currentFilterLabel})`}
+          title={t('actionHistory.chart.title', { label: currentFilterLabel })}
           timeFilterMode={timeFilterMode}
           selectedDate={selectedDate}
           selectedMonth={selectedMonth}
@@ -1578,13 +1421,13 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left' }}>
-                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>MÃ BẢN GHI</th>
-                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>HÀNH ĐỘNG &amp; NỘI DUNG</th>
-                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>ĐỐI TƯỢNG</th>
-                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>THỜI LƯỢNG</th>
-                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>KẾT QUẢ</th>
-                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>THỜI ĐIỂM</th>
-                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', textAlign: 'center' }}>CHI TIẾT</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>{t('actionHistory.table.colId')}</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>{t('actionHistory.table.colAction')}</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>{t('actionHistory.table.colTarget')}</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>{t('actionHistory.table.colDuration')}</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>{t('actionHistory.table.colResult')}</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' }}>{t('actionHistory.table.colTimestamp')}</th>
+                <th style={{ padding: '11px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', textAlign: 'center' }}>{t('actionHistory.table.colDetail')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1607,10 +1450,10 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                       <ShieldCheck size={24} color="#059669" />
                     </div>
                     <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.9rem' }}>
-                      Không có bản ghi lịch sử nào phù hợp
+                      {t('actionHistory.empty.title')}
                     </div>
                     <div style={{ fontSize: '0.78rem', marginTop: '4px', color: '#64748B' }}>
-                      Không tìm thấy hành động tự phục hồi nào khớp với mốc thời gian hoặc tiêu chí đã lọc.
+                      {t('actionHistory.empty.subtitle')}
                     </div>
                     {isFiltered && (
                       <button
@@ -1628,7 +1471,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                           cursor: 'pointer',
                         }}
                       >
-                        Đặt lại bộ lọc
+                        {t('common.resetFilters')}
                       </button>
                     )}
                   </td>
@@ -1638,7 +1481,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                   const isSucceeded = rec.status === 'COMPLETED' || rec.status === 'SUCCEEDED';
                   const isCancelled = rec.status === 'CANCELLED';
                   const isFailed = rec.status === 'FAILED';
-                  const isPending = rec.status === 'PENDING' || (rec.result && rec.result.includes('Chờ duyệt'));
+                  const isPending = rec.status === 'PENDING';
                   const isVerificationFailed = rec.status === 'VERIFICATION_FAILED';
 
                   let statusColor = '#047857';
@@ -1692,7 +1535,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                         <div style={{ fontWeight: 600, color: '#0F172A', lineHeight: 1.45, fontSize: '0.8rem' }}>{rec.title}</div>
                         {rec.errorMessage && (
                           <div style={{ fontSize: '0.72rem', color: '#DC2626', marginTop: '3px' }}>
-                            Lý do: {rec.errorMessage}
+                            {t('actionHistory.table.reasonPrefix')} {rec.errorMessage}
                           </div>
                         )}
                       </td>
@@ -1766,9 +1609,9 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                                 gap: '4px',
                                 width: 'fit-content',
                               }}
-                              title="Chuyển ngay tới Cổng Phê Duyệt HITL để kiểm tra và duyệt"
+                              title={t('actionHistory.table.approveNowTitle')}
                             >
-                              <span>Ký duyệt ngay &rarr;</span>
+                              <span>{t('actionHistory.table.approveNow')}</span>
                             </button>
                           )}
                         </div>
@@ -1804,7 +1647,7 @@ const translateActionMessageToVi = (rawMsg, targetName = '', actionFriendlyName 
                           }}
                         >
                           <Eye size={12} />
-                          <span>Chi tiết</span>
+                          <span>{t('common.details')}</span>
                         </button>
                       </td>
                     </tr>

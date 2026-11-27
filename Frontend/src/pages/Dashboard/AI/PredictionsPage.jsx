@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
+import i18nInstance, { getIntlLocale } from '../../../i18n';
 
 import { useDashboard } from '../context/DashboardContext';
 
@@ -75,44 +77,6 @@ import {
 
 
 
-const RISK_HEADS_CONFIG = [
-
-  { key: 'CPU_OVERLOAD', label: 'Quá Tải CPU (CPU Overload)', threshold: 0.81, defaultDesc: 'Bão hòa chu kỳ CPU do tác vụ xử lý dồn dập' },
-
-  { key: 'OOM', label: 'Nguy Cơ Tràn RAM (OOM Risk)', threshold: 0.50, defaultDesc: 'Độ dốc rò rỉ bộ nhớ RSS vượt ngưỡng an toàn Pod' },
-
-  { key: 'HIGH_LATENCY', label: 'Độ Trễ Phản Hồi Cao (High Latency)', threshold: 0.62, defaultDesc: 'Tắc nghẽn xử lý I/O hoặc nghẽn mạng cụm' },
-
-  { key: 'DISK_FULL', label: 'Tràn Bộ Nhớ Đĩa (Disk Full)', threshold: 0.85, defaultDesc: 'Phân vùng ephemeral storage hoặc log phình to' },
-
-  { key: 'HTTP_5XX_SPIKE', label: 'Đột Biến Lỗi 5xx (5xx Spike)', threshold: 0.81, defaultDesc: 'Tỷ lệ lỗi máy chủ tăng cao bất thường' },
-
-  { key: 'TRAFFIC_OVERLOAD', label: 'Quá Tải Lưu Lượng (Traffic Spike)', threshold: 0.85, defaultDesc: 'Đột biến lưu lượng truy cập Ingress ngoài dự kiến' },
-
-  { key: 'SCALE_DOWN_CANDIDATE', label: 'Thu Nhỏ Bản Sao (Scale Down / Tiết Kiệm)', threshold: 0.96, defaultDesc: 'Tải thấp kéo dài liên tục; đề xuất giảm số lượng Pod để tối ưu chi phí hạ tầng' },
-
-];
-
-
-
-const SERIES_CONFIG = [
-
-  { key: 'cpu', label: 'CPU (%)', color: '#10B981', gradientId: 'cpuGrad', unit: '%' },
-
-  { key: 'ram', label: 'RAM (%)', color: '#3B82F6', gradientId: 'ramGrad', unit: '%' },
-
-  { key: 'disk', label: 'Đĩa Disk (%)', color: '#F59E0B', gradientId: 'diskGrad', unit: '%' },
-
-  { key: 'latency', label: 'Độ trễ (ms)', color: '#8B5CF6', gradientId: 'latGrad', unit: 'ms' },
-
-  { key: 'request_rate', label: 'Lưu lượng (Req/s)', color: '#06B6D4', gradientId: 'reqGrad', unit: 'req/s' },
-
-  { key: 'http_5xx_rate', label: 'Lỗi 5xx (%)', color: '#EF4444', gradientId: 'errGrad', unit: '%' },
-
-];
-
-
-
 const parseRiskOutputs = (riskOutputs) => {
 
   if (!riskOutputs) return {};
@@ -143,19 +107,19 @@ const getActiveRisks = (p) => {
 
   const RISK_META = {
 
-    HTTP_5XX_SPIKE: { label: 'HTTP 5xx Lỗi', color: '#DC2626', bg: '#FEE2E2', border: '#FCA5A5' },
+    HTTP_5XX_SPIKE: { label: i18nInstance.t('dashboard:predictions.riskMeta.HTTP_5XX_SPIKE'), color: '#DC2626', bg: '#FEE2E2', border: '#FCA5A5' },
 
-    HIGH_LATENCY: { label: 'Độ trễ cao', color: '#D97706', bg: '#FEF3C7', border: '#FCD34D' },
+    HIGH_LATENCY: { label: i18nInstance.t('dashboard:predictions.riskMeta.HIGH_LATENCY'), color: '#D97706', bg: '#FEF3C7', border: '#FCD34D' },
 
-    CPU_OVERLOAD: { label: 'Quá tải CPU', color: '#B91C1C', bg: '#FEE2E2', border: '#FCA5A5' },
+    CPU_OVERLOAD: { label: i18nInstance.t('dashboard:predictions.riskMeta.CPU_OVERLOAD'), color: '#B91C1C', bg: '#FEE2E2', border: '#FCA5A5' },
 
-    OOM: { label: 'Tràn RAM (OOM)', color: '#7E22CE', bg: '#F3E8FF', border: '#D8B4FE' },
+    OOM: { label: i18nInstance.t('dashboard:predictions.riskMeta.OOM'), color: '#7E22CE', bg: '#F3E8FF', border: '#D8B4FE' },
 
-    DISK_FULL: { label: 'Đầy ổ đĩa', color: '#B45309', bg: '#FEF3C7', border: '#FDE68A' },
+    DISK_FULL: { label: i18nInstance.t('dashboard:predictions.riskMeta.DISK_FULL'), color: '#B45309', bg: '#FEF3C7', border: '#FDE68A' },
 
-    TRAFFIC_OVERLOAD: { label: 'Quá tải lưu lượng', color: '#1D4ED8', bg: '#DBEAFE', border: '#93C5FD' },
+    TRAFFIC_OVERLOAD: { label: i18nInstance.t('dashboard:predictions.riskMeta.TRAFFIC_OVERLOAD'), color: '#1D4ED8', bg: '#DBEAFE', border: '#93C5FD' },
 
-    SCALE_DOWN_CANDIDATE: { label: 'Dư thừa tài nguyên', color: '#475569', bg: '#F1F5F9', border: '#CBD5E1' },
+    SCALE_DOWN_CANDIDATE: { label: i18nInstance.t('dashboard:predictions.riskMeta.SCALE_DOWN_CANDIDATE'), color: '#475569', bg: '#F1F5F9', border: '#CBD5E1' },
 
   };
 
@@ -201,9 +165,9 @@ const getActionDetails = (code) => {
 
       return {
 
-        label: 'Tự động an toàn (NO_ACTION)',
+        label: i18nInstance.t('dashboard:predictions.actions.NO_ACTION_label'),
 
-        desc: 'Hệ thống viễn trắc nằm trong ngưỡng an toàn tự thích ứng. Quyết định tự động: Không can thiệp để bảo toàn Zero-Downtime.',
+        desc: i18nInstance.t('dashboard:predictions.actions.NO_ACTION_desc'),
 
         badgeBg: '#ECFDF5',
 
@@ -217,9 +181,9 @@ const getActionDetails = (code) => {
 
       return {
 
-        label: 'Thay thế Pod (REPLACE_POD)',
+        label: i18nInstance.t('dashboard:predictions.actions.REPLACE_POD_label'),
 
-        desc: 'Thu hồi Pod gặp sự cố và khởi tạo Pod thay thế mới đảm bảo Pod Anti-Affinity và tính sẵn sàng.',
+        desc: i18nInstance.t('dashboard:predictions.actions.REPLACE_POD_desc'),
 
         badgeBg: '#EFF6FF',
 
@@ -233,9 +197,9 @@ const getActionDetails = (code) => {
 
       return {
 
-        label: 'Dọn dẹp bộ nhớ đệm / Logs (CLEANUP_STORAGE)',
+        label: i18nInstance.t('dashboard:predictions.actions.CLEANUP_STORAGE_label'),
 
-        desc: 'Giải phóng dung lượng bộ nhớ đệm, tệp nhật ký tạm thời và dọn dẹp các volume đĩa đang đầy.',
+        desc: i18nInstance.t('dashboard:predictions.actions.CLEANUP_STORAGE_desc'),
 
         badgeBg: '#FEF3C7',
 
@@ -249,9 +213,9 @@ const getActionDetails = (code) => {
 
       return {
 
-        label: 'Chặn IP tạm thời (TEMPORARY_IP_BLOCK)',
+        label: i18nInstance.t('dashboard:predictions.actions.TEMPORARY_IP_BLOCK_label'),
 
-        desc: 'Kích hoạt NetworkPolicy hoặc WAF để chặn các dải địa chỉ IP bất thường gây quá tải truy cập.',
+        desc: i18nInstance.t('dashboard:predictions.actions.TEMPORARY_IP_BLOCK_desc'),
 
         badgeBg: '#FEF2F2',
 
@@ -265,9 +229,9 @@ const getActionDetails = (code) => {
 
       return {
 
-        label: 'Khởi động lại Deployment (RESTART_DEPLOYMENT)',
+        label: i18nInstance.t('dashboard:predictions.actions.RESTART_DEPLOYMENT_label'),
 
-        desc: 'Kích hoạt rollout restart cho toàn bộ Deployment để làm mới trạng thái phiên bản dịch vụ.',
+        desc: i18nInstance.t('dashboard:predictions.actions.RESTART_DEPLOYMENT_desc'),
 
         badgeBg: '#EFF6FF',
 
@@ -281,9 +245,9 @@ const getActionDetails = (code) => {
 
       return {
 
-        label: 'Khởi động lại Pod (RESTART_POD)',
+        label: i18nInstance.t('dashboard:predictions.actions.RESTART_POD_label'),
 
-        desc: 'Thực hiện Rolling Restart an toàn cho Pod mục tiêu qua Kubernetes API, kiểm soát Zero-Downtime theo vòng lặp thích ứng MAPE\u2011K.',
+        desc: i18nInstance.t('dashboard:predictions.actions.RESTART_POD_desc'),
 
         badgeBg: '#EFF6FF',
 
@@ -297,9 +261,9 @@ const getActionDetails = (code) => {
 
       return {
 
-        label: 'Scale Replicas',
+        label: i18nInstance.t('dashboard:predictions.actions.SCALE_REPLICAS_label'),
 
-        desc: 'Tự động nâng số lượng Replicas Pods để phân bổ tải và phục hồi năng lực dịch vụ theo chuẩn MAPE\u2011K.',
+        desc: i18nInstance.t('dashboard:predictions.actions.SCALE_REPLICAS_desc'),
 
         badgeBg: '#ECFDF5',
 
@@ -313,9 +277,9 @@ const getActionDetails = (code) => {
 
       return {
 
-        label: 'Rollback Deployment',
+        label: i18nInstance.t('dashboard:predictions.actions.ROLLBACK_DEPLOYMENT_label'),
 
-        desc: 'Khôi phục về bản ReplicaSet ổn định trước đó nhằm triệt tiêu lỗi CrashLoop sau bản phát hành mới.',
+        desc: i18nInstance.t('dashboard:predictions.actions.ROLLBACK_DEPLOYMENT_desc'),
 
         badgeBg: '#FEF2F2',
 
@@ -333,9 +297,9 @@ const getActionDetails = (code) => {
 
       return {
 
-        label: 'Scale Down',
+        label: i18nInstance.t('dashboard:predictions.actions.SCALE_DOWN_label'),
 
-        desc: 'Tự động giảm số lượng Replicas Pods khi tải thấp liên tục nhằm tối ưu hóa chi phí hạ tầng theo chuẩn MAPE-K.',
+        desc: i18nInstance.t('dashboard:predictions.actions.SCALE_DOWN_desc'),
 
         badgeBg: '#F3E8FF',
 
@@ -349,9 +313,9 @@ const getActionDetails = (code) => {
 
       return {
 
-        label: code || 'Tự phục hồi MAPE\u2011K',
+        label: code || i18nInstance.t('dashboard:predictions.actions.default_label'),
 
-        desc: 'Áp dụng hành động tự sửa lỗi kiểm soát an toàn theo vòng lặp điều khiển tự thích ứng MAPE\u2011K.',
+        desc: i18nInstance.t('dashboard:predictions.actions.default_desc'),
 
         badgeBg: '#FEF3C7',
 
@@ -371,27 +335,27 @@ const getActionDetails = (code) => {
 
 const formatRootCauseType = (cause) => {
 
-  if (!cause) return 'Phát hiện bất thường viễn trắc hệ thống';
+  if (!cause) return i18nInstance.t('dashboard:predictions.rootCause.default');
 
-  if (cause === 'Unstable application pod') return 'Pod ứng dụng hoạt động không ổn định (Unstable Pod / Lỗi Probe)';
+  if (cause === 'Unstable application pod') return i18nInstance.t('dashboard:predictions.rootCause.unstablePod');
 
-  if (cause === 'CPU_OVERLOAD') return 'Quá tải chu kỳ vi xử lý CPU (CPU Overload)';
+  if (cause === 'CPU_OVERLOAD') return i18nInstance.t('dashboard:predictions.rootCause.cpuOverload');
 
-  if (cause === 'OOM' || cause === 'MEMORY_LEAK') return 'Nguy cơ tràn bộ nhớ RAM (OOM / Memory Spike)';
+  if (cause === 'OOM' || cause === 'MEMORY_LEAK') return i18nInstance.t('dashboard:predictions.rootCause.oom');
 
-  if (cause === 'DISK_FULL') return 'Tràn dung lượng bộ nhớ đĩa (Disk Full)';
+  if (cause === 'DISK_FULL') return i18nInstance.t('dashboard:predictions.rootCause.diskFull');
 
-  if (cause === 'HIGH_LATENCY') return 'Độ trễ phản hồi vượt ngưỡng (High Latency Spike)';
+  if (cause === 'HIGH_LATENCY') return i18nInstance.t('dashboard:predictions.rootCause.highLatency');
 
-  if (cause === 'HTTP_5XX_SPIKE') return 'Đột biến tỷ lệ lỗi máy chủ 5xx (5xx Spike)';
+  if (cause === 'HTTP_5XX_SPIKE') return i18nInstance.t('dashboard:predictions.rootCause.http5xx');
 
-  if (cause === 'TRAFFIC_OVERLOAD') return 'Đột biến lưu lượng truy cập Ingress (Traffic Spike)';
+  if (cause === 'TRAFFIC_OVERLOAD') return i18nInstance.t('dashboard:predictions.rootCause.trafficOverload');
 
-  if (cause === 'SCALE_DOWN_CANDIDATE' || cause === 'scale_down_candidate') return 'Cơ hội thu nhỏ tài nguyên (Scale Down Candidate)';
+  if (cause === 'SCALE_DOWN_CANDIDATE' || cause === 'scale_down_candidate') return i18nInstance.t('dashboard:predictions.rootCause.scaleDownCandidate');
 
-  if (cause === 'underutilized' || cause === 'Workload underutilized (scale down opportunity)') return 'Tải thấp kéo dài / Dư thừa tài nguyên (Underutilized)';
+  if (cause === 'underutilized' || cause === 'Workload underutilized (scale down opportunity)') return i18nInstance.t('dashboard:predictions.rootCause.underutilized');
 
-  if (cause === 'insufficient_evidence') return 'Chưa đủ dữ liệu viễn trắc để xác nhận bất thường';
+  if (cause === 'insufficient_evidence') return i18nInstance.t('dashboard:predictions.rootCause.insufficientEvidence');
 
   return cause;
 
@@ -403,45 +367,45 @@ const formatRootCauseType = (cause) => {
 
 const formatAiExplanation = (raw, rootCause) => {
 
-  if (!raw) return 'Kết quả đối soát viễn trắc eBPF và Kubelet xác nhận hành vi bất thường của tiến trình.';
+  if (!raw) return i18nInstance.t('dashboard:predictions.aiExplanation.default');
 
   if (raw.includes('unhealthy or repeatedly restarting')) {
 
-    return 'Phát hiện Pod ứng dụng hoạt động không ổn định hoặc liên tục gặp lỗi khởi động lại (Restart Loop)';
+    return i18nInstance.t('dashboard:predictions.aiExplanation.unhealthyRestart');
 
   }
 
   if (raw.includes('most strongly supports Unstable application pod')) {
 
-    return 'Dữ liệu viễn trắc và bằng chứng hệ thống xác nhận Pod ứng dụng hoạt động không ổn định (tiến trình bên trong Pod không phản hồi kiểm tra tính sẵn sàng Readiness Probe).';
+    return i18nInstance.t('dashboard:predictions.aiExplanation.unstablePodStrong');
 
   }
 
   if (raw.includes('most strongly supports CPU_OVERLOAD')) {
-    return 'Bằng chứng viễn trắc eBPF và mô hình AI xác nhận mức tiêu thụ CPU bão hòa, có nguy cơ gây tắc nghẽn hàng đợi xử lý request.';
+    return i18nInstance.t('dashboard:predictions.aiExplanation.cpuStrong');
   }
 
   if (raw.includes('most strongly supports OOM')) {
 
-    return 'Mức tiêu thụ bộ nhớ RAM tăng dốc liên tục, nguy cơ bị Linux Kernel OOM-Killer tiêu diệt tiến trình.';
+    return i18nInstance.t('dashboard:predictions.aiExplanation.oomStrong');
 
   }
 
   if (raw.includes('Additional replicas can distribute load')) {
 
-    return 'Tải lượng tăng cao đột biến, cần mở rộng thêm bản sao Pod để giải tỏa áp lực và duy trì độ ổn định';
+    return i18nInstance.t('dashboard:predictions.aiExplanation.additionalReplicas');
 
   }
 
   if (raw.includes('underutilized') || raw.includes('scale down replicas') || raw.includes('low utilization')) {
 
-    return 'Chỉ số viễn trắc cho thấy tải thấp kéo dài liên tục; đề xuất giảm số lượng bản sao Pod để tối ưu chi phí hạ tầng';
+    return i18nInstance.t('dashboard:predictions.aiExplanation.underutilized');
 
   }
 
   if (raw.includes('No safe infrastructure action is justified')) {
 
-    return 'Hệ thống đang trong giới hạn an toàn tự thích ứng, tiếp tục theo dõi các ngưỡng viễn trắc';
+    return i18nInstance.t('dashboard:predictions.aiExplanation.noActionJustified');
 
   }
 
@@ -455,35 +419,35 @@ const formatAiExplanation = (raw, rootCause) => {
 
 const formatReasoning = (raw) => {
 
-  if (!raw) return 'Phát hiện Pod ứng dụng có dấu hiệu bất thường hoặc lặp lại chu kỳ khởi động lại.';
+  if (!raw) return i18nInstance.t('dashboard:predictions.reasoning.default');
 
   if (raw === 'Khuyến nghị: NO_ACTION' || raw === 'NO_ACTION' || (typeof raw === 'string' && raw.includes('NO_ACTION')) || (typeof raw === 'string' && raw.includes('No safe infrastructure action is justified')) || (typeof raw === 'string' && raw.includes('No action is needed'))) {
 
-    return 'Hệ thống viễn trắc nằm trong ngưỡng an toàn tự thích ứng. Tự động xác định: Chưa cần can thiệp hạ tầng.';
+    return i18nInstance.t('dashboard:predictions.reasoning.noAction');
 
   }
 
   if (raw.includes('unhealthy or repeatedly restarting')) {
 
-    return 'Phát hiện Pod ứng dụng hoạt động không ổn định hoặc liên tục gặp lỗi khởi động lại (Restart Loop)';
+    return i18nInstance.t('dashboard:predictions.reasoning.unhealthyRestart');
 
   }
 
   if (raw.includes('Additional replicas can distribute load')) {
 
-    return 'Tải lượng tăng cao đột biến, cần mở rộng thêm bản sao Pod để giải tỏa áp lực và duy trì độ ổn định';
+    return i18nInstance.t('dashboard:predictions.reasoning.additionalReplicas');
 
   }
 
   if (raw.includes('underutilized') || raw.includes('scale down replicas') || raw.includes('low utilization')) {
 
-    return 'Chỉ số viễn trắc cho thấy tải thấp kéo dài liên tục; đề xuất giảm số lượng bản sao Pod để tối ưu chi phí hạ tầng';
+    return i18nInstance.t('dashboard:predictions.reasoning.underutilized');
 
   }
 
   if (raw.includes('No safe infrastructure action is justified')) {
 
-    return 'Hệ thống đang trong giới hạn an toàn tự thích ứng, tiếp tục theo dõi các ngưỡng viễn trắc';
+    return i18nInstance.t('dashboard:predictions.reasoning.noActionJustified');
 
   }
 
@@ -505,7 +469,7 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
     return {
 
-      title: 'Lỗi kiểm tra tính sẵn sàng (Readiness Probe Failure)',
+      title: i18nInstance.t('dashboard:predictions.evidence.readinessTitle'),
 
       badge: 'KUBELET_PROBE',
 
@@ -513,9 +477,9 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
       badgeBg: '#FEE2E2',
 
-      importanceLabel: 'Bằng chứng cốt lõi',
+      importanceLabel: i18nInstance.t('dashboard:predictions.evidence.readinessImportance'),
 
-      desc: 'Bộ điều khiển Kubernetes Kubelet ghi nhận Pod phản hồi thất bại bài kiểm tra tính sẵn sàng (Readiness probe is failing). Trong thời gian này, K8s Service tự động ngắt định tuyến traffic tới Pod để tránh sinh lỗi gián đoạn cho người dùng.',
+      desc: i18nInstance.t('dashboard:predictions.evidence.readinessDesc'),
 
     };
 
@@ -527,12 +491,12 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
     const match = text.match(/\(([^)]+)\)/);
     const scoreStr = match ? match[1] : '90%';
     return {
-      title: 'Mô hình Trí Tuệ Nhân Tạo AI cảnh báo quá tải CPU',
+      title: i18nInstance.t('dashboard:predictions.evidence.gruCpuTitle'),
       badge: 'AI_DEEP_LEARNING',
       badgeColor: '#7C3AED',
       badgeBg: '#EDE9FE',
-      importanceLabel: 'Dự báo chuỗi thời gian',
-      desc: `Mô hình AI phân tích 12 mốc chuỗi thời gian viễn trắc gần nhất và dự báo nguy cơ quá tải CPU đạt xác suất ${scoreStr}. Cần chủ động can thiệp phòng ngừa trước khi suy sụp dịch vụ.`,
+      importanceLabel: i18nInstance.t('dashboard:predictions.evidence.gruCpuImportance'),
+      desc: i18nInstance.t('dashboard:predictions.evidence.gruCpuDesc', { score: scoreStr }),
     };
   }
 
@@ -546,7 +510,7 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
     return {
 
-      title: 'Mức tiêu thụ CPU chạm ngưỡng nguy kịch',
+      title: i18nInstance.t('dashboard:predictions.evidence.cpuCriticalTitle'),
 
       badge: 'EBPF_CPU_METRIC',
 
@@ -554,9 +518,9 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
       badgeBg: '#FEE2E2',
 
-      importanceLabel: 'Viễn trắc thời gian thực',
+      importanceLabel: i18nInstance.t('dashboard:predictions.evidence.cpuCriticalImportance'),
 
-      desc: `Bộ viễn trắc hạt nhân eBPF ghi nhận mức tải CPU của Pod đạt ${pctStr}, vượt ngưỡng an toàn cho phép và gây nghẽn luồng xử lý ứng dụng.`,
+      desc: i18nInstance.t('dashboard:predictions.evidence.cpuCriticalDesc', { pct: pctStr }),
 
     };
 
@@ -568,7 +532,7 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
     return {
 
-      title: 'Dữ liệu viễn trắc bình thường',
+      title: i18nInstance.t('dashboard:predictions.evidence.insufficientTitle'),
 
       badge: 'TELEMETRY_HEALTHY',
 
@@ -576,9 +540,9 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
       badgeBg: '#D1FAE5',
 
-      importanceLabel: 'Thông tin theo dõi',
+      importanceLabel: i18nInstance.t('dashboard:predictions.evidence.insufficientImportance'),
 
-      desc: 'Không ghi nhận chỉ số viễn trắc nào vượt ngưỡng bất thường tại thời điểm phân tích.',
+      desc: i18nInstance.t('dashboard:predictions.evidence.insufficientDesc'),
 
     };
 
@@ -590,7 +554,7 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
     return {
 
-      title: 'Lỗi kiểm tra tính sống còn (Liveness Probe Failure)',
+      title: i18nInstance.t('dashboard:predictions.evidence.livenessTitle'),
 
       badge: 'KUBELET_LIVENESS',
 
@@ -598,9 +562,9 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
       badgeBg: '#FEE2E2',
 
-      importanceLabel: 'Nguy kịch',
+      importanceLabel: i18nInstance.t('dashboard:predictions.evidence.livenessImportance'),
 
-      desc: 'Tiến trình container bị treo (deadlock/unresponsive), Kubelet chuẩn bị thực thi kill và khởi động lại container.',
+      desc: i18nInstance.t('dashboard:predictions.evidence.livenessDesc'),
 
     };
 
@@ -612,7 +576,7 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
     return {
 
-      title: 'Mức tiêu thụ bộ nhớ RAM vượt ngưỡng an toàn',
+      title: i18nInstance.t('dashboard:predictions.evidence.memoryTitle'),
 
       badge: 'EBPF_MEM_METRIC',
 
@@ -620,9 +584,9 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
       badgeBg: '#FEF3C7',
 
-      importanceLabel: 'Cảnh báo bộ nhớ',
+      importanceLabel: i18nInstance.t('dashboard:predictions.evidence.memoryImportance'),
 
-      desc: 'Bộ nhớ RAM tăng trưởng dốc đứng, tiệm cận hạn mức cgroup memory limit của Kubernetes Pod.',
+      desc: i18nInstance.t('dashboard:predictions.evidence.memoryDesc'),
 
     };
 
@@ -632,7 +596,7 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
   return {
 
-    title: text || 'Bằng chứng quan trắc hệ thống',
+    title: text || i18nInstance.t('dashboard:predictions.evidence.defaultTitle'),
 
     badge: sourceType || 'AI_TELEMETRY',
 
@@ -640,9 +604,9 @@ const formatEvidenceDetail = (summaryText, sourceType) => {
 
     badgeBg: '#DBEAFE',
 
-    importanceLabel: 'Bằng chứng viễn trắc',
+    importanceLabel: i18nInstance.t('dashboard:predictions.evidence.defaultImportance'),
 
-    desc: 'Bản ghi sự kiện viễn trắc thu thập từ bộ giám sát hạ tầng và thuật toán phân tích gốc rễ RCA.',
+    desc: i18nInstance.t('dashboard:predictions.evidence.defaultDesc'),
 
   };
 
@@ -723,6 +687,26 @@ export const normalizeServiceName = (val) => {
 };
 
 export const PredictionsPage = () => {
+  const { t, i18n } = useTranslation('dashboard');
+  const RISK_HEADS_CONFIG = useMemo(() => [
+    { key: 'CPU_OVERLOAD', label: t('predictions.riskHeads.CPU_OVERLOAD.label'), threshold: 0.81, defaultDesc: t('predictions.riskHeads.CPU_OVERLOAD.desc') },
+    { key: 'OOM', label: t('predictions.riskHeads.OOM.label'), threshold: 0.50, defaultDesc: t('predictions.riskHeads.OOM.desc') },
+    { key: 'HIGH_LATENCY', label: t('predictions.riskHeads.HIGH_LATENCY.label'), threshold: 0.62, defaultDesc: t('predictions.riskHeads.HIGH_LATENCY.desc') },
+    { key: 'DISK_FULL', label: t('predictions.riskHeads.DISK_FULL.label'), threshold: 0.85, defaultDesc: t('predictions.riskHeads.DISK_FULL.desc') },
+    { key: 'HTTP_5XX_SPIKE', label: t('predictions.riskHeads.HTTP_5XX_SPIKE.label'), threshold: 0.81, defaultDesc: t('predictions.riskHeads.HTTP_5XX_SPIKE.desc') },
+    { key: 'TRAFFIC_OVERLOAD', label: t('predictions.riskHeads.TRAFFIC_OVERLOAD.label'), threshold: 0.85, defaultDesc: t('predictions.riskHeads.TRAFFIC_OVERLOAD.desc') },
+    { key: 'SCALE_DOWN_CANDIDATE', label: t('predictions.riskHeads.SCALE_DOWN_CANDIDATE.label'), threshold: 0.96, defaultDesc: t('predictions.riskHeads.SCALE_DOWN_CANDIDATE.desc') },
+  ], [t]);
+
+  const SERIES_CONFIG = useMemo(() => [
+    { key: 'cpu', label: t('predictions.series.cpu'), color: '#10B981', gradientId: 'cpuGrad', unit: '%' },
+    { key: 'ram', label: t('predictions.series.ram'), color: '#3B82F6', gradientId: 'ramGrad', unit: '%' },
+    { key: 'disk', label: t('predictions.series.disk'), color: '#F59E0B', gradientId: 'diskGrad', unit: '%' },
+    { key: 'latency', label: t('predictions.series.latency'), color: '#8B5CF6', gradientId: 'latGrad', unit: t('predictions.units.ms') },
+    { key: 'request_rate', label: t('predictions.series.request_rate'), color: '#06B6D4', gradientId: 'reqGrad', unit: t('predictions.units.reqPerSec') },
+    { key: 'http_5xx_rate', label: t('predictions.series.http_5xx_rate'), color: '#EF4444', gradientId: 'errGrad', unit: '%' },
+  ], [t]);
+
   const { currentOrg, currentEnv, isAgentConnected, envList, setCurrentEnv, isRefreshing, triggerRefresh, onNavigate } = useDashboard();
 
   const activeClusterId = currentEnv?.id || currentEnv?.clusterId || currentEnv?.cluster || '';
@@ -903,7 +887,7 @@ export const PredictionsPage = () => {
 
   const [logWorkloadFilter, setLogWorkloadFilter] = useState('ALL');
 
-  const [lastWsSyncTime, setLastWsSyncTime] = useState(() => new Date().toLocaleTimeString('vi-VN'));
+  const [lastWsSyncTime, setLastWsSyncTime] = useState(() => new Date().toLocaleTimeString(getIntlLocale(i18n.language)));
 
 
 
@@ -1439,7 +1423,7 @@ export const PredictionsPage = () => {
 
           const evalTime = newPred.evaluated_at || newPred.predicted_at || new Date().toISOString();
 
-          const timeStr = new Date(evalTime).toLocaleTimeString('vi-VN');
+          const timeStr = new Date(evalTime).toLocaleTimeString(getIntlLocale(i18nInstance.language));
 
 
 
@@ -1689,7 +1673,7 @@ export const PredictionsPage = () => {
 
           if (sId && (!currentTarget || sId === currentTarget)) {
 
-            setLastWsSyncTime(new Date().toLocaleTimeString('vi-VN'));
+            setLastWsSyncTime(new Date().toLocaleTimeString(getIntlLocale(i18nInstance.language)));
 
             setBatchProgress(bp);
 
@@ -1793,7 +1777,7 @@ export const PredictionsPage = () => {
 
           type: 'warning',
 
-          text: 'Chưa có dịch vụ nào trên cụm này để thực hiện suy diễn.',
+          text: t('predictions.notices.noServiceForInference'),
 
         });
 
@@ -1823,19 +1807,13 @@ export const PredictionsPage = () => {
 
         type: 'success',
 
-        text: `Đã hoàn tất chu kỳ suy diễn On-Demand! Điểm rủi ro AI: ${
-
-          gruPred?.overall_risk_score !== undefined
-
+        text: t('predictions.notices.inferenceSuccess', {
+          score: gruPred?.overall_risk_score !== undefined
             ? parseFloat(gruPred.overall_risk_score).toFixed(4)
-
-            : '0.0002'
-
-        } (${gruPred?.status || 'HEALTHY'}). Chẩn đoán RCA: ${
-
-          rca?.root_cause?.cause || 'Không phát hiện bất thường nghiêm trọng'
-
-        }.`,
+            : '0.0002',
+          status: gruPred?.status || 'HEALTHY',
+          cause: rca?.root_cause?.cause || t('predictions.notices.noSevereAnomaly'),
+        }),
 
       });
 
@@ -1851,7 +1829,7 @@ export const PredictionsPage = () => {
 
         type: 'error',
 
-        text: `Lỗi khi chạy suy diễn On-Demand: ${err.message}`,
+        text: t('predictions.notices.inferenceError', { message: err.message }),
 
       });
 
@@ -2021,11 +1999,9 @@ export const PredictionsPage = () => {
 
         type: 'success',
 
-        text: `Đã kích hoạt hành động phòng ngừa thành công! Ghi nhận vào bảng healing_actions (Mã hành động: ${
-
-          action?.id?.substring(0, 8) || 'thành công'
-
-        }). Lệnh khắc phục MAPE-K đã thực thi.`,
+        text: t('predictions.notices.mitigateSuccess', {
+          id: action?.id?.substring(0, 8) || t('predictions.notices.successFallback'),
+        }),
 
       });
 
@@ -2055,7 +2031,7 @@ export const PredictionsPage = () => {
 
         type: 'error',
 
-        text: `Không thể áp dụng hành động: ${err.message}`,
+        text: t('predictions.notices.mitigateError', { message: err.message }),
 
       });
 
@@ -2094,23 +2070,23 @@ export const PredictionsPage = () => {
 
   const formatRelativeTime = (dateStr) => {
 
-    if (!dateStr) return 'Vừa xong';
+    if (!dateStr) return t('predictions.relativeTime.justNow');
 
     const diff = Date.now() - new Date(dateStr).getTime();
 
-    if (isNaN(diff)) return 'Vừa xong';
+    if (isNaN(diff)) return t('predictions.relativeTime.justNow');
 
     const mins = Math.floor(diff / 60000);
 
-    if (mins < 1) return 'Vừa xong';
+    if (mins < 1) return t('predictions.relativeTime.justNow');
 
-    if (mins < 60) return `${mins} phút trước`;
+    if (mins < 60) return t('predictions.relativeTime.minutesAgo', { count: mins });
 
     const hours = Math.floor(mins / 60);
 
-    if (hours < 24) return `${hours} giờ trước`;
+    if (hours < 24) return t('predictions.relativeTime.hoursAgo', { count: hours });
 
-    return `${Math.floor(hours / 24)} ngày trước`;
+    return t('predictions.relativeTime.daysAgo', { count: Math.floor(hours / 24) });
 
   };
 
@@ -2126,7 +2102,7 @@ export const PredictionsPage = () => {
 
         type: 'error',
 
-        text: 'Khuyến nghị này chưa gắn với mã Incident nào trong cơ sở dữ liệu.',
+        text: t('predictions.notices.noIncidentAttached'),
 
       });
 
@@ -2176,13 +2152,13 @@ export const PredictionsPage = () => {
 
       clusterId: rec.cluster_id || currentEnv?.clusterId,
 
-      title: isNoAction ? 'Giám sát viễn trắc an toàn - Quyết định NO_ACTION' : (rec.incident_title || rec.recommendation || 'Bất thường viễn trắc AI'),
+      title: isNoAction ? t('predictions.evidenceModal.noActionTitle') : (rec.incident_title || rec.recommendation || t('predictions.evidenceModal.defaultTitle')),
 
       service: targetService,
 
       severity: isNoAction ? 'LOW' : (rec.severity || 'LOW').toUpperCase(),
 
-      status: isApplied ? 'Đã khắc phục hoàn tất' : (isNoAction ? 'Tự động an toàn (NO_ACTION)' : 'Chờ phê duyệt HITL'),
+      status: isApplied ? t('predictions.evidenceModal.resolvedStatus') : (isNoAction ? t('predictions.evidenceModal.noActionStatus') : t('predictions.evidenceModal.hitlPendingStatus')),
 
       time: formatRelativeTime(rec.created_at),
 
@@ -2192,13 +2168,13 @@ export const PredictionsPage = () => {
 
       recommendationReason: isNoAction
 
-        ? 'Hệ thống viễn trắc nằm trong ngưỡng an toàn tự thích ứng. Quyết định tự động: Không can thiệp để bảo toàn Zero-Downtime.'
+        ? t('predictions.evidenceModal.noActionReason')
 
-        : (rec.reason || 'Áp dụng hành động tự sửa lỗi kiểm soát an toàn theo vòng lặp điều khiển tự thích ứng MAPE-K.'),
+        : (rec.reason || t('predictions.evidenceModal.defaultReason')),
 
       confidence: Math.round(Number(rec.confidence || 0.3) * 100),
 
-      primaryRisk: isNoAction ? 'AN TOÀN (100%)' : `${rec.recommendation || 'RỦI RO'} (${Math.round(Number(rec.confidence || 0.3) * 100)}%)`,
+      primaryRisk: isNoAction ? t('predictions.evidenceModal.safeRisk') : `${rec.recommendation || t('predictions.evidenceModal.riskFallback')} (${Math.round(Number(rec.confidence || 0.3) * 100)}%)`,
 
       actionParameters: rec.action_parameters,
 
@@ -2220,7 +2196,7 @@ export const PredictionsPage = () => {
 
       incidentId: rec.incident_id,
 
-      recTitle: rec.recommendation || 'Khuyến nghị phòng ngừa',
+      recTitle: rec.recommendation || t('predictions.evidenceModal.defaultRecTitle'),
 
       recData: rec,
 
@@ -2288,9 +2264,9 @@ export const PredictionsPage = () => {
 
             ...prev.incidentModalData,
 
-            status: 'Đã khắc phục hoàn tất',
+            status: t('predictions.evidenceModal.resolvedStatus'),
 
-            mttr: 'Đã khắc phục hoàn tất',
+            mttr: t('predictions.evidenceModal.resolvedStatus'),
 
           }
 
@@ -2608,7 +2584,7 @@ export const PredictionsPage = () => {
 
           ? ''
 
-          : d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          : d.toLocaleTimeString(getIntlLocale(i18n.language), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 
 
@@ -2674,7 +2650,7 @@ export const PredictionsPage = () => {
 
     }));
 
-  }, [currentInputs]);
+  }, [currentInputs, i18n.language]);
 
 
 
@@ -2700,7 +2676,7 @@ export const PredictionsPage = () => {
 
           ? ''
 
-          : d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          : d.toLocaleTimeString(getIntlLocale(i18n.language), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 
 
@@ -2766,7 +2742,7 @@ export const PredictionsPage = () => {
 
     }));
 
-  }, [gruModal.inputs]);
+  }, [gruModal.inputs, i18n.language]);
 
 
 
@@ -3150,9 +3126,14 @@ export const PredictionsPage = () => {
 
         <div style={{ fontSize: '0.78125rem', color: '#64748B', fontWeight: 500 }}>
 
-          Hiển thị <strong style={{ color: '#0F172A' }}>{startIdx}–{endIdx}</strong> trong tổng số{' '}
-
-          <strong style={{ color: '#0F172A' }}>{totalItems}</strong> mục (10 mục / trang)
+          <Trans
+            i18nKey="dashboard:predictions.pagination.showing"
+            values={{ start: startIdx, end: endIdx, total: totalItems }}
+            components={{
+              1: <strong style={{ color: '#0F172A' }} />,
+              3: <strong style={{ color: '#0F172A' }} />,
+            }}
+          />
 
         </div>
 
@@ -3190,7 +3171,7 @@ export const PredictionsPage = () => {
 
           >
 
-            &laquo; Trước
+            {t('predictions.pagination.prev')}
 
           </button>
 
@@ -3284,7 +3265,7 @@ export const PredictionsPage = () => {
 
           >
 
-            Sau &raquo;
+            {t('predictions.pagination.next')}
 
           </button>
 
@@ -3434,7 +3415,7 @@ export const PredictionsPage = () => {
 
     return { yMax: ceiling, yTicks: ticks, activeSeriesList: activeConfigs };
 
-  }, [timesteps, activeSeries, scaleMode]);
+  }, [displayTimesteps, activeSeries, scaleMode, SERIES_CONFIG]);
 
 
 
@@ -3598,12 +3579,12 @@ export const PredictionsPage = () => {
 
               <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--dash-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
 
-                AI Dự Báo Nguy Cơ Sớm & Đề Xuất Phòng Ngừa
+                {t('predictions.pageTitle')}
 
               </h1>
 
               <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginTop: '2px', margin: 0 }}>
-                Phân loại rủi ro đa nhãn thời gian thực bằng mô hình AI
+                {t('predictions.pageSubtitle')}
               </p>
 
             </div>
@@ -3662,7 +3643,7 @@ export const PredictionsPage = () => {
 
             <RefreshCw size={14} className={loading || isRefreshing ? 'animate-spin' : ''} />
 
-            <span>Làm mới bảng</span>
+            <span>{t('predictions.refreshTable')}</span>
 
           </button>
 
@@ -3718,7 +3699,7 @@ export const PredictionsPage = () => {
 
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
 
-              Tổng Lượt Suy Luận
+              {t('predictions.stats.totalInferences')}
 
             </span>
 
@@ -3754,7 +3735,11 @@ export const PredictionsPage = () => {
 
               style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}
 
-              title={isAgentConnected ? `Tiến trình gom mẻ viễn trắc: ${currentServiceBatchProgress?.collected !== undefined ? currentServiceBatchProgress.collected : 12}/${currentServiceBatchProgress?.target || 12} (${currentServiceTarget})` : 'Cụm chưa kết nối'}
+              title={isAgentConnected ? t('predictions.stats.batchTitle', {
+                collected: currentServiceBatchProgress?.collected !== undefined ? currentServiceBatchProgress.collected : 12,
+                target: currentServiceBatchProgress?.target || 12,
+                service: currentServiceTarget,
+              }) : t('predictions.stats.clusterDisconnected')}
 
             >
 
@@ -3766,7 +3751,7 @@ export const PredictionsPage = () => {
 
                     : '12/12')
 
-                : 'Cụm chưa kết nối tác tử viễn trắc'}
+                : t('predictions.stats.clusterNoAgent')}
 
             </span>
 
@@ -3782,7 +3767,7 @@ export const PredictionsPage = () => {
 
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
 
-              Nguy Cơ &amp; Dị Thường
+              {t('predictions.stats.risksAndAnomalies')}
 
             </span>
 
@@ -3812,9 +3797,9 @@ export const PredictionsPage = () => {
 
                   {displayStats.total > 0
 
-                    ? `${(((displayStats.total - (displayStats.by_type?.NORMAL || 0)) / displayStats.total) * 100).toFixed(1)}% chu kỳ phát hiện dị thường`
+                    ? t('predictions.stats.anomalyRate', { pct: (((displayStats.total - (displayStats.by_type?.NORMAL || 0)) / displayStats.total) * 100).toFixed(1) })
 
-                    : '0 chu kỳ phát hiện dị thường'}
+                    : t('predictions.stats.zeroAnomalyRate')}
 
                 </span>
 
@@ -3822,7 +3807,7 @@ export const PredictionsPage = () => {
 
             ) : (
 
-              '0 chu kỳ phát hiện dị thường'
+              t('predictions.stats.zeroAnomalyRate')
 
             )}
 
@@ -3838,7 +3823,7 @@ export const PredictionsPage = () => {
 
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
 
-              Đề Xuất Chờ Xử Lý
+              {t('predictions.stats.pendingRecommendations')}
 
             </span>
 
@@ -3866,15 +3851,11 @@ export const PredictionsPage = () => {
 
               ? (pendingProposedRecommendations.length > 0
 
-                  ? `${pendingProposedRecommendations.length} đề xuất đang chờ kích hoạt`
+                  ? t('predictions.stats.pendingCountDesc', { count: pendingProposedRecommendations.length })
 
-                  : (noActionRecommendations.length > 0
+                  : t('predictions.stats.zeroPendingDesc'))
 
-                      ? '0 đề xuất đang chờ kích hoạt'
-
-                      : '0 đề xuất đang chờ kích hoạt'))
-
-              : '0 đề xuất đang chờ kích hoạt'}
+              : t('predictions.stats.zeroPendingDesc')}
 
           </div>
 
@@ -3888,7 +3869,7 @@ export const PredictionsPage = () => {
 
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--dash-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
 
-              Đã Khắc Phục Tự Lành
+              {t('predictions.stats.healedActions')}
 
             </span>
 
@@ -3910,13 +3891,13 @@ export const PredictionsPage = () => {
 
                 <CheckCircle2 size={13} />
 
-                <span>Ghi nhận bảng healing_actions</span>
+                <span>{t('predictions.stats.recordedInTable')}</span>
 
               </>
 
             ) : (
 
-              <span>0 hành động tự lành</span>
+              <span>{t('predictions.stats.zeroHealed')}</span>
 
             )}
 
@@ -3934,7 +3915,7 @@ export const PredictionsPage = () => {
 
       {/* 4. Khối Trực Quan Hóa: Biểu Đồ 12 Bước Đa Chuỗi (Ẩn/Hiện) & Hồ Sơ Xác Suất Rủi Ro GRU */}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(0, 1fr)', gap: '20px' }}>
+      <div className="dash-grid-split" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(0, 1fr)', gap: '20px' }}>
 
         
 
@@ -3956,7 +3937,7 @@ export const PredictionsPage = () => {
 
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
 
-                    Chuỗi Viễn Trắc Telemetry Thời Gian Thực (60 Giây)
+                    {t('predictions.telemetryChart.title')}
 
                   </h3>
 
@@ -3966,7 +3947,7 @@ export const PredictionsPage = () => {
 
                   <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '4px 0 0 0', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
 
-                    <span>Quy mô: <strong style={{ fontFamily: 'var(--font-mono)', color: '#15803D' }}>{currentServiceMetadata.pods} Pods</strong> / <strong style={{ fontFamily: 'var(--font-mono)', color: '#475569' }}>{currentServiceMetadata.nodes} Node</strong></span>
+                    <span>{t('predictions.telemetryChart.scalePrefix')} <strong style={{ fontFamily: 'var(--font-mono)', color: '#15803D' }}>{t('predictions.telemetryChart.podsCount', { count: currentServiceMetadata.pods })}</strong> / <strong style={{ fontFamily: 'var(--font-mono)', color: '#475569' }}>{t('predictions.telemetryChart.nodesCount', { count: currentServiceMetadata.nodes })}</strong></span>
 
                   </p>
 
@@ -3994,7 +3975,7 @@ export const PredictionsPage = () => {
 
                   onClick={() => setIsHoverInfo((v) => !v)}
 
-                  aria-label="Nguyên tắc minh bạch của AI"
+                  aria-label={t('predictions.telemetryChart.honestAria')}
 
                   style={{
 
@@ -4024,7 +4005,7 @@ export const PredictionsPage = () => {
 
                   }}
 
-                  title="Nguyên tắc minh bạch của AI (Honest Telemetry)"
+                  title={t('predictions.telemetryChart.honestTitle')}
 
                 >
 
@@ -4080,13 +4061,19 @@ export const PredictionsPage = () => {
 
                       <Info size={14} color="#2563EB" />
 
-                      <span>Nguyên Tắc Minh Bạch Của AI (Honest Telemetry)</span>
+                      <span>{t('predictions.telemetryChart.honestHeading')}</span>
 
                     </div>
 
                     <div style={{ color: '#334155', fontSize: '0.78125rem' }}>
 
-                      <strong style={{ color: '#1E3A8A' }}>Cơ chế phân loại rủi ro AI đa nhãn:</strong> Mô hình học máy của hệ thống phân tích chuỗi thời gian gồm đúng <strong style={{ color: '#1E3A8A' }}>12 bước quan sát viễn trắc (cửa sổ 60 giây)</strong> và tính toán độc lập xác suất cho 6 nguy cơ bão hòa: CPU, OOM, Disk Full, High Latency, 5xx Spikes, Traffic Overload.
+                      <Trans
+                        i18nKey="dashboard:predictions.telemetryChart.honestBody"
+                        components={{
+                          0: <strong style={{ color: '#1E3A8A' }} />,
+                          2: <strong style={{ color: '#1E3A8A' }} />,
+                        }}
+                      />
 
                     </div>
 
@@ -4108,7 +4095,7 @@ export const PredictionsPage = () => {
 
                 <Server size={13} color="#3B82F6" />
 
-                Dịch vụ:
+                {t('predictions.telemetryChart.serviceLabel')}
 
               </span>
 
@@ -4116,7 +4103,7 @@ export const PredictionsPage = () => {
 
                 <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '4px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
 
-                  Agent chưa kết nối (Không có dữ liệu viễn trắc)
+                  {t('predictions.telemetryChart.agentNotConnectedInfo')}
 
                 </span>
 
@@ -4124,7 +4111,7 @@ export const PredictionsPage = () => {
 
                 <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '4px 10px', backgroundColor: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
 
-                  Chưa có dịch vụ nào gửi telemetry trên cụm này
+                  {t('predictions.telemetryChart.noServicesOnCluster')}
 
                 </span>
 
@@ -4240,7 +4227,7 @@ export const PredictionsPage = () => {
 
                 onClick={() => setScaleMode((m) => (m === 'auto' ? 'standard' : 'auto'))}
 
-                title="Chuyển đổi thang đo trục Y"
+                title={t('predictions.telemetryChart.yScaleTitle')}
 
                 style={{
 
@@ -4272,7 +4259,7 @@ export const PredictionsPage = () => {
 
                 <Sliders size={12} />
 
-                <span>Thang: {scaleMode === 'auto' ? 'Tự co giãn' : '0 - 100%'}</span>
+                <span>{t('predictions.telemetryChart.scaleLabel', { mode: scaleMode === 'auto' ? t('predictions.telemetryChart.scaleAuto') : t('predictions.telemetryChart.scaleStandard') })}</span>
 
               </button>
 
@@ -4304,7 +4291,7 @@ export const PredictionsPage = () => {
 
             <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', marginRight: '4px' }}>
 
-              <Filter size={12} /> Bật/tắt đường:
+              <Filter size={12} /> {t('predictions.telemetryChart.toggleLinesLabel')}
 
             </span>
 
@@ -4390,9 +4377,9 @@ export const PredictionsPage = () => {
 
               <Server size={32} color="#CBD5E1" />
 
-              <div style={{ fontWeight: 600, color: '#64748B' }}>Cụm {currentEnv?.cluster || 'N/A'} chưa kết nối tác tử viễn trắc (Agent Offline)</div>
+              <div style={{ fontWeight: 600, color: '#64748B' }}>{t('predictions.telemetryChart.clusterOfflineTitle', { cluster: currentEnv?.cluster || 'N/A' })}</div>
 
-              <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Chưa có dữ liệu chuỗi viễn trắc thu thập cho cụm này</div>
+              <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{t('predictions.telemetryChart.clusterOfflineDesc')}</div>
 
             </div>
 
@@ -4402,7 +4389,7 @@ export const PredictionsPage = () => {
 
               <RefreshCw size={18} className="animate-spin" style={{ marginRight: '8px', color: '#38BDF8' }} />
 
-              Đang đồng bộ chuỗi 12 điểm viễn trắc...
+              {t('predictions.telemetryChart.syncingSequence')}
 
             </div>
 
@@ -4414,13 +4401,13 @@ export const PredictionsPage = () => {
 
               <div style={{ fontWeight: 600, color: 'var(--dash-text-primary)' }}>
 
-                Đang gom nhịp viễn trắc độc lập cho {currentServiceTarget || 'dịch vụ'}...
+                {t('predictions.telemetryChart.collectingForService', { service: currentServiceTarget || t('predictions.telemetryChart.defaultService') })}
 
               </div>
 
               <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
 
-                {currentServiceBatchProgress?.message || 'Hệ thống đang tích lũy đủ 12 bước viễn trắc (60s) để suy luận AI'}
+                {currentServiceBatchProgress?.message || t('predictions.telemetryChart.defaultBatchMsg')}
 
               </div>
 
@@ -4802,7 +4789,7 @@ export const PredictionsPage = () => {
 
                           >
 
-                            {currentStepLabel} ({activeSweepIdx === 0 ? 'Đủ 12 bước -> AI' : 'Đầu gom mới'})
+                            {currentStepLabel} ({activeSweepIdx === 0 ? t('predictions.telemetryChart.enough12Steps') : t('predictions.telemetryChart.newHead')})
 
                           </text>
 
@@ -4888,7 +4875,7 @@ export const PredictionsPage = () => {
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.15)', paddingBottom: '4px', marginBottom: '6px', fontFamily: 'var(--font-mono)' }}>
 
-                    <span style={{ fontWeight: 700, color: '#38BDF8' }}>Mốc {timesteps[hoverIndex].stepLabel}</span>
+                    <span style={{ fontWeight: 700, color: '#38BDF8' }}>{t('predictions.telemetryChart.stepTooltip', { step: timesteps[hoverIndex].stepLabel })}</span>
 
                     <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>{timesteps[hoverIndex].displayTime}</span>
 
@@ -4986,11 +4973,11 @@ export const PredictionsPage = () => {
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', fontFamily: 'var(--font-mono)' }}>
 
-                  <span style={{ color: '#64748B' }}>Hiện: <strong style={{ color: '#0F172A' }}>{s.latest}</strong></span>
+                  <span style={{ color: '#64748B' }}>{t('predictions.telemetryChart.latestShort')} <strong style={{ color: '#0F172A' }}>{s.latest}</strong></span>
 
-                  <span style={{ color: '#64748B' }}>TB: <strong style={{ color: '#0F172A' }}>{s.avg}</strong></span>
+                  <span style={{ color: '#64748B' }}>{t('predictions.telemetryChart.avgShort')} <strong style={{ color: '#0F172A' }}>{s.avg}</strong></span>
 
-                  <span style={{ color: '#64748B' }}>Max: <strong style={{ color: s.color }}>{s.max}</strong></span>
+                  <span style={{ color: '#64748B' }}>{t('predictions.telemetryChart.maxShort')} <strong style={{ color: s.color }}>{s.max}</strong></span>
 
                 </div>
 
@@ -5014,7 +5001,7 @@ export const PredictionsPage = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <BarChart2 size={18} color="#7C3AED" />
               <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Hồ Sơ Xác Suất Rủi Ro
+                {t('predictions.riskProfile.title')}
               </h3>
             </div>
           </div>
@@ -5025,7 +5012,7 @@ export const PredictionsPage = () => {
 
             <div>
 
-              <span style={{ color: '#64748B' }}>Điểm rủi ro tổng hợp: </span>
+              <span style={{ color: '#64748B' }}>{t('predictions.riskProfile.overallScore')} </span>
 
               <strong style={{ color: displaySelectedPrediction ? (parseFloat(displaySelectedPrediction.risk_score) >= 0.7 ? '#E11D48' : '#059669') : '#94A3B8', fontFamily: 'var(--font-mono)' }}>
 
@@ -5035,7 +5022,7 @@ export const PredictionsPage = () => {
 
               <span style={{ marginLeft: '6px', fontWeight: 700, color: displaySelectedPrediction ? (parseFloat(displaySelectedPrediction.risk_score) >= 0.7 ? '#E11D48' : '#059669') : '#94A3B8' }}>
 
-                ({displaySelectedPrediction ? (displaySelectedPrediction.status || 'HEALTHY') : (isAgentConnected ? 'CHƯA CÓ LƯỢT SUY LUẬN' : 'DISCONNECTED')})
+                ({displaySelectedPrediction ? (displaySelectedPrediction.status || 'HEALTHY') : (isAgentConnected ? t('predictions.riskProfile.noInferenceStatus') : t('predictions.riskProfile.disconnectedStatus'))})
 
               </span>
 
@@ -5135,7 +5122,7 @@ export const PredictionsPage = () => {
 
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: isExceeded ? '#E11D48' : 'var(--dash-text-muted)' }}>
 
-                        Ngưỡng: {(effectiveThreshold * 100).toFixed(0)}%
+                        {t('predictions.riskProfile.threshold', { pct: (effectiveThreshold * 100).toFixed(0) })}
 
                       </span>
 
@@ -5210,11 +5197,11 @@ export const PredictionsPage = () => {
 
                 ? ((displaySelectedPrediction.status === 'RISK_DETECTED' || Number(displaySelectedPrediction.risk_score ?? displaySelectedPrediction.overall_risk_score ?? 0) >= 0.7)
 
-                    ? '⚠️ Phát hiện nguy cơ vượt ngưỡng!'
+                    ? t('predictions.riskProfile.riskExceeded')
 
-                    : 'Tất cả dưới ngưỡng an toàn')
+                    : t('predictions.riskProfile.allSafe'))
 
-                : (isAgentConnected ? 'Chưa có lượt suy luận' : 'Cụm chưa kết nối • Không có dữ liệu suy luận')}
+                : (isAgentConnected ? t('predictions.riskProfile.noInference') : t('predictions.riskProfile.clusterDisconnected'))}
 
             </span>
 

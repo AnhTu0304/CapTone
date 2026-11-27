@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDashboard } from '../context/DashboardContext';
 import ActionHistoryPage from './ActionHistoryPage';
 import ApprovalsPage from './ApprovalsPage';
@@ -6,6 +7,7 @@ import HealingActionsPage from './HealingActionsPage';
 import { History, CheckCircle2, Zap } from 'lucide-react';
 
 export const SelfHealingHubPage = ({ currentPath = '/dashboard/self-healing', onNavigate }) => {
+  const { t } = useTranslation('dashHealing');
   const { pendingApprovalsCount } = useDashboard();
 
   const [activeTab, setActiveTab] = useState(() => {
@@ -78,7 +80,7 @@ export const SelfHealingHubPage = ({ currentPath = '/dashboard/self-healing', on
           }}
         >
           <History size={16} />
-          <span>1. Lịch Sử Phục Hồi</span>
+          <span>{t('selfHealingHub.tabs.history')}</span>
         </button>
 
         <button
@@ -102,7 +104,7 @@ export const SelfHealingHubPage = ({ currentPath = '/dashboard/self-healing', on
           }}
         >
           <CheckCircle2 size={16} />
-          <span>2. Cổng Phê Duyệt (HITL)</span>
+          <span>{t('selfHealingHub.tabs.approvals')}</span>
           {pendingApprovalsCount > 0 && (
             <span
               style={{
@@ -141,7 +143,7 @@ export const SelfHealingHubPage = ({ currentPath = '/dashboard/self-healing', on
           }}
         >
           <Zap size={16} />
-          <span>3. Danh Mục Hành Động</span>
+          <span>{t('selfHealingHub.tabs.actions')}</span>
         </button>
       </div>
 

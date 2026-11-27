@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import { usePermissions, PERMISSIONS } from '../../../hooks/usePermissions';
 import { agentService } from '../../../services/agentService';
@@ -27,6 +29,8 @@ import {
 } from 'lucide-react';
 
 export const AgentsPage = () => {
+  const { t, i18n } = useTranslation('dashMonitoring');
+  const intlLocale = getIntlLocale(i18n.language);
   const { currentOrg, currentEnv, isRefreshing, triggerRefresh } = useDashboard();
 
   // Real Agents State
@@ -81,7 +85,7 @@ export const AgentsPage = () => {
       setDisconnectingAgent(null);
       await fetchAgents();
     } catch (err) {
-      setActionError(err.message || 'Lỗi ngắt kết nối Agent');
+      setActionError(err.message || t('agents.disconnectError'));
     } finally {
       setIsDisconnecting(false);
     }
@@ -97,7 +101,7 @@ export const AgentsPage = () => {
       setForceDeleteAgent(false);
       await fetchAgents();
     } catch (err) {
-      setActionError(err.message || 'Lỗi xóa Agent');
+      setActionError(err.message || t('agents.deleteError'));
     } finally {
       setIsDeleting(false);
     }
@@ -125,8 +129,8 @@ export const AgentsPage = () => {
   const onlineRatio = agents.length > 0 ? `${onlineAgents.length} / ${agents.length}` : '0 / 0';
   const onlinePercent =
     agents.length > 0
-      ? `${Math.round((onlineAgents.length / agents.length) * 100)}% Trực tuyến`
-      : 'Chưa có tác tử';
+      ? t('agents.kpi.onlinePercent', { percent: Math.round((onlineAgents.length / agents.length) * 100) })
+      : t('agents.kpi.noAgents');
 
   // Hàm chuẩn hóa domain cho Agent Installer (tự động loại bỏ cổng dev 3000/3001 trên localhost để trỏ đúng Nginx Gateway cổng 80)
   const getInstallerOrigin = () => {
@@ -178,11 +182,11 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           </div>
           <div>
             <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-              Quản Trị Tác Tử eBPF Agent
+              {t('agents.title')}
             </h1>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Giám sát nhịp tim heartbeat, tài nguyên CPU/RAM và đầu dò eBPF trên cụm{' '}
-              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || 'Toàn hệ thống'}</strong>
+              {t('agents.subtitlePrefix')}{' '}
+              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{currentEnv?.name || t('common.systemWide')}</strong>
             </p>
           </div>
         </div>
@@ -213,7 +217,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                 cursor: 'pointer',
               }}
             >
-              {currentEnv?.name || 'Cụm hiện tại'}
+              {currentEnv?.name || t('agents.scopeCurrentFallback')}
             </button>
             <button
               type="button"
@@ -229,7 +233,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                 cursor: 'pointer',
               }}
             >
-              Toàn tổ chức
+              {t('agents.scopeAllOrg')}
             </button>
           </div>
 
@@ -253,7 +257,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             }}
           >
             <RefreshCw size={14} className={isRefreshing || isLoading ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
+            <span>{t('common.refresh')}</span>
           </button>
 
           {can(PERMISSIONS.AGENT_MANAGE) && (
@@ -276,17 +280,17 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               }}
             >
               <Plus size={15} />
-              <span>Cài đặt Tác tử</span>
+              <span>{t('agents.installBtn')}</span>
             </button>
           )}
         </div>
       </div>
 
       {/* 2. Stat Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #059669' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TỔNG SỐ TÁC TỬ</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('agents.kpi.totalAgents')}</span>
             <Radio size={14} color="#059669" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -298,13 +302,13 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             </span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            {onlineAgents.length > 0 ? `Bao phủ worker nodes (${currentEnv?.name})` : 'Chờ triển khai tác tử'}
+            {onlineAgents.length > 0 ? t('agents.kpi.coveredWorkers', { cluster: currentEnv?.name }) : t('agents.kpi.waitingDeploy')}
           </div>
         </div>
 
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #10B981' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>NHỊP TIM TRUNG BÌNH</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('agents.kpi.avgHeartbeat')}</span>
             <Clock size={14} color="#10B981" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -312,17 +316,17 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               {onlineAgents.length > 0 ? '3.0s' : 'N/A'}
             </span>
             <span style={{ fontSize: '0.7rem', fontWeight: 600, color: onlineAgents.length > 0 ? '#059669' : '#94A3B8' }}>
-              Tần suất 5s
+              {t('agents.kpi.freq5s')}
             </span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            {onlineAgents.length > 0 ? 'Độ trễ truyền tin < 1.2ms' : 'Chưa có tín hiệu heartbeat'}
+            {onlineAgents.length > 0 ? t('agents.kpi.lowLatency') : t('agents.kpi.noHeartbeat')}
           </div>
         </div>
 
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: '2.5px solid #3B82F6' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>TẢI CPU / RAM TÁC TỬ</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('agents.kpi.cpuRamTitle')}</span>
             <Cpu size={14} color="#3B82F6" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
@@ -334,25 +338,25 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             </span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            Mô hình siêu nhẹ (Zero-Overhead)
+            {t('agents.kpi.zeroOverhead')}
           </div>
         </div>
 
         <div className="dash-card" style={{ padding: '11px 14px', borderRadius: '12px', borderTop: `2.5px solid ${onlineAgents.length > 0 ? '#10B981' : '#94A3B8'}` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>ĐẦU DÒ NHÂN eBPF</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', letterSpacing: '0.02em' }}>{t('agents.kpi.ebpfProbes')}</span>
             <CheckCircle2 size={14} color={onlineAgents.length > 0 ? '#10B981' : '#94A3B8'} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
             <span style={{ fontSize: '1.25rem', fontWeight: 800, color: onlineAgents.length > 0 ? '#059669' : '#64748B' }}>
-              {onlineAgents.length > 0 ? 'Hoạt động' : 'Tạm dừng'}
+              {onlineAgents.length > 0 ? t('agents.kpi.active') : t('agents.kpi.paused')}
             </span>
             <span style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', fontWeight: 600, color: onlineAgents.length > 0 ? '#059669' : '#94A3B8' }}>
               Linux 5.15+
             </span>
           </div>
           <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-            WebSocket mTLS mã hóa bảo mật
+            {t('agents.kpi.mtlsDesc')}
           </div>
         </div>
       </div>
@@ -361,10 +365,10 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
       <div className="dash-card" style={{ padding: '16px 18px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
           {/* Search box */}
-          <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
+          <div className="dash-search-box" style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
             <input
               type="text"
-              placeholder="Tìm theo tên agent, UID hoặc cụm..."
+              placeholder={t('agents.filters.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -384,9 +388,9 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           {/* Status filter (Segmented Pill) */}
           <div style={{ display: 'inline-flex', gap: '3px', padding: '3px', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
             {[
-              { id: 'ALL', label: 'Tất cả' },
-              { id: 'ONLINE', label: 'Trực tuyến' },
-              { id: 'OFFLINE', label: 'Ngoại tuyến' },
+              { id: 'ALL', label: t('common.all') },
+              { id: 'ONLINE', label: t('common.online') },
+              { id: 'OFFLINE', label: t('common.offline') },
             ].map((st) => (
               <button
                 key={st.id}
@@ -416,7 +420,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
           {isLoading ? (
             <div style={{ padding: '40px', textAlign: 'center', color: '#64748B', fontSize: '0.825rem' }}>
               <RefreshCw size={22} className="animate-spin" style={{ margin: '0 auto 10px auto' }} color="#059669" />
-              <div>Đang tải thông tin tác tử từ cụm Kubernetes...</div>
+              <div>{t('agents.empty.loading')}</div>
             </div>
           ) : filteredAgents.length === 0 ? (
             <div style={{ padding: '44px 24px', textAlign: 'center' }}>
@@ -425,11 +429,11 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               </div>
               <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0F172A' }}>
                 {scopeMode === 'CURRENT_CLUSTER'
-                  ? `Chưa có Tác tử nào được cài đặt trên cụm "${currentEnv?.name}"`
-                  : 'Chưa có Tác tử nào trong tổ chức'}
+                  ? t('agents.empty.currentClusterTitle', { cluster: currentEnv?.name || '' })
+                  : t('agents.empty.allOrgTitle')}
               </div>
               <p style={{ fontSize: '0.8rem', color: '#64748B', maxWidth: '460px', margin: '5px auto 14px auto' }}>
-                Triển khai Tác tử eBPF vào cụm Kubernetes của bạn để tự động thu thập viễn trắc và kích hoạt cơ chế tự phục hồi AI.
+                {t('agents.empty.description')}
               </p>
               {can(PERMISSIONS.AGENT_MANAGE) && (
               <button
@@ -447,7 +451,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                   cursor: 'pointer',
                 }}
               >
-                + Cài đặt Tác tử Mới
+                {t('agents.installNewBtn')}
               </button>
               )}
             </div>
@@ -455,13 +459,13 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#64748B', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Tên Tác Tử &amp; UID</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Cụm &amp; Máy Chủ (Node)</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Trạng Thái &amp; Nhịp Tim</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Phiên Bản</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>CPU / RAM</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>Token Hoạt Động</th>
-                  <th style={{ padding: '11px 14px', fontWeight: 700, textAlign: 'right' }}>Thao Tác</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('agents.table.colName')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('agents.table.colClusterNode')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('agents.table.colStatus')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('agents.table.colVersion')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('agents.table.colResources')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700 }}>{t('agents.table.colTokens')}</th>
+                  <th style={{ padding: '11px 14px', fontWeight: 700, textAlign: 'right' }}>{t('agents.table.colAction')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -517,10 +521,10 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                               backgroundColor: isOnline ? '#10B981' : '#EF4444',
                             }}
                           />
-                          {isOnline ? 'Trực tuyến' : 'Ngoại tuyến'}
+                          {isOnline ? t('common.online') : t('common.offline')}
                         </span>
                         <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '3px' }}>
-                          {isOnline ? 'Vừa phản hồi (< 3s trước)' : (agent.last_seen_at ? new Date(agent.last_seen_at).toLocaleTimeString() : 'Chưa nhận tín hiệu')}
+                          {isOnline ? t('agents.table.justResponded') : (agent.last_seen_at ? new Date(agent.last_seen_at).toLocaleTimeString(intlLocale) : t('agents.table.noSignal'))}
                         </div>
                       </td>
                       <td style={{ padding: '12px 14px', color: '#0F172A', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
@@ -533,11 +537,11 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                             <div style={{ fontSize: '0.68rem', color: '#64748B', fontFamily: 'var(--font-mono)' }}>15.1 MB</div>
                           </>
                         ) : (
-                          <span style={{ color: '#94A3B8', fontSize: '0.75rem' }}>N/A (Ngoại tuyến)</span>
+                          <span style={{ color: '#94A3B8', fontSize: '0.75rem' }}>{t('agents.table.naOffline')}</span>
                         )}
                       </td>
                       <td style={{ padding: '12px 14px', color: '#475569', fontWeight: 600 }}>
-                        {agent.active_tokens_count ?? 1} token hợp lệ
+                        {t('agents.table.validTokens', { count: agent.active_tokens_count ?? 1 })}
                       </td>
                       <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
@@ -560,10 +564,10 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                                 fontWeight: 700,
                                 cursor: 'pointer',
                               }}
-                              title="Ngắt kết nối Agent"
+                              title={t('agents.table.disconnectTitle')}
                             >
                               <PowerOff size={12} />
-                              <span>Ngắt</span>
+                              <span>{t('agents.table.disconnectBtn')}</span>
                             </button>
                           )}
                           {can(PERMISSIONS.AGENT_DELETE) && (
@@ -585,10 +589,10 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                                 fontWeight: 600,
                                 cursor: 'pointer',
                               }}
-                              title="Xóa Agent khỏi hệ thống"
+                              title={t('agents.table.deleteTitle')}
                             >
                               <Trash2 size={12} />
-                              <span>Xóa</span>
+                              <span>{t('agents.table.deleteBtn')}</span>
                             </button>
                           )}
                         </div>
@@ -645,7 +649,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Terminal size={18} color="var(--dash-primary)" />
                 <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                  Cài Đặt Tác Tử Cho Cụm "{currentEnv?.name}"
+                  {t('agents.installModal.title', { cluster: currentEnv?.name || '' })}
                 </h3>
               </div>
               <button
@@ -716,7 +720,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               {/* Code snippet display */}
               <div>
                 <p style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)', marginBottom: '10px' }}>
-                  Sao chép và thực thi câu lệnh sau trên máy trạm có kết nối <code>kubectl</code> tới cụm Kubernetes:
+                  {t('agents.installModal.instructionPrefix')} <code>kubectl</code> {t('agents.installModal.instructionSuffix')}
                 </p>
                 <div style={{ position: 'relative' }}>
                   <pre
@@ -767,7 +771,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                     }}
                   >
                     {copiedCode ? <Check size={13} /> : <Copy size={13} />}
-                    <span>{copiedCode ? 'Đã sao chép!' : 'Sao chép'}</span>
+                    <span>{copiedCode ? t('common.copiedBang') : t('common.copy')}</span>
                   </button>
                 </div>
               </div>
@@ -789,7 +793,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               >
                 <Shield size={16} color="var(--dash-primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <span>
-                  <strong>Nguyên tắc Zero Cluster-Admin:</strong> Tác tử SelfHeal chỉ thu thập viễn trắc thông qua socket nhân Linux và hoạt động dưới quyền ServiceAccount bị giới hạn chặt chẽ.
+                  <strong>{t('agents.installModal.securityTitle')}</strong> {t('agents.installModal.securityDesc')}
                 </span>
               </div>
             </div>
@@ -817,7 +821,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                   color: 'var(--dash-text-primary)',
                 }}
               >
-                Đóng
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -856,7 +860,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#DC2626' }}>
               <PowerOff size={22} />
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
-                Xác Nhận Ngắt Kết Nối Tác Tử
+                {t('agents.disconnectModal.title')}
               </h3>
             </div>
             {actionError && (
@@ -865,7 +869,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               </div>
             )}
             <p style={{ margin: 0, fontSize: '0.8125rem', color: '#475569', lineHeight: '1.5' }}>
-              Bạn có chắc chắn muốn ngắt kết nối Tác tử <strong>{disconnectingAgent.name}</strong>? Tác tử sẽ chuyển sang trạng thái <strong>OFFLINE</strong>, phiên WebSocket sẽ bị đóng và toàn bộ token hoạt động sẽ bị thu hồi.
+              {t('agents.disconnectModal.descPrefix')} <strong>{disconnectingAgent.name}</strong>{t('agents.disconnectModal.descMiddle')} <strong>OFFLINE</strong>{t('agents.disconnectModal.descSuffix')}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
               <button
@@ -873,7 +877,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                 onClick={() => setDisconnectingAgent(null)}
                 style={{ padding: '8px 14px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8125rem' }}
               >
-                Hủy
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -891,7 +895,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                   fontSize: '0.8125rem',
                 }}
               >
-                {isDisconnecting ? 'Đang ngắt...' : 'Xác Nhận Ngắt'}
+                {isDisconnecting ? t('agents.disconnectModal.disconnecting') : t('agents.disconnectModal.confirmBtn')}
               </button>
             </div>
           </div>
@@ -931,7 +935,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#991B1B' }}>
               <ShieldAlert size={22} />
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--dash-text-primary)' }}>
-                Xác Nhận Xóa Tác Tử Khỏi Hệ Thống
+                {t('agents.deleteModal.title')}
               </h3>
             </div>
             {actionError && (
@@ -940,7 +944,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
               </div>
             )}
             <div style={{ padding: '12px', backgroundColor: '#FEF2F2', borderRadius: '6px', border: '1px solid #FECACA', fontSize: '0.8125rem', color: '#991B1B', lineHeight: '1.5' }}>
-              Thao tác này sẽ xóa vĩnh viễn Tác tử <strong>{deletingAgent.name}</strong> (UID: {deletingAgent.agent_uid}) và toàn bộ token liên quan.
+              {t('agents.deleteModal.descPrefix')} <strong>{deletingAgent.name}</strong> (UID: {deletingAgent.agent_uid}) {t('agents.deleteModal.descSuffix')}
             </div>
 
             {deletingAgent.status === 'ONLINE' && (
@@ -953,7 +957,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                   onChange={(e) => setForceDeleteAgent(e.target.checked)}
                 />
                 <label htmlFor="forceDeleteAgent" style={{ fontSize: '0.75rem', color: '#92400E', fontWeight: 600, cursor: 'pointer' }}>
-                  Tác tử đang ONLINE. Đánh dấu để xác nhận xóa bắt buộc (force=true) ngay lập tức.
+                  {t('agents.deleteModal.forceLabel')}
                 </label>
               </div>
             )}
@@ -964,7 +968,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                 onClick={() => setDeletingAgent(null)}
                 style={{ padding: '8px 14px', border: '1px solid var(--dash-border)', backgroundColor: '#FFFFFF', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8125rem' }}
               >
-                Hủy
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -982,7 +986,7 @@ helm upgrade --install selfheal-agent selfheal/selfheal-agent \\
                   fontSize: '0.8125rem',
                 }}
               >
-                {isDeleting ? 'Đang xóa...' : 'Xác Nhận Xóa'}
+                {isDeleting ? t('agents.deleteModal.deleting') : t('agents.deleteModal.confirmBtn')}
               </button>
             </div>
           </div>

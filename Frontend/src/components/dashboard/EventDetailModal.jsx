@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   X,
   Bell,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 import { K8sEventSeverityBadge } from './K8sEventSeverityBadge';
 import { telemetryService } from '../../services/telemetryService';
+import i18n, { getIntlLocale, normalizeLanguage } from '../../i18n';
 
 /**
  * Mask sensitive credentials or secrets in text
@@ -54,7 +56,7 @@ const K8S_REASON_VI_MAP = {
 };
 
 export function translateK8sEventReasonVi(reason) {
-  if (!reason) return '';
+  if (!reason || normalizeLanguage(i18n.language) === 'en') return '';
   return K8S_REASON_VI_MAP[reason] || '';
 }
 
@@ -86,6 +88,7 @@ function translateProbeFailureDetailVi(detail) {
 
 export function translateK8sEventMessageVi(rawMessage) {
   if (!rawMessage || typeof rawMessage !== 'string') return '';
+  if (normalizeLanguage(i18n.language) === 'en') return rawMessage.trim();
   let msg = rawMessage.trim();
   let prefix = '';
 
@@ -252,24 +255,24 @@ export function formatEventDateTime(timestamp) {
 
     const diffMs = Date.now() - d.getTime();
     const diffSec = Math.floor(diffMs / 1000);
-    let relative = 'Vừa xong';
+    let relative = i18n.t('dashMonitoring:common.justNow');
     if (diffSec >= 60) {
       const diffMin = Math.floor(diffSec / 60);
-      if (diffMin < 60) relative = `${diffMin} phút trước`;
+      if (diffMin < 60) relative = i18n.t('dashMonitoring:common.minutesAgo', { count: diffMin });
       else {
         const diffHours = Math.floor(diffMin / 60);
-        if (diffHours < 24) relative = `${diffHours} giờ trước`;
+        if (diffHours < 24) relative = i18n.t('dashMonitoring:common.hoursAgo', { count: diffHours });
         else {
           const diffDays = Math.floor(diffHours / 24);
-          relative = `${diffDays} ngày trước`;
+          relative = i18n.t('dashMonitoring:common.daysAgo', { count: diffDays });
         }
       }
     } else if (diffSec > 0) {
-      relative = `${diffSec} giây trước`;
+      relative = i18n.t('dashMonitoring:common.secondsAgo', { count: diffSec });
     }
 
     return {
-      local: d.toLocaleString('vi-VN', {
+      local: d.toLocaleString(getIntlLocale(i18n.language), {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -295,6 +298,7 @@ export const EventDetailModal = ({
   onClose,
   onApplyFilter,
 }) => {
+  const { t } = useTranslation('dashMonitoring');
   const [eventData, setEventData] = useState(initialEvent || null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -337,12 +341,12 @@ export const EventDetailModal = ({
       if (err?.message && (err.message.includes('404') || err.message.toLowerCase().includes('không tìm thấy'))) {
         setIsNotFound(true);
       } else {
-        setErrorMessage(err.message || 'Không thể tải chi tiết sự kiện Kubernetes');
+        setErrorMessage(err.message || t('events.modal.fetchError'));
       }
     } finally {
       setIsLoading(false);
     }
-  }, [eventId, initialEvent]);
+  }, [eventId, initialEvent, t]);
 
   useEffect(() => {
     loadEventDetail();
@@ -452,7 +456,7 @@ export const EventDetailModal = ({
                     letterSpacing: '-0.01em',
                   }}
                 >
-                  {eventData?.reason || 'Chi tiết Sự kiện Kubernetes'}
+                  {eventData?.reason || t('events.modal.defaultTitle')}
                   {reasonVi ? (
                     <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#475569', marginLeft: '6px' }}>
                       ({reasonVi})
@@ -474,7 +478,7 @@ export const EventDetailModal = ({
             type="button"
             data-testid="event-detail-close-btn"
             onClick={onClose}
-            aria-label="Đóng cửa sổ chi tiết sự kiện"
+            aria-label={t('events.modal.closeAria')}
             style={{
               border: 'none',
               background: 'transparent',
@@ -516,7 +520,7 @@ export const EventDetailModal = ({
               }}
             >
               <RotateCcw size={24} className="animate-spin" color="var(--dash-primary, #4F46E5)" />
-              <span>Đang tải thông tin chi tiết sự kiện Kubernetes...</span>
+              <span>{t('events.modal.loading')}</span>
             </div>
           ) : isNotFound || (!eventData && !errorMessage) ? (
             /* Not Found State */
@@ -529,9 +533,9 @@ export const EventDetailModal = ({
               }}
             >
               <AlertTriangle size={32} color="#D97706" style={{ margin: '0 auto 8px' }} />
-              <div style={{ fontWeight: 600 }}>Sự kiện không tồn tại</div>
+              <div style={{ fontWeight: 600 }}>{t('events.modal.notFoundTitle')}</div>
               <p style={{ fontSize: '0.8125rem', margin: '4px 0 0' }}>
-                Bản ghi này có thể đã bị dọn dẹp hoặc tài khoản không có quyền truy cập.
+                {t('events.modal.notFoundDesc')}
               </p>
             </div>
           ) : errorMessage ? (
@@ -568,7 +572,7 @@ export const EventDetailModal = ({
                   cursor: 'pointer',
                 }}
               >
-                Thử lại
+                {t('common.retry')}
               </button>
             </div>
           ) : (
@@ -589,7 +593,7 @@ export const EventDetailModal = ({
                 {/* Object Name & Type */}
                 <div>
                   <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted, #94A3B8)', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Đối tượng liên quan
+                    {t('events.modal.objectLabel')}
                   </span>
                   <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-primary, #4F46E5)', marginTop: '2px', wordBreak: 'break-all' }}>
                     {eventData.resource_type ? `${eventData.resource_type}/` : ''}
@@ -614,7 +618,7 @@ export const EventDetailModal = ({
                         fontWeight: 600,
                       }}
                     >
-                      <Filter size={10} /> Lọc theo loại {eventData.resource_type}
+                      <Filter size={10} /> {t('events.modal.filterByResource', { type: eventData.resource_type })}
                     </button>
                   )}
                 </div>
@@ -622,7 +626,7 @@ export const EventDetailModal = ({
                 {/* Namespace */}
                 <div>
                   <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted, #94A3B8)', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Không gian tên (Namespace)
+                    {t('events.modal.namespaceLabel')}
                   </span>
                   <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary, #0F172A)', marginTop: '2px' }}>
                     {resolvedNamespace}
@@ -646,7 +650,7 @@ export const EventDetailModal = ({
                         fontWeight: 600,
                       }}
                     >
-                      <Filter size={10} /> Lọc theo namespace này
+                      <Filter size={10} /> {t('events.modal.filterByNamespace')}
                     </button>
                   )}
                 </div>
@@ -654,7 +658,7 @@ export const EventDetailModal = ({
                 {/* Reason */}
                 <div>
                   <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted, #94A3B8)', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Lý do (Reason)
+                    {t('events.modal.reasonLabel')}
                   </span>
                   <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--dash-text-primary, #0F172A)', marginTop: '2px' }}>
                     {eventData.reason || '—'}
@@ -683,7 +687,7 @@ export const EventDetailModal = ({
                         fontWeight: 600,
                       }}
                     >
-                      <Filter size={10} /> Lọc theo lý do này
+                      <Filter size={10} /> {t('events.modal.filterByReason')}
                     </button>
                   )}
                 </div>
@@ -691,7 +695,7 @@ export const EventDetailModal = ({
                 {/* Repetition Count */}
                 <div>
                   <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted, #94A3B8)', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Số lần lặp lại
+                    {t('events.modal.countLabel')}
                   </span>
                   <div style={{ marginTop: '2px' }}>
                     <span
@@ -707,7 +711,7 @@ export const EventDetailModal = ({
                         color: (eventData.count || 1) > 1 ? '#4F46E5' : 'var(--dash-text-secondary, #64748B)',
                       }}
                     >
-                      {eventData.count || 1} lần
+                      {t('events.modal.countValue', { count: eventData.count || 1 })}
                     </span>
                   </div>
                 </div>
@@ -715,7 +719,7 @@ export const EventDetailModal = ({
                 {/* Source & Reporting Controller */}
                 <div>
                   <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted, #94A3B8)', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Nguồn phát sinh / Controller
+                    {t('events.modal.sourceLabel')}
                   </span>
                   <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem', color: 'var(--dash-text-secondary, #64748B)', marginTop: '2px' }}>
                     {eventData.source_component ? `Component: ${eventData.source_component}` : ''}
@@ -727,10 +731,10 @@ export const EventDetailModal = ({
                 {/* Cluster / Context */}
                 <div>
                   <span style={{ fontSize: '0.6875rem', color: 'var(--dash-text-muted, #94A3B8)', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Cụm máy chủ & Môi trường
+                    {t('events.modal.clusterLabel')}
                   </span>
                   <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem', color: 'var(--dash-text-secondary, #64748B)', marginTop: '2px' }}>
-                    {eventData.cluster_name || clusterContext?.clusterName || eventData.cluster_id || 'Cụm mặc định'}
+                    {eventData.cluster_name || clusterContext?.clusterName || eventData.cluster_id || t('events.modal.defaultCluster')}
                     {(eventData.environment_name || clusterContext?.environmentName) ? ` (${eventData.environment_name || clusterContext?.environmentName})` : ''}
                   </div>
                 </div>
@@ -750,7 +754,7 @@ export const EventDetailModal = ({
               >
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.6875rem', color: 'var(--dash-text-muted, #94A3B8)', fontWeight: 700 }}>
-                    <Clock size={12} /> LẦN ĐẦU XUẤT HIỆN (FIRST SEEN)
+                    <Clock size={12} /> {t('events.modal.firstSeen')}
                   </div>
                   <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary, #0F172A)', marginTop: '3px' }}>
                     {firstSeen.local}
@@ -762,7 +766,7 @@ export const EventDetailModal = ({
 
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.6875rem', color: 'var(--dash-text-muted, #94A3B8)', fontWeight: 700 }}>
-                    <Clock size={12} /> LẦN CUỐI XUẤT HIỆN (LAST SEEN)
+                    <Clock size={12} /> {t('events.modal.lastSeen')}
                   </div>
                   <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary, #0F172A)', marginTop: '3px' }}>
                     {lastSeen.local}
@@ -775,7 +779,7 @@ export const EventDetailModal = ({
                 {eventData.observed_at && (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.6875rem', color: 'var(--dash-text-muted, #94A3B8)', fontWeight: 700 }}>
-                      <Clock size={12} /> THỜI ĐIỂM QUAN SÁT (OBSERVED/SYNC)
+                      <Clock size={12} /> {t('events.modal.observedAt')}
                     </div>
                     <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--dash-text-primary, #0F172A)', marginTop: '3px' }}>
                       {observedAt.local}
@@ -788,7 +792,7 @@ export const EventDetailModal = ({
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-primary, #0F172A)' }}>
-                    Thông điệp chi tiết (Message)
+                    {t('events.modal.messageTitle')}
                   </span>
                   <button
                     type="button"
@@ -809,7 +813,7 @@ export const EventDetailModal = ({
                     }}
                   >
                     {copiedMsg ? <Check size={12} /> : <Copy size={12} />}
-                    <span>{copiedMsg ? 'Đã sao chép' : 'Sao chép'}</span>
+                    <span>{copiedMsg ? t('common.copied') : t('common.copy')}</span>
                   </button>
                 </div>
                 <div
@@ -829,7 +833,7 @@ export const EventDetailModal = ({
                     border: '1px solid #334155',
                   }}
                 >
-                  <div>{translatedMessage || maskedMessage || 'Không có nội dung thông điệp'}</div>
+                  <div>{translatedMessage || maskedMessage || t('events.modal.emptyMessage')}</div>
                   {translatedMessage && translatedMessage !== maskedMessage && (
                     <div
                       style={{
@@ -840,7 +844,7 @@ export const EventDetailModal = ({
                         color: '#94A3B8',
                       }}
                     >
-                      Bản gốc K8s: {maskedMessage}
+                      {t('events.modal.originalMessagePrefix')} {maskedMessage}
                     </div>
                   )}
                 </div>
@@ -867,7 +871,7 @@ export const EventDetailModal = ({
                     }}
                   >
                     <Code size={14} />
-                    <span>{showRawJson ? 'Thu gọn JSON thô' : 'Xem chi tiết JSON thô (Metadata)'}</span>
+                    <span>{showRawJson ? t('events.modal.hideRawJson') : t('events.modal.showRawJson')}</span>
                   </button>
 
                   {showRawJson && (
@@ -890,7 +894,7 @@ export const EventDetailModal = ({
                       }}
                     >
                       {copiedJson ? <Check size={12} /> : <Copy size={12} />}
-                      <span>{copiedJson ? 'Đã sao chép JSON' : 'Sao chép JSON'}</span>
+                      <span>{copiedJson ? t('common.copiedJson') : t('common.copyJson')}</span>
                     </button>
                   )}
                 </div>
@@ -948,7 +952,7 @@ export const EventDetailModal = ({
               color: 'var(--dash-text-primary, #0F172A)',
             }}
           >
-            Đóng
+            {t('common.close')}
           </button>
         </div>
       </div>

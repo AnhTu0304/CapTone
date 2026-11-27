@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getIntlLocale } from '../../../i18n';
 import { useDashboard } from '../context/DashboardContext';
 import { useToast } from '../../../context/ToastContext';
 import { exportToCsv, exportToJson } from '../../../utils/exportUtils';
@@ -128,329 +130,329 @@ const resolveLogServiceName = (item) => {
 
 const EVENT_DISPLAY_MAP = {
   AUTONOMOUS_HEALING_TRIGGERED: {
-    label: 'Kích hoạt tự phục hồi',
+    labelKey: 'auditLogs.events.AUTONOMOUS_HEALING_TRIGGERED',
     bg: '#F0FDFA',
     color: '#0F766E',
     border: '#99F6E4',
     dot: '#14B8A6',
   },
   REMEDIATION_COMPLETED: {
-    label: 'Hoàn tất tự phục hồi',
+    labelKey: 'auditLogs.events.REMEDIATION_COMPLETED',
     bg: '#ECFDF5',
     color: '#047857',
     border: '#A7F3D0',
     dot: '#10B981',
   },
   REMEDIATION_FAILED: {
-    label: 'Tự phục hồi thất bại',
+    labelKey: 'auditLogs.events.REMEDIATION_FAILED',
     bg: '#FFFBEB',
     color: '#B45309',
     border: '#FDE68A',
     dot: '#F59E0B',
   },
   REMEDIATION_ABORTED: {
-    label: 'Dừng khẩn cấp',
+    labelKey: 'auditLogs.events.REMEDIATION_ABORTED',
     bg: '#FFF1F2',
     color: '#BE123C',
     border: '#FECDD3',
     dot: '#F43F5E',
   },
   REMEDIATION_POD_RESTARTED: {
-    label: 'Khởi động lại Pod',
+    labelKey: 'auditLogs.events.REMEDIATION_POD_RESTARTED',
     bg: '#F0F9FF',
     color: '#0369A1',
     border: '#BAE6FD',
     dot: '#0EA5E9',
   },
   CIRCUIT_BREAKER_TRIPPED: {
-    label: 'Ngắt mạch bảo vệ',
+    labelKey: 'auditLogs.events.CIRCUIT_BREAKER_TRIPPED',
     bg: '#FFFBEB',
     color: '#B45309',
     border: '#FDE68A',
     dot: '#F59E0B',
   },
   HITL_APPROVAL_GRANTED: {
-    label: 'Phê duyệt HITL',
+    labelKey: 'auditLogs.events.HITL_APPROVAL_GRANTED',
     bg: '#ECFDF5',
     color: '#047857',
     border: '#A7F3D0',
     dot: '#10B981',
   },
   HITL_APPROVAL_REJECTED: {
-    label: 'Từ chối phê duyệt HITL',
+    labelKey: 'auditLogs.events.HITL_APPROVAL_REJECTED',
     bg: '#FFF1F2',
     color: '#BE123C',
     border: '#FECDD3',
     dot: '#F43F5E',
   },
   REMEDIATION_NODE_DRAINED: {
-    label: 'Rút tải Node (Drain)',
+    labelKey: 'auditLogs.events.REMEDIATION_NODE_DRAINED',
     bg: '#F0F9FF',
     color: '#0369A1',
     border: '#BAE6FD',
     dot: '#0EA5E9',
   },
   AGENT_CONNECTED: {
-    label: 'Agent kết nối lại',
+    labelKey: 'auditLogs.events.AGENT_CONNECTED',
     bg: '#F5F3FF',
     color: '#6D28D9',
     border: '#DDD6FE',
     dot: '#8B5CF6',
   },
   AGENT_DISCONNECTED: {
-    label: 'Agent mất kết nối',
+    labelKey: 'auditLogs.events.AGENT_DISCONNECTED',
     bg: '#FFFBEB',
     color: '#B45309',
     border: '#FDE68A',
     dot: '#F59E0B',
   },
   DISCONNECTED: {
-    label: 'Ngắt kết nối Agent',
+    labelKey: 'auditLogs.events.DISCONNECTED',
     bg: '#FFFBEB',
     color: '#B45309',
     border: '#FDE68A',
     dot: '#F59E0B',
   },
   AGENT_CREATED: {
-    label: 'Khởi tạo Agent',
+    labelKey: 'auditLogs.events.AGENT_CREATED',
     bg: '#EFF6FF',
     color: '#1D4ED8',
     border: '#BFDBFE',
     dot: '#3B82F6',
   },
   AGENT_REVOKED: {
-    label: 'Thu hồi Agent',
+    labelKey: 'auditLogs.events.AGENT_REVOKED',
     bg: '#FFF1F2',
     color: '#BE123C',
     border: '#FECDD3',
     dot: '#F43F5E',
   },
   AGENT_TOKEN_CREATED: {
-    label: 'Cấp Token Agent',
+    labelKey: 'auditLogs.events.AGENT_TOKEN_CREATED',
     bg: '#EEF2FF',
     color: '#4338CA',
     border: '#C7D2FE',
     dot: '#6366F1',
   },
   AGENT_TOKEN_REVOKED: {
-    label: 'Thu hồi Token Agent',
+    labelKey: 'auditLogs.events.AGENT_TOKEN_REVOKED',
     bg: '#FFF1F2',
     color: '#BE123C',
     border: '#FECDD3',
     dot: '#F43F5E',
   },
   AGENT_DELETED: {
-    label: 'Xóa Agent',
+    labelKey: 'auditLogs.events.AGENT_DELETED',
     bg: '#F1F5F9',
     color: '#475569',
     border: '#CBD5E1',
     dot: '#64748B',
   },
   AUTH_LOGIN_SUCCESS: {
-    label: 'Đăng nhập thành công',
+    labelKey: 'auditLogs.events.AUTH_LOGIN_SUCCESS',
     bg: '#EFF6FF',
     color: '#1D4ED8',
     border: '#BFDBFE',
     dot: '#3B82F6',
   },
   AUTH_LOGIN_FAILURE: {
-    label: 'Đăng nhập thất bại',
+    labelKey: 'auditLogs.events.AUTH_LOGIN_FAILURE',
     bg: '#FFFBEB',
     color: '#B45309',
     border: '#FDE68A',
     dot: '#F59E0B',
   },
   AUTH_LOGOUT: {
-    label: 'Đăng xuất',
+    labelKey: 'auditLogs.events.AUTH_LOGOUT',
     bg: '#F1F5F9',
     color: '#475569',
     border: '#CBD5E1',
     dot: '#64748B',
   },
   AUTH_PASSWORD_CHANGED: {
-    label: 'Đổi mật khẩu',
+    labelKey: 'auditLogs.events.AUTH_PASSWORD_CHANGED',
     bg: '#EEF2FF',
     color: '#4338CA',
     border: '#C7D2FE',
     dot: '#6366F1',
   },
   CRITICAL_INCIDENT_ALERT_SENT: {
-    label: 'Phát cảnh báo khẩn cấp (Email & In-App)',
+    labelKey: 'auditLogs.events.CRITICAL_INCIDENT_ALERT_SENT',
     bg: '#FEF2F2',
     color: '#DC2626',
     border: '#FECACA',
     dot: '#EF4444',
   },
   CRITICAL_INCIDENT_ALERT_SUPPRESSED_COOLDOWN: {
-    label: 'Nén cảnh báo lặp (Cooldown)',
+    labelKey: 'auditLogs.events.CRITICAL_INCIDENT_ALERT_SUPPRESSED_COOLDOWN',
     bg: '#FFFBEB',
     color: '#B45309',
     border: '#FDE68A',
     dot: '#F59E0B',
   },
   ORG_ALERT_SETTINGS_UPDATED: {
-    label: 'Cập nhật cấu hình cảnh báo Email',
+    labelKey: 'auditLogs.events.ORG_ALERT_SETTINGS_UPDATED',
     bg: '#EEF2FF',
     color: '#4338CA',
     border: '#C7D2FE',
     dot: '#6366F1',
   },
   TEST_ALERT_EMAIL_SENT: {
-    label: 'Gửi Email test cảnh báo',
+    labelKey: 'auditLogs.events.TEST_ALERT_EMAIL_SENT',
     bg: '#ECFDF5',
     color: '#059669',
     border: '#A7F3D0',
     dot: '#10B981',
   },
   ACCESS_DENIED_ROLE: {
-    label: 'Từ chối quyền (RBAC)',
+    labelKey: 'auditLogs.events.ACCESS_DENIED_ROLE',
     bg: '#FEF2F2',
     color: '#DC2626',
     border: '#FECACA',
     dot: '#EF4444',
   },
   ACCESS_DENIED_TENANT: {
-    label: 'Từ chối truy cập tổ chức',
+    labelKey: 'auditLogs.events.ACCESS_DENIED_TENANT',
     bg: '#FEF2F2',
     color: '#DC2626',
     border: '#FECACA',
     dot: '#EF4444',
   },
   POLICY_CREATED: {
-    label: 'Tạo chính sách mới',
+    labelKey: 'auditLogs.events.POLICY_CREATED',
     bg: '#EFF6FF',
     color: '#1D4ED8',
     border: '#BFDBFE',
     dot: '#3B82F6',
   },
   POLICY_UPDATED: {
-    label: 'Cập nhật chính sách',
+    labelKey: 'auditLogs.events.POLICY_UPDATED',
     bg: '#EEF2FF',
     color: '#4338CA',
     border: '#C7D2FE',
     dot: '#6366F1',
   },
   POLICY_THRESHOLD_MODIFIED: {
-    label: 'Điều chỉnh ngưỡng chính sách',
+    labelKey: 'auditLogs.events.POLICY_THRESHOLD_MODIFIED',
     bg: '#EEF2FF',
     color: '#4338CA',
     border: '#C7D2FE',
     dot: '#6366F1',
   },
   POLICY_STATUS_CHANGED: {
-    label: 'Đổi trạng thái chính sách',
+    labelKey: 'auditLogs.events.POLICY_STATUS_CHANGED',
     bg: '#EEF2FF',
     color: '#4338CA',
     border: '#C7D2FE',
     dot: '#6366F1',
   },
   POLICY_DELETED: {
-    label: 'Xóa chính sách',
+    labelKey: 'auditLogs.events.POLICY_DELETED',
     bg: '#FFF1F2',
     color: '#BE123C',
     border: '#FECDD3',
     dot: '#F43F5E',
   },
   CLUSTER_CREATED: {
-    label: 'Tạo cụm Kubernetes',
+    labelKey: 'auditLogs.events.CLUSTER_CREATED',
     bg: '#EFF6FF',
     color: '#1D4ED8',
     border: '#BFDBFE',
     dot: '#3B82F6',
   },
   CLUSTER_REMOVED: {
-    label: 'Gỡ bỏ cụm Kubernetes',
+    labelKey: 'auditLogs.events.CLUSTER_REMOVED',
     bg: '#FFF1F2',
     color: '#BE123C',
     border: '#FECDD3',
     dot: '#F43F5E',
   },
   CLUSTER_DELETED: {
-    label: 'Xóa cụm Kubernetes',
+    labelKey: 'auditLogs.events.CLUSTER_DELETED',
     bg: '#FFF1F2',
     color: '#BE123C',
     border: '#FECDD3',
     dot: '#F43F5E',
   },
   TOKEN_ROTATED: {
-    label: 'Xoay vòng Token Agent',
+    labelKey: 'auditLogs.events.TOKEN_ROTATED',
     bg: '#EEF2FF',
     color: '#4338CA',
     border: '#C7D2FE',
     dot: '#6366F1',
   },
   TOKEN_REVOKED: {
-    label: 'Thu hồi Token Agent',
+    labelKey: 'auditLogs.events.TOKEN_REVOKED',
     bg: '#FFF1F2',
     color: '#BE123C',
     border: '#FECDD3',
     dot: '#F43F5E',
   },
   CONFIG_UPDATED: {
-    label: 'Cập nhật cấu hình',
+    labelKey: 'auditLogs.events.CONFIG_UPDATED',
     bg: '#F1F5F9',
     color: '#334155',
     border: '#CBD5E1',
     dot: '#64748B',
   },
   MEMBER_INVITED: {
-    label: 'Mời thành viên',
+    labelKey: 'auditLogs.events.MEMBER_INVITED',
     bg: '#EFF6FF',
     color: '#1D4ED8',
     border: '#BFDBFE',
     dot: '#3B82F6',
   },
   MEMBER_JOINED: {
-    label: 'Thành viên gia nhập',
+    labelKey: 'auditLogs.events.MEMBER_JOINED',
     bg: '#ECFDF5',
     color: '#047857',
     border: '#A7F3D0',
     dot: '#10B981',
   },
   MEMBER_ROLE_CHANGED: {
-    label: 'Đổi vai trò thành viên',
+    labelKey: 'auditLogs.events.MEMBER_ROLE_CHANGED',
     bg: '#EEF2FF',
     color: '#4338CA',
     border: '#C7D2FE',
     dot: '#6366F1',
   },
   MEMBER_REMOVED: {
-    label: 'Loại bỏ thành viên',
+    labelKey: 'auditLogs.events.MEMBER_REMOVED',
     bg: '#FFF1F2',
     color: '#BE123C',
     border: '#FECDD3',
     dot: '#F43F5E',
   },
   ORG_CREATED: {
-    label: 'Tạo tổ chức',
+    labelKey: 'auditLogs.events.ORG_CREATED',
     bg: '#EFF6FF',
     color: '#1D4ED8',
     border: '#BFDBFE',
     dot: '#3B82F6',
   },
   COMPANY_CREATE: {
-    label: 'Tạo doanh nghiệp',
+    labelKey: 'auditLogs.events.COMPANY_CREATE',
     bg: '#EFF6FF',
     color: '#1D4ED8',
     border: '#BFDBFE',
     dot: '#3B82F6',
   },
   COMPANY_JOIN: {
-    label: 'Gia nhập doanh nghiệp',
+    labelKey: 'auditLogs.events.COMPANY_JOIN',
     bg: '#ECFDF5',
     color: '#047857',
     border: '#A7F3D0',
     dot: '#10B981',
   },
   USER_PROFILE_UPDATED: {
-    label: 'Cập nhật hồ sơ',
+    labelKey: 'auditLogs.events.USER_PROFILE_UPDATED',
     bg: '#F1F5F9',
     color: '#334155',
     border: '#CBD5E1',
     dot: '#64748B',
   },
   PROFILE_UPDATE: {
-    label: 'Cập nhật hồ sơ',
+    labelKey: 'auditLogs.events.PROFILE_UPDATE',
     bg: '#F1F5F9',
     color: '#334155',
     border: '#CBD5E1',
@@ -458,10 +460,14 @@ const EVENT_DISPLAY_MAP = {
   },
 };
 
-const getEventPresentation = (eventCode) => {
+const getEventPresentation = (eventCode, t) => {
   const key = String(eventCode || '').trim().toUpperCase();
   if (EVENT_DISPLAY_MAP[key]) {
-    return EVENT_DISPLAY_MAP[key];
+    const entry = EVENT_DISPLAY_MAP[key];
+    return {
+      ...entry,
+      label: t(entry.labelKey),
+    };
   }
   const readable = key
     ? key
@@ -469,7 +475,7 @@ const getEventPresentation = (eventCode) => {
         .split('_')
         .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : ''))
         .join(' ')
-    : 'Sự kiện hệ thống';
+    : t('auditLogs.events.default');
   return {
     label: readable,
     bg: '#F8FAFC',
@@ -547,61 +553,61 @@ const HIDDEN_DETAIL_META_KEYS = new Set([
 
 const SENSITIVE_META_KEY_REGEX = /token|secret|password|key|hash|signature/i;
 
-const extractDetailMetaItems = (log) => {
+const extractDetailMetaItems = (log, t) => {
   const m = log?.metadata && typeof log.metadata === 'object' ? log.metadata : {};
   const items = [];
-  if (m.reasonCode) items.push({ label: 'Mã lý do', value: String(m.reasonCode) });
-  if (m.policy_name) items.push({ label: 'Chính sách áp dụng', value: m.policy_name });
+  if (m.reasonCode) items.push({ label: t('auditLogs.metaLabels.reasonCode'), value: String(m.reasonCode) });
+  if (m.policy_name) items.push({ label: t('auditLogs.metaLabels.policyName'), value: m.policy_name });
   if (m.action_type || m.action_code) {
-    items.push({ label: 'Loại can thiệp', value: m.action_type || m.action_code });
+    items.push({ label: t('auditLogs.metaLabels.actionType'), value: m.action_type || m.action_code });
   }
-  if (m.cluster_name) items.push({ label: 'Cụm Kubernetes', value: m.cluster_name });
+  if (m.cluster_name) items.push({ label: t('auditLogs.metaLabels.clusterName'), value: m.cluster_name });
   if (m.agent_name && m.agent_name !== log?.actor) {
-    items.push({ label: 'Tác tử Agent', value: m.agent_name });
+    items.push({ label: t('auditLogs.metaLabels.agentName'), value: m.agent_name });
   }
-  if (m.agent_version) items.push({ label: 'Phiên bản Agent', value: m.agent_version });
-  if (m.agent_uid) items.push({ label: 'Mã định danh Agent', value: m.agent_uid });
-  if (m.namespace) items.push({ label: 'Namespace', value: m.namespace });
-  if (m.pod_name) items.push({ label: 'Pod mục tiêu', value: m.pod_name });
-  if (m.node_name) items.push({ label: 'Node mục tiêu', value: m.node_name });
-  if (m.incident_id) items.push({ label: 'Mã sự cố', value: String(m.incident_id) });
+  if (m.agent_version) items.push({ label: t('auditLogs.metaLabels.agentVersion'), value: m.agent_version });
+  if (m.agent_uid) items.push({ label: t('auditLogs.metaLabels.agentUid'), value: m.agent_uid });
+  if (m.namespace) items.push({ label: t('auditLogs.metaLabels.namespace'), value: m.namespace });
+  if (m.pod_name) items.push({ label: t('auditLogs.metaLabels.podName'), value: m.pod_name });
+  if (m.node_name) items.push({ label: t('auditLogs.metaLabels.nodeName'), value: m.node_name });
+  if (m.incident_id) items.push({ label: t('auditLogs.metaLabels.incidentId'), value: String(m.incident_id) });
   if (typeof m.duration_ms === 'number') {
-    items.push({ label: 'Thời gian thực thi', value: `${m.duration_ms} ms` });
+    items.push({ label: t('auditLogs.metaLabels.durationMs'), value: `${m.duration_ms} ms` });
   }
   if (typeof m.latency_ms === 'number') {
-    items.push({ label: 'Độ trễ Heartbeat', value: `${m.latency_ms} ms` });
+    items.push({ label: t('auditLogs.metaLabels.latencyMs'), value: `${m.latency_ms} ms` });
   }
   if (typeof m.timeout_threshold_seconds === 'number') {
-    items.push({ label: 'Ngưỡng Timeout', value: `${m.timeout_threshold_seconds}s` });
+    items.push({ label: t('auditLogs.metaLabels.timeoutThreshold'), value: `${m.timeout_threshold_seconds}s` });
   }
   if (typeof m.confidence === 'number') {
-    items.push({ label: 'Độ tin cậy AI', value: `${Math.round(m.confidence * 100)}%` });
+    items.push({ label: t('auditLogs.metaLabels.confidence'), value: `${Math.round(m.confidence * 100)}%` });
   }
   if (m.threshold !== undefined && m.threshold !== null && m.threshold !== '') {
-    items.push({ label: 'Ngưỡng kích hoạt', value: String(m.threshold) });
+    items.push({ label: t('auditLogs.metaLabels.threshold'), value: String(m.threshold) });
   }
   if (m.path) {
-    items.push({ label: 'Endpoint API', value: m.method ? `${m.method} ${m.path}` : m.path });
+    items.push({ label: t('auditLogs.metaLabels.apiEndpoint'), value: m.method ? `${m.method} ${m.path}` : m.path });
   }
   if (Array.isArray(m.required_roles) && m.required_roles.length > 0) {
-    items.push({ label: 'Vai trò yêu cầu', value: m.required_roles.join(', ') });
+    items.push({ label: t('auditLogs.metaLabels.requiredRoles'), value: m.required_roles.join(', ') });
   }
   if (Array.isArray(m.current_roles) && m.current_roles.length > 0) {
-    items.push({ label: 'Vai trò hiện tại', value: m.current_roles.join(', ') });
+    items.push({ label: t('auditLogs.metaLabels.currentRoles'), value: m.current_roles.join(', ') });
   }
   if (Array.isArray(m.changed_fields) && m.changed_fields.length > 0) {
-    items.push({ label: 'Trường thay đổi', value: m.changed_fields.join(', ') });
+    items.push({ label: t('auditLogs.metaLabels.changedFields'), value: m.changed_fields.join(', ') });
   }
-  if (m.approved_by) items.push({ label: 'Người phê duyệt', value: m.approved_by });
-  if (m.rejected_by) items.push({ label: 'Người từ chối', value: m.rejected_by });
-  if (m.aborted_by) items.push({ label: 'Người dừng lệnh', value: m.aborted_by });
-  if (m.executed_by) items.push({ label: 'Người thực thi', value: m.executed_by });
-  if (m.updated_by) items.push({ label: 'Người cập nhật', value: m.updated_by });
-  if (m.created_by) items.push({ label: 'Người khởi tạo', value: m.created_by });
-  if (m.deleted_by) items.push({ label: 'Người xóa', value: m.deleted_by });
-  if (m.email) items.push({ label: 'Email liên quan', value: m.email });
-  if (m.role_code || m.role) items.push({ label: 'Vai trò', value: m.role_code || m.role });
-  if (m.reason) items.push({ label: 'Lý do', value: m.reason });
+  if (m.approved_by) items.push({ label: t('auditLogs.metaLabels.approvedBy'), value: m.approved_by });
+  if (m.rejected_by) items.push({ label: t('auditLogs.metaLabels.rejectedBy'), value: m.rejected_by });
+  if (m.aborted_by) items.push({ label: t('auditLogs.metaLabels.abortedBy'), value: m.aborted_by });
+  if (m.executed_by) items.push({ label: t('auditLogs.metaLabels.executedBy'), value: m.executed_by });
+  if (m.updated_by) items.push({ label: t('auditLogs.metaLabels.updatedBy'), value: m.updated_by });
+  if (m.created_by) items.push({ label: t('auditLogs.metaLabels.createdBy'), value: m.created_by });
+  if (m.deleted_by) items.push({ label: t('auditLogs.metaLabels.deletedBy'), value: m.deleted_by });
+  if (m.email) items.push({ label: t('auditLogs.metaLabels.email'), value: m.email });
+  if (m.role_code || m.role) items.push({ label: t('auditLogs.metaLabels.role'), value: m.role_code || m.role });
+  if (m.reason) items.push({ label: t('auditLogs.metaLabels.reason'), value: m.reason });
 
   Object.entries(m).forEach(([key, val]) => {
     if (HIDDEN_DETAIL_META_KEYS.has(key) || SENSITIVE_META_KEY_REGEX.test(key)) return;
@@ -621,6 +627,8 @@ const extractDetailMetaItems = (log) => {
 };
 
 export const AuditLogsPage = () => {
+  const { t, i18n } = useTranslation('dashAdmin');
+  const intlLocale = getIntlLocale(i18n.language);
   const { currentOrg, currentEnv } = useDashboard();
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -702,25 +710,27 @@ export const AuditLogsPage = () => {
   const currentFilterLabel = useMemo(() => {
     if (timeFilterMode === 'today') {
       const parts = getTodayStr().split('-');
-      return `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})`;
+      return t('auditLogs.calendar.todayLabel', { date: `${parts[2]}/${parts[1]}/${parts[0]}` });
     }
     if (timeFilterMode === 'date') {
-      if (!selectedDate) return 'Chọn ngày';
+      if (!selectedDate) return t('auditLogs.calendar.selectDate');
       const parts = selectedDate.split('-');
       const isToday = selectedDate === getTodayStr();
-      return isToday ? `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})` : `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return isToday
+        ? t('auditLogs.calendar.todayLabel', { date: `${parts[2]}/${parts[1]}/${parts[0]}` })
+        : `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
     if (timeFilterMode === 'month') {
-      if (!selectedMonth) return 'Chọn tháng';
+      if (!selectedMonth) return t('auditLogs.calendar.selectMonth');
       const parts = selectedMonth.split('-');
-      return `Tháng ${parts[1]}/${parts[0]}`;
+      return t('auditLogs.calendar.monthLabel', { month: parts[1], year: parts[0] });
     }
     if (timeFilterMode === 'year') {
-      return `Năm ${selectedYear}`;
+      return t('auditLogs.calendar.yearLabel', { year: selectedYear });
     }
     const parts = getTodayStr().split('-');
-    return `Hôm nay (${parts[2]}/${parts[1]}/${parts[0]})`;
-  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear]);
+    return t('auditLogs.calendar.todayLabel', { date: `${parts[2]}/${parts[1]}/${parts[0]}` });
+  }, [timeFilterMode, selectedDate, selectedMonth, selectedYear, t]);
 
   // Danh sách các năm khả dụng trích từ dữ liệu thực tế & năm hiện hành
   const availableYears = useMemo(() => {
@@ -814,7 +824,7 @@ export const AuditLogsPage = () => {
         return;
       }
       console.error('Failed to load audit logs:', err);
-      const errMsg = err?.message || 'Không thể tải nhật ký kiểm toán từ máy chủ';
+      const errMsg = err?.message || t('auditLogs.errors.loadFailed');
       setRawLogs([]);
       setLoadError(errMsg);
       toastError(errMsg);
@@ -835,6 +845,7 @@ export const AuditLogsPage = () => {
     selectedStatus,
     debouncedSearch,
     toastError,
+    t,
   ]);
 
   // Chuẩn hóa danh sách theo Thời gian và Cụm K8s đang kích hoạt
@@ -982,17 +993,17 @@ export const AuditLogsPage = () => {
   // Export CSV (xuất toàn bộ bản ghi khớp bộ lọc hiện tại)
   const handleExportCsv = () => {
     const headers = [
-      'Mã Bản Ghi',
-      'Thời Gian',
-      'Tác Nhân (Actor)',
-      'Vai Trò',
-      'Sự Kiện',
-      'Mô Tả Chi Tiết',
-      'Đối Tượng Mục Tiêu',
-      'Cụm K8s',
-      'Dịch Vụ K8s',
-      'Địa Chỉ IP',
-      'Trạng Thái',
+      t('auditLogs.export.csvHeaders.id'),
+      t('auditLogs.export.csvHeaders.timestamp'),
+      t('auditLogs.export.csvHeaders.actor'),
+      t('auditLogs.export.csvHeaders.role'),
+      t('auditLogs.export.csvHeaders.event'),
+      t('auditLogs.export.csvHeaders.description'),
+      t('auditLogs.export.csvHeaders.target'),
+      t('auditLogs.export.csvHeaders.cluster'),
+      t('auditLogs.export.csvHeaders.service'),
+      t('auditLogs.export.csvHeaders.ip'),
+      t('auditLogs.export.csvHeaders.status'),
     ];
     const rows = filteredLogs.map((log) => [
       log.id,
@@ -1009,7 +1020,7 @@ export const AuditLogsPage = () => {
     ]);
     exportToCsv(`so-cai-kiem-toan-${currentOrg?.slug || 'org'}.csv`, headers, rows);
     setExportNotice(true);
-    toastSuccess(`Đã xuất ${rows.length} bản ghi kiểm toán định dạng CSV!`, 'Xuất Dữ Liệu');
+    toastSuccess(t('auditLogs.export.toastCsvSuccess', { count: rows.length }), t('auditLogs.export.toastTitle'));
     setTimeout(() => setExportNotice(false), 3000);
   };
 
@@ -1017,14 +1028,14 @@ export const AuditLogsPage = () => {
   const handleExportJson = () => {
     exportToJson(`so-cai-kiem-toan-${currentOrg?.slug || 'org'}.json`, filteredLogs);
     setExportNotice(true);
-    toastSuccess(`Đã xuất ${filteredLogs.length} bản ghi kiểm toán định dạng JSON!`, 'Xuất Dữ Liệu');
+    toastSuccess(t('auditLogs.export.toastJsonSuccess', { count: filteredLogs.length }), t('auditLogs.export.toastTitle'));
     setTimeout(() => setExportNotice(false), 3000);
   };
 
   // Print / Save PDF
   const handlePrintPdf = () => {
     setExportNotice(true);
-    toastSuccess('Đang mở hộp thoại In / Lưu PDF của trình duyệt...', 'In / Lưu PDF');
+    toastSuccess(t('auditLogs.export.toastPdfSuccess'), t('auditLogs.export.toastPdfTitle'));
     setTimeout(() => {
       window.print();
     }, 250);
@@ -1049,39 +1060,39 @@ export const AuditLogsPage = () => {
 
     return [
       {
-        title: 'Tổng Bản Ghi Sổ Cái',
+        title: t('auditLogs.kpis.totalTitle'),
         value: totalCount,
-        sub: 'Theo bộ lọc thực tế',
+        sub: t('auditLogs.kpis.totalSub'),
         icon: ScrollText,
         color: '#2563EB',
         bg: '#EFF6FF',
       },
       {
-        title: 'AI MAPE-K & Agent K8s',
+        title: t('auditLogs.kpis.autonomousTitle'),
         value: autonomousCount,
-        sub: 'Tác vụ tự trị & Agent',
+        sub: t('auditLogs.kpis.autonomousSub'),
         icon: Bot,
         color: '#059669',
         bg: '#ECFDF5',
       },
       {
-        title: 'Cổng Phê Duyệt HITL',
+        title: t('auditLogs.kpis.hitlTitle'),
         value: hitlCount,
-        sub: 'Con người xác nhận',
+        sub: t('auditLogs.kpis.hitlSub'),
         icon: UserCheck,
         color: '#D97706',
         bg: '#FFFBEB',
       },
       {
-        title: 'Vi Phạm Bị Chặn (RBAC)',
+        title: t('auditLogs.kpis.blockedTitle'),
         value: blockedCount,
-        sub: 'Từ chối quyền truy cập',
+        sub: t('auditLogs.kpis.blockedSub'),
         icon: ShieldAlert,
         color: '#DC2626',
         bg: '#FEF2F2',
       },
     ];
-  }, [filteredLogs]);
+  }, [filteredLogs, t]);
 
     // Nút Lịch & Popover đặt trên góc phải của Biểu đồ
   const calendarFilterControl = (
@@ -1105,7 +1116,7 @@ export const AuditLogsPage = () => {
           boxShadow: isCalendarOpen ? '0 0 0 2px rgba(15, 23, 42, 0.08)' : 'none',
           transition: 'all 0.15s ease',
         }}
-        title="Mở bảng lịch chọn ngày, tháng hoặc năm"
+        title={t('auditLogs.calendar.buttonTitle')}
       >
         <Calendar size={14} color="#64748B" />
         <span>{currentFilterLabel}</span>
@@ -1121,6 +1132,7 @@ export const AuditLogsPage = () => {
             left: '0',
             zIndex: 100,
             width: '330px',
+            maxWidth: 'calc(100vw - 32px)',
             backgroundColor: '#FFFFFF',
             borderRadius: '10px',
             border: '1px solid #E2E8F0',
@@ -1151,7 +1163,7 @@ export const AuditLogsPage = () => {
                 cursor: 'pointer',
               }}
             >
-              📅 Ngày
+              {t('auditLogs.calendar.tabDate')}
             </button>
             <button
               type="button"
@@ -1171,7 +1183,7 @@ export const AuditLogsPage = () => {
                 cursor: 'pointer',
               }}
             >
-              🗓️ Tháng
+              {t('auditLogs.calendar.tabMonth')}
             </button>
             <button
               type="button"
@@ -1191,7 +1203,7 @@ export const AuditLogsPage = () => {
                 cursor: 'pointer',
               }}
             >
-              📆 Năm
+              {t('auditLogs.calendar.tabYear')}
             </button>
           </div>
 
@@ -1199,7 +1211,7 @@ export const AuditLogsPage = () => {
           {(timeFilterMode === 'date' || timeFilterMode === 'today') && (
             <div>
               <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                Chọn ngày cụ thể:
+                {t('auditLogs.calendar.specificDateLabel')}
               </label>
               <input
                 type="date"
@@ -1227,7 +1239,7 @@ export const AuditLogsPage = () => {
               {/* Quick presets for recent days */}
               <div style={{ marginTop: '10px' }}>
                 <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
-                  Ngày có bản ghi gần đây:
+                  {t('auditLogs.calendar.recentDaysLabel')}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {recentActiveDays.map((dStr) => {
@@ -1259,7 +1271,7 @@ export const AuditLogsPage = () => {
                           cursor: 'pointer',
                         }}
                       >
-                        {isToday ? `Hôm nay (${dParts[2]}/${dParts[1]})` : `${dParts[2]}/${dParts[1]}`}
+                        {isToday ? t('auditLogs.calendar.todayShort', { date: `${dParts[2]}/${dParts[1]}` }) : `${dParts[2]}/${dParts[1]}`}
                       </button>
                     );
                   })}
@@ -1272,7 +1284,7 @@ export const AuditLogsPage = () => {
           {timeFilterMode === 'month' && (
             <div>
               <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                Chọn tháng & năm:
+                {t('auditLogs.calendar.monthYearLabel')}
               </label>
               <input
                 type="month"
@@ -1299,7 +1311,7 @@ export const AuditLogsPage = () => {
 
               {/* 12 Months grid */}
               <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', marginBottom: '6px' }}>
-                Các tháng trong năm {selectedMonth?.split('-')[0] || getThisYearStr()}:
+                {t('auditLogs.calendar.monthsInYear', { year: selectedMonth?.split('-')[0] || getThisYearStr() })}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((mNum) => {
@@ -1326,7 +1338,7 @@ export const AuditLogsPage = () => {
                         textAlign: 'center',
                       }}
                     >
-                      Tháng {mNum}
+                      {t('auditLogs.calendar.monthOption', { num: mNum })}
                     </button>
                   );
                 })}
@@ -1338,7 +1350,7 @@ export const AuditLogsPage = () => {
           {timeFilterMode === 'year' && (
             <div>
               <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: '6px' }}>
-                Chọn năm khảo sát:
+                {t('auditLogs.calendar.selectYearLabel')}
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                 {availableYears.map((yr) => {
@@ -1364,7 +1376,7 @@ export const AuditLogsPage = () => {
                         textAlign: 'center',
                       }}
                     >
-                      Năm {yr}
+                      {t('auditLogs.calendar.yearOption', { year: yr })}
                     </button>
                   );
                 })}
@@ -1392,7 +1404,7 @@ export const AuditLogsPage = () => {
                 padding: 0,
               }}
             >
-              Về hôm nay
+              {t('auditLogs.calendar.backToToday')}
             </button>
             <button
               type="button"
@@ -1408,7 +1420,7 @@ export const AuditLogsPage = () => {
                 cursor: 'pointer',
               }}
             >
-              Áp dụng
+              {t('auditLogs.calendar.apply')}
             </button>
           </div>
         </div>
@@ -1441,11 +1453,11 @@ export const AuditLogsPage = () => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-                Nhật Ký Kiểm Toán
+                {t('auditLogs.title')}
               </h1>
             </div>
             <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
-              Lịch sử thao tác hệ thống, hành động tự phục hồi &amp; kiểm soát truy cập theo chuẩn SOC 2 / ISO 27001
+              {t('auditLogs.subtitle')}
             </p>
           </div>
         </div>
@@ -1472,7 +1484,7 @@ export const AuditLogsPage = () => {
             }}
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-            <span>{isLoading ? 'Đang tải...' : 'Làm mới'}</span>
+            <span>{isLoading ? t('auditLogs.refreshing') : t('auditLogs.refresh')}</span>
           </button>
 
           {/* Danh Sách Chọn Định Dạng Xuất Sổ Cái */}
@@ -1482,8 +1494,8 @@ export const AuditLogsPage = () => {
               onClick={() => setIsExportMenuOpen((prev) => !prev)}
               aria-haspopup="true"
               aria-expanded={isExportMenuOpen}
-              aria-label="Tùy chọn xuất sổ cái"
-              title="Chọn định dạng file xuất sổ cái kiểm toán (CSV, JSON, PDF)"
+              aria-label={t('auditLogs.export.ariaLabel')}
+              title={t('auditLogs.export.title')}
               style={{
                 height: '34px',
                 display: 'inline-flex',
@@ -1502,7 +1514,7 @@ export const AuditLogsPage = () => {
               }}
             >
               <Download size={14} />
-              <span>Xuất Sổ Cái</span>
+              <span>{t('auditLogs.export.button')}</span>
               <ChevronDown
                 size={14}
                 style={{
@@ -1515,7 +1527,7 @@ export const AuditLogsPage = () => {
             {/* Danh sách định dạng file để chọn */}
             <div
               role="menu"
-              aria-label="Danh sách định dạng xuất sổ cái"
+              aria-label={t('auditLogs.export.menuAriaLabel')}
               style={{
                 display: isExportMenuOpen ? 'flex' : 'none',
                 flexDirection: 'column',
@@ -1543,7 +1555,7 @@ export const AuditLogsPage = () => {
                   letterSpacing: '0.05em',
                 }}
               >
-                Chọn Định Dạng File
+                {t('auditLogs.export.menuHeading')}
               </div>
 
               <button
@@ -1553,7 +1565,7 @@ export const AuditLogsPage = () => {
                   handleExportCsv();
                   setIsExportMenuOpen(false);
                 }}
-                aria-label="Xuất CSV"
+                aria-label={t('auditLogs.export.csvAria')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1587,8 +1599,8 @@ export const AuditLogsPage = () => {
                   <FileSpreadsheet size={16} color="#059669" />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ color: '#0F172A', fontWeight: 600 }}>Xuất CSV</span>
-                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 400 }}>Bảng tính Excel (.csv)</span>
+                  <span style={{ color: '#0F172A', fontWeight: 600 }}>{t('auditLogs.export.csv')}</span>
+                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 400 }}>{t('auditLogs.export.csvDesc')}</span>
                 </div>
               </button>
 
@@ -1599,7 +1611,7 @@ export const AuditLogsPage = () => {
                   handleExportJson();
                   setIsExportMenuOpen(false);
                 }}
-                aria-label="Xuất JSON"
+                aria-label={t('auditLogs.export.jsonAria')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1633,8 +1645,8 @@ export const AuditLogsPage = () => {
                   <FileJson size={16} color="#0284C7" />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ color: '#0F172A', fontWeight: 600 }}>Xuất JSON</span>
-                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 400 }}>Cấu trúc đối tượng (.json)</span>
+                  <span style={{ color: '#0F172A', fontWeight: 600 }}>{t('auditLogs.export.json')}</span>
+                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 400 }}>{t('auditLogs.export.jsonDesc')}</span>
                 </div>
               </button>
 
@@ -1645,7 +1657,7 @@ export const AuditLogsPage = () => {
                   handlePrintPdf();
                   setIsExportMenuOpen(false);
                 }}
-                aria-label="In hoặc Lưu PDF"
+                aria-label={t('auditLogs.export.pdfAria')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1679,8 +1691,8 @@ export const AuditLogsPage = () => {
                   <Printer size={16} color="#475569" />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ color: '#0F172A', fontWeight: 600 }}>In / Lưu PDF</span>
-                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 400 }}>In hoặc tài liệu PDF A4</span>
+                  <span style={{ color: '#0F172A', fontWeight: 600 }}>{t('auditLogs.export.pdf')}</span>
+                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 400 }}>{t('auditLogs.export.pdfDesc')}</span>
                 </div>
               </button>
             </div>
@@ -1703,12 +1715,12 @@ export const AuditLogsPage = () => {
           }}
         >
           <CheckCircle2 size={18} color="#059669" />
-          <span>Dữ liệu nhật ký kiểm toán đã được xuất thành công!</span>
+          <span>{t('auditLogs.export.noticeSuccess')}</span>
         </div>
       )}
 
       {/* 2. KPI Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
+      <div className="dash-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
         {summaryKpis.map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
@@ -1743,7 +1755,7 @@ export const AuditLogsPage = () => {
                     letterSpacing: '-0.02em',
                   }}
                 >
-                  {kpi.value.toLocaleString('vi-VN')}
+                  {kpi.value.toLocaleString(intlLocale)}
                 </span>
                 <span style={{ fontSize: '0.68rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {kpi.sub}
@@ -1771,16 +1783,16 @@ export const AuditLogsPage = () => {
           {/* Bộ chọn Thời Gian, Cụm K8s (Header) và Dịch Vụ K8s */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>Thời Gian:</span>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>{t('auditLogs.filters.time')}</span>
               {calendarFilterControl}
             </div>
 
             {headerClusterId && headerClusterName && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>Cụm K8s:</span>
+                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>{t('auditLogs.filters.cluster')}</span>
                 <div
                   role="group"
-                  aria-label="Phạm vi cụm Kubernetes"
+                  aria-label={t('auditLogs.filters.clusterScopeAria')}
                   style={{
                     display: 'inline-flex',
                     backgroundColor: '#F1F5F9',
@@ -1799,7 +1811,7 @@ export const AuditLogsPage = () => {
                       setPage(1);
                     }}
                     aria-pressed={scopeMode === 'cluster'}
-                    title={`Lọc theo cụm đang chọn trên Header: ${headerClusterName}`}
+                    title={t('auditLogs.filters.clusterTitle', { name: headerClusterName })}
                     style={{
                       height: '28px',
                       padding: '0 11px',
@@ -1827,7 +1839,7 @@ export const AuditLogsPage = () => {
                       setPage(1);
                     }}
                     aria-pressed={scopeMode === 'all'}
-                    title="Xem nhật ký của toàn bộ các cụm và cấp tổ chức"
+                    title={t('auditLogs.filters.allCompanyTitle')}
                     style={{
                       height: '28px',
                       padding: '0 11px',
@@ -1842,7 +1854,7 @@ export const AuditLogsPage = () => {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    Toàn công ty
+                    {t('auditLogs.filters.allCompany')}
                   </button>
                 </div>
               </div>
@@ -1850,7 +1862,7 @@ export const AuditLogsPage = () => {
 
             {/* Bộ lọc Dịch vụ K8s thực tế */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>Dịch Vụ:</span>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748B' }}>{t('auditLogs.filters.service')}</span>
               <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                 <Layers
                   size={13}
@@ -1858,7 +1870,7 @@ export const AuditLogsPage = () => {
                   style={{ position: 'absolute', left: '10px', pointerEvents: 'none' }}
                 />
                 <select
-                  aria-label="Lọc theo dịch vụ K8s"
+                  aria-label={t('auditLogs.filters.serviceAria')}
                   value={selectedService}
                   onChange={(e) => {
                     setSelectedService(e.target.value);
@@ -1878,10 +1890,10 @@ export const AuditLogsPage = () => {
                     maxWidth: '230px',
                   }}
                 >
-                  <option value="ALL">Tất cả dịch vụ ({uniqueServices.length})</option>
+                  <option value="ALL">{t('auditLogs.filters.allServices', { count: uniqueServices.length })}</option>
                   {uniqueServices.map((svc) => (
                     <option key={svc} value={svc}>
-                      Dịch vụ: {svc}
+                      {t('auditLogs.filters.serviceOption', { name: svc })}
                     </option>
                   ))}
                 </select>
@@ -1914,7 +1926,7 @@ export const AuditLogsPage = () => {
                 }}
               >
                 <RotateCcw size={12} />
-                <span>Đặt lại lọc</span>
+                <span>{t('auditLogs.filters.reset')}</span>
               </button>
             )}
           </div>
@@ -1939,7 +1951,7 @@ export const AuditLogsPage = () => {
             <Search size={15} color="#64748B" />
             <input
               type="text"
-              placeholder="Tìm theo Mã bản ghi (AUD-...), Tác nhân, Sự kiện, Mục tiêu, Nội dung hoặc IP..."
+              placeholder={t('auditLogs.filters.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -1955,7 +1967,7 @@ export const AuditLogsPage = () => {
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                aria-label="Xóa từ khóa tìm kiếm"
+                aria-label={t('auditLogs.filters.clearSearchAria')}
                 style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '2px', display: 'flex' }}
               >
                 <X size={14} color="#64748B" />
@@ -1968,14 +1980,14 @@ export const AuditLogsPage = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', paddingTop: '12px', borderTop: '1px dashed #E2E8F0' }}>
           {/* Role pills */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)', marginRight: '2px' }}>Tác Nhân:</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)', marginRight: '2px' }}>{t('auditLogs.filters.actor')}</span>
             {[
-              { key: 'ALL', label: 'Tất cả', activeBg: '#0F172A', activeBorder: '#0F172A' },
-              { key: 'SYSTEM_AI', label: 'AI MAPE-K', activeBg: '#059669', activeBorder: '#059669' },
-              { key: 'AGENT', label: 'Agent K8s', activeBg: '#7C3AED', activeBorder: '#7C3AED' },
-              { key: 'SME_OWNER', label: 'SME Owner', activeBg: '#2563EB', activeBorder: '#2563EB' },
-              { key: 'DEVOPS', label: 'DevOps Lead', activeBg: '#0284C7', activeBorder: '#0284C7' },
-              { key: 'VIEWER', label: 'Viewer', activeBg: '#475569', activeBorder: '#475569' },
+              { key: 'ALL', activeBg: '#0F172A', activeBorder: '#0F172A' },
+              { key: 'SYSTEM_AI', activeBg: '#059669', activeBorder: '#059669' },
+              { key: 'AGENT', activeBg: '#7C3AED', activeBorder: '#7C3AED' },
+              { key: 'SME_OWNER', activeBg: '#2563EB', activeBorder: '#2563EB' },
+              { key: 'DEVOPS', activeBg: '#0284C7', activeBorder: '#0284C7' },
+              { key: 'VIEWER', activeBg: '#475569', activeBorder: '#475569' },
             ].map((rk) => {
               const isActive = selectedRole === rk.key;
               return (
@@ -1999,7 +2011,7 @@ export const AuditLogsPage = () => {
                     boxShadow: isActive ? '0 1px 3px rgba(15, 23, 42, 0.14)' : 'none',
                   }}
                 >
-                  {rk.label}
+                  {t(`auditLogs.roles.${rk.key}`)}
                 </button>
               );
             })}
@@ -2007,12 +2019,12 @@ export const AuditLogsPage = () => {
 
           {/* Status pills */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)', marginRight: '2px' }}>Trạng Thái:</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)', marginRight: '2px' }}>{t('auditLogs.filters.status')}</span>
             {[
-              { key: 'ALL', label: 'Tất cả', activeBg: '#0F172A', activeBorder: '#0F172A' },
-              { key: 'SUCCESS', label: 'Thành Công', activeBg: '#059669', activeBorder: '#059669' },
-              { key: 'FAILED', label: 'Thất Bại', activeBg: '#D97706', activeBorder: '#D97706' },
-              { key: 'DENIED', label: 'Bị Từ Chối (RBAC)', activeBg: '#DC2626', activeBorder: '#DC2626' },
+              { key: 'ALL', activeBg: '#0F172A', activeBorder: '#0F172A' },
+              { key: 'SUCCESS', activeBg: '#059669', activeBorder: '#059669' },
+              { key: 'FAILED', activeBg: '#D97706', activeBorder: '#D97706' },
+              { key: 'DENIED', activeBg: '#DC2626', activeBorder: '#DC2626' },
             ].map((st) => {
               const isActive = selectedStatus === st.key;
               return (
@@ -2036,7 +2048,7 @@ export const AuditLogsPage = () => {
                     boxShadow: isActive ? '0 1px 3px rgba(15, 23, 42, 0.14)' : 'none',
                   }}
                 >
-                  {st.label}
+                  {t(`auditLogs.statuses.${st.key}`)}
                 </button>
               );
             })}
@@ -2048,8 +2060,8 @@ export const AuditLogsPage = () => {
       {showChart && (
         <AuditDistributionChart
           height={230}
-          title={`Phân Bổ Sự Kiện Kiểm Toán (${currentFilterLabel})`}
-          subtitle="Phân loại các thao tác do AI tự động thực thi, con người phê duyệt và các thay đổi cấu hình bảo mật"
+          title={t('auditLogs.chart.title', { filter: currentFilterLabel })}
+          subtitle={t('auditLogs.chart.subtitle')}
           logs={filteredLogs}
           timeFilterMode={timeFilterMode}
           selectedDate={selectedDate}
@@ -2075,7 +2087,7 @@ export const AuditLogsPage = () => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dash-text-primary)', margin: 0 }}>
-                Sổ Cái Nhật Ký Kiểm Toán ({total} Bản ghi)
+                {t('auditLogs.table.title', { count: total })}
               </h3>
               {selectedService !== 'ALL' && (
                 <span
@@ -2088,19 +2100,19 @@ export const AuditLogsPage = () => {
                     color: '#047857',
                   }}
                 >
-                  {`Dịch vụ: ${selectedService}`}
+                  {t('auditLogs.table.serviceBadge', { name: selectedService })}
                 </span>
               )}
             </div>
             <p style={{ fontSize: '0.75rem', color: 'var(--dash-text-secondary)', margin: '3px 0 0 0' }}>
-              Danh sách sự kiện và thao tác vận hành được ghi nhận đầy đủ theo thứ tự thời gian thực
+              {t('auditLogs.table.subtitle')}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <button
               type="button"
               onClick={() => setShowChart((prev) => !prev)}
-              title={showChart ? 'Thu gọn biểu đồ phân bổ' : 'Mở biểu đồ phân bổ sự kiện'}
+              title={showChart ? t('auditLogs.chart.hideTitle') : t('auditLogs.chart.showTitle')}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -2117,7 +2129,7 @@ export const AuditLogsPage = () => {
               }}
             >
               <BarChart2 size={14} />
-              <span>{showChart ? 'Ẩn Biểu Đồ Phân Bổ' : 'Xem Phân Bổ Sự Kiện'}</span>
+              <span>{showChart ? t('auditLogs.chart.hide') : t('auditLogs.chart.show')}</span>
             </button>
           </div>
         </div>
@@ -2126,12 +2138,12 @@ export const AuditLogsPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--dash-bg-canvas)', borderBottom: '1px solid var(--dash-border)' }}>
-                <th style={{ padding: '12px 12px 12px 18px', fontWeight: 700, color: 'var(--dash-text-secondary)', width: '132px', whiteSpace: 'nowrap' }}>Mã & Thời Điểm</th>
-                <th style={{ padding: '12px 12px', fontWeight: 700, color: 'var(--dash-text-secondary)', width: '218px' }}>Tác Nhân (Actor)</th>
-                <th style={{ padding: '12px 12px', fontWeight: 700, color: 'var(--dash-text-secondary)', width: '240px' }}>Loại Sự Kiện & Mục Tiêu</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', minWidth: '300px' }}>Nội Dung Chi Tiết</th>
-                <th style={{ padding: '12px 12px', fontWeight: 700, color: 'var(--dash-text-secondary)', width: '128px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
-                <th style={{ padding: '12px 18px 12px 10px', fontWeight: 700, color: 'var(--dash-text-secondary)', width: '82px', textAlign: 'center', whiteSpace: 'nowrap' }}>Chi Tiết</th>
+                <th style={{ padding: '12px 12px 12px 18px', fontWeight: 700, color: 'var(--dash-text-secondary)', width: '132px', whiteSpace: 'nowrap' }}>{t('auditLogs.table.colIdTime')}</th>
+                <th style={{ padding: '12px 12px', fontWeight: 700, color: 'var(--dash-text-secondary)', width: '218px' }}>{t('auditLogs.table.colActor')}</th>
+                <th style={{ padding: '12px 12px', fontWeight: 700, color: 'var(--dash-text-secondary)', width: '240px' }}>{t('auditLogs.table.colEventTarget')}</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--dash-text-secondary)', minWidth: '300px' }}>{t('auditLogs.table.colDetails')}</th>
+                <th style={{ padding: '12px 12px', fontWeight: 700, color: 'var(--dash-text-secondary)', width: '128px', whiteSpace: 'nowrap' }}>{t('auditLogs.table.colStatus')}</th>
+                <th style={{ padding: '12px 18px 12px 10px', fontWeight: 700, color: 'var(--dash-text-secondary)', width: '82px', textAlign: 'center', whiteSpace: 'nowrap' }}>{t('auditLogs.table.colAction')}</th>
               </tr>
             </thead>
             <tbody>
@@ -2140,7 +2152,7 @@ export const AuditLogsPage = () => {
                   <td colSpan={6} style={{ padding: '44px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                       <RefreshCw size={24} className="animate-spin" color="var(--dash-primary)" />
-                      <span>Đang tải sổ cái kiểm toán từ CSDL...</span>
+                      <span>{t('auditLogs.table.loading')}</span>
                     </div>
                   </td>
                 </tr>
@@ -2148,7 +2160,7 @@ export const AuditLogsPage = () => {
                 <tr>
                   <td colSpan={6} style={{ padding: '44px', textAlign: 'center', color: '#DC2626' }}>
                     <ShieldAlert size={32} style={{ margin: '0 auto 8px auto', opacity: 0.75 }} />
-                    <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>Không thể tải dữ liệu kiểm toán thực tế từ máy chủ</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{t('auditLogs.errors.loadErrorTitle')}</div>
                     <div style={{ fontSize: '0.75rem', marginTop: '4px', color: 'var(--dash-text-secondary)' }}>{loadError}</div>
                     <button
                       type="button"
@@ -2165,7 +2177,7 @@ export const AuditLogsPage = () => {
                         cursor: 'pointer',
                       }}
                     >
-                      Thử tải lại
+                      {t('auditLogs.errors.retry')}
                     </button>
                   </td>
                 </tr>
@@ -2173,8 +2185,8 @@ export const AuditLogsPage = () => {
                 <tr>
                   <td colSpan={6} style={{ padding: '44px', textAlign: 'center', color: 'var(--dash-text-muted)' }}>
                     <ScrollText size={32} style={{ margin: '0 auto 8px auto', opacity: 0.4 }} />
-                    <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Không tìm thấy bản ghi kiểm toán nào</div>
-                    <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>Thử thay đổi bộ lọc, mở rộng khoảng thời gian hoặc từ khóa tìm kiếm</div>
+                    <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{t('auditLogs.table.emptyTitle')}</div>
+                    <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>{t('auditLogs.table.emptyDesc')}</div>
                     <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '8px', marginTop: '14px' }}>
                       {timeFilterMode === 'today' && (
                         <button
@@ -2194,7 +2206,7 @@ export const AuditLogsPage = () => {
                             cursor: 'pointer',
                           }}
                         >
-                          Xem tháng này
+                          {t('auditLogs.table.quickThisMonth')}
                         </button>
                       )}
                       {timeFilterMode !== 'year' && (
@@ -2215,7 +2227,7 @@ export const AuditLogsPage = () => {
                             cursor: 'pointer',
                           }}
                         >
-                          Xem cả năm
+                          {t('auditLogs.table.quickFullYear')}
                         </button>
                       )}
                       {scopeMode === 'cluster' && headerClusterId && (
@@ -2236,7 +2248,7 @@ export const AuditLogsPage = () => {
                             cursor: 'pointer',
                           }}
                         >
-                          Xem toàn công ty
+                          {t('auditLogs.table.quickAllCompany')}
                         </button>
                       )}
                     </div>
@@ -2249,7 +2261,7 @@ export const AuditLogsPage = () => {
                   const isOwner = log.role === 'SME_OWNER' || log.role === 'SUPER_ADMIN';
                   const isDenied = log.status === 'DENIED';
                   const isFailed = log.status === 'FAILED';
-                  const evt = getEventPresentation(log.event);
+                  const evt = getEventPresentation(log.event, t);
                   const tsParts = splitFormattedTimestamp(log.timestamp);
                   const runtimeMetric =
                     typeof log.metadata?.duration_ms === 'number'
@@ -2278,7 +2290,7 @@ export const AuditLogsPage = () => {
                             whiteSpace: 'nowrap',
                           }}
                           onClick={() => setSelectedLogDetail(log)}
-                          title="Bấm để xem chi tiết bản ghi"
+                          title={t('auditLogs.table.viewLogTitle')}
                         >
                           {log.id}
                         </div>
@@ -2356,7 +2368,7 @@ export const AuditLogsPage = () => {
                                 </span>
                               ) : (
                                 <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>
-                                  {isAgent ? 'Cụm K8s' : isSystem ? 'Nội bộ hệ thống' : 'Không ghi nhận IP'}
+                                  {isAgent ? t('auditLogs.table.sourceCluster') : isSystem ? t('auditLogs.table.sourceInternal') : t('auditLogs.table.noIpRecorded')}
                                 </span>
                               )}
                             </div>
@@ -2478,7 +2490,7 @@ export const AuditLogsPage = () => {
                               borderRadius: 'var(--dash-radius-full)',
                             }}
                           >
-                            ✕ TỪ CHỐI
+                            {t('auditLogs.table.statusDenied')}
                           </span>
                         ) : isFailed ? (
                           <span
@@ -2497,7 +2509,7 @@ export const AuditLogsPage = () => {
                               borderRadius: 'var(--dash-radius-full)',
                             }}
                           >
-                            ! THẤT BẠI
+                            {t('auditLogs.table.statusFailed')}
                           </span>
                         ) : (
                           <span
@@ -2516,7 +2528,7 @@ export const AuditLogsPage = () => {
                               borderRadius: 'var(--dash-radius-full)',
                             }}
                           >
-                            ● THÀNH CÔNG
+                            {t('auditLogs.table.statusSuccess')}
                           </span>
                         )}
                       </td>
@@ -2525,7 +2537,7 @@ export const AuditLogsPage = () => {
                         <button
                           type="button"
                           onClick={() => setSelectedLogDetail(log)}
-                          title="Xem chi tiết dữ liệu trước/sau"
+                          title={t('auditLogs.table.viewDiffTitle')}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -2543,7 +2555,7 @@ export const AuditLogsPage = () => {
                           }}
                         >
                           <Eye size={13} />
-                          <span>Xem</span>
+                          <span>{t('auditLogs.table.viewBtn')}</span>
                         </button>
                       </td>
                     </tr>
@@ -2568,11 +2580,11 @@ export const AuditLogsPage = () => {
           }}
         >
           <div style={{ fontSize: '0.8125rem', color: 'var(--dash-text-secondary)' }}>
-            Hiển thị{' '}
+            {t('auditLogs.pagination.showingPrefix')}{' '}
             <strong style={{ color: 'var(--dash-text-primary)' }}>
               {total > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, total)}
             </strong>{' '}
-            trên tổng số <strong style={{ color: 'var(--dash-text-primary)' }}>{total}</strong> bản ghi
+            {t('auditLogs.pagination.showingMiddle')} <strong style={{ color: 'var(--dash-text-primary)' }}>{total}</strong> {t('auditLogs.pagination.showingSuffix')}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2595,7 +2607,7 @@ export const AuditLogsPage = () => {
               }}
             >
               <ChevronLeft size={14} />
-              <span>Trước</span>
+              <span>{t('auditLogs.pagination.prev')}</span>
             </button>
 
             {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -2647,7 +2659,7 @@ export const AuditLogsPage = () => {
                 cursor: page >= totalPages ? 'not-allowed' : 'pointer',
               }}
             >
-              <span>Tiếp</span>
+              <span>{t('auditLogs.pagination.next')}</span>
               <ChevronRight size={14} />
             </button>
           </div>
@@ -2716,7 +2728,7 @@ export const AuditLogsPage = () => {
                 </div>
                 <div>
                   <h3 style={{ fontSize: '1.125rem', fontWeight: 800, margin: 0, color: '#0F172A' }}>
-                    Chi Tiết Bản Ghi Kiểm Toán
+                    {t('auditLogs.modal.title')}
                   </h3>
                   <span style={{ fontSize: '0.75rem', color: '#475569', fontFamily: 'var(--font-mono)' }}>
                     ID: {selectedLogDetail.id} &bull; {selectedLogDetail.timestamp}
@@ -2757,10 +2769,10 @@ export const AuditLogsPage = () => {
                   }}
                 >
                   {selectedLogDetail.status === 'DENIED'
-                    ? '✕ TỪ CHỐI'
+                    ? t('auditLogs.table.statusDenied')
                     : selectedLogDetail.status === 'FAILED'
-                    ? '! THẤT BẠI'
-                    : '● THÀNH CÔNG'}
+                    ? t('auditLogs.table.statusFailed')
+                    : t('auditLogs.table.statusSuccess')}
                 </span>
                 <button
                   type="button"
@@ -2785,7 +2797,7 @@ export const AuditLogsPage = () => {
               {/* Event Metadata Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                 <div style={{ padding: '12px 14px', borderRadius: '10px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B' }}>Tác Nhân Thực Hiện</div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B' }}>{t('auditLogs.modal.actor')}</div>
                   <div style={{ fontWeight: 700, color: '#0F172A', marginTop: '3px', wordBreak: 'break-word' }}>
                     {selectedLogDetail.actor}
                   </div>
@@ -2829,12 +2841,12 @@ export const AuditLogsPage = () => {
                 </div>
 
                 <div style={{ padding: '12px 14px', borderRadius: '10px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B' }}>Địa Chỉ IP & Kết Nối</div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B' }}>{t('auditLogs.modal.ipAndConnection')}</div>
                   <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '3px', wordBreak: 'break-word' }}>
-                    {selectedLogDetail.ip || 'Chưa ghi nhận IP'}
+                    {selectedLogDetail.ip || t('auditLogs.modal.noIp')}
                   </div>
                   <div style={{ fontSize: '0.6875rem', color: '#475569', marginTop: '5px', wordBreak: 'break-word' }}>
-                    {selectedLogDetail.metadata?.userAgent || 'Chưa ghi nhận User-Agent'}
+                    {selectedLogDetail.metadata?.userAgent || t('auditLogs.modal.noUserAgent')}
                   </div>
                   {selectedLogDetail.metadata?.requestId && (
                     <div style={{ fontSize: '0.6875rem', color: '#64748B', marginTop: '4px', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
@@ -2844,17 +2856,17 @@ export const AuditLogsPage = () => {
                 </div>
 
                 <div style={{ padding: '12px 14px', borderRadius: '10px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B' }}>Mã Sự Kiện Chuẩn</div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B' }}>{t('auditLogs.modal.eventCode')}</div>
                   <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#059669', marginTop: '3px', wordBreak: 'break-word' }}>
                     {selectedLogDetail.event}
                   </div>
                   <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '4px', fontWeight: 600 }}>
-                    {getEventPresentation(selectedLogDetail.event).label}
+                    {getEventPresentation(selectedLogDetail.event, t).label}
                   </div>
                 </div>
 
                 <div style={{ padding: '12px 14px', borderRadius: '10px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B' }}>Đối Tượng Tác Động</div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748B' }}>{t('auditLogs.modal.targetObject')}</div>
                   <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '3px', wordBreak: 'break-word' }}>
                     {selectedLogDetail.target}
                   </div>
@@ -2873,13 +2885,13 @@ export const AuditLogsPage = () => {
                 </div>
               </div>
 
-              {extractDetailMetaItems(selectedLogDetail).length > 0 && (
+              {extractDetailMetaItems(selectedLogDetail, t).length > 0 && (
                 <div>
                   <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', marginBottom: '6px' }}>
-                    Thông Số Thực Thi Ghi Nhận
+                    {t('auditLogs.modal.executionMetrics')}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {extractDetailMetaItems(selectedLogDetail).map((item, idx) => (
+                    {extractDetailMetaItems(selectedLogDetail, t).map((item, idx) => (
                       <div
                         key={idx}
                         style={{
@@ -2900,7 +2912,7 @@ export const AuditLogsPage = () => {
 
               {/* Description */}
               <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', marginBottom: '6px' }}>Mô Tả Chi Tiết</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', marginBottom: '6px' }}>{t('auditLogs.modal.description')}</div>
                 <div
                   style={{
                     padding: '12px 14px',
@@ -2922,13 +2934,13 @@ export const AuditLogsPage = () => {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--dash-text-secondary)', marginBottom: '8px' }}>
                     <Code2 size={14} />
-                    <span>Dữ Liệu Trạng Thái Trước & Sau Thay Đổi (State Diff)</span>
+                    <span>{t('auditLogs.modal.stateDiffTitle')}</span>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                     <div>
                       <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#DC2626', marginBottom: '4px' }}>
-                        Trạng Thái Trước (Before)
+                        {t('auditLogs.modal.beforeState')}
                       </div>
                       <pre
                         style={{
@@ -2954,7 +2966,7 @@ export const AuditLogsPage = () => {
 
                     <div>
                       <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#059669', marginBottom: '4px' }}>
-                        Trạng Thái Sau (After)
+                        {t('auditLogs.modal.afterState')}
                       </div>
                       <pre
                         style={{
@@ -3006,7 +3018,7 @@ export const AuditLogsPage = () => {
                   cursor: 'pointer',
                 }}
               >
-                Đóng
+                {t('auditLogs.modal.close')}
               </button>
             </div>
           </div>

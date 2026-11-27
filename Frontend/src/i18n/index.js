@@ -21,8 +21,19 @@ import viFeatures from './locales/vi/features.json';
 import enFeatures from './locales/en/features.json';
 import viError from './locales/vi/error.json';
 import enError from './locales/en/error.json';
+import viPortal from './locales/vi/portal.json';
+import enPortal from './locales/en/portal.json';
+import viDashboard from './locales/vi/dashboard.json';
+import enDashboard from './locales/en/dashboard.json';
+import viDashMonitoring from './locales/vi/dashMonitoring.json';
+import enDashMonitoring from './locales/en/dashMonitoring.json';
+import viDashHealing from './locales/vi/dashHealing.json';
+import enDashHealing from './locales/en/dashHealing.json';
+import viDashAdmin from './locales/vi/dashAdmin.json';
+import enDashAdmin from './locales/en/dashAdmin.json';
 
 export const LANG_STORAGE_KEY = 'selfheal_lang';
+export const PREFERENCES_STORAGE_KEY = 'selfheal_personal_preferences_v1';
 export const SUPPORTED_LANGUAGES = ['vi', 'en'];
 export const DEFAULT_LANGUAGE = 'vi';
 
@@ -31,11 +42,18 @@ export const normalizeLanguage = (lng) => {
   return SUPPORTED_LANGUAGES.includes(short) ? short : DEFAULT_LANGUAGE;
 };
 
+export const getIntlLocale = (lng) => (normalizeLanguage(lng) === 'en' ? 'en-US' : 'vi-VN');
+
 export const getSavedLanguage = () => {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const saved = window.localStorage.getItem(LANG_STORAGE_KEY);
       if (saved) return normalizeLanguage(saved);
+      const rawPrefs = window.localStorage.getItem(PREFERENCES_STORAGE_KEY);
+      if (rawPrefs) {
+        const parsed = JSON.parse(rawPrefs);
+        if (parsed?.language) return normalizeLanguage(parsed.language);
+      }
     }
   } catch {
     // Ignore storage access errors in restricted environments
@@ -48,6 +66,14 @@ const syncLanguageSideEffects = (lng) => {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(LANG_STORAGE_KEY, normalized);
+      const rawPrefs = window.localStorage.getItem(PREFERENCES_STORAGE_KEY);
+      const parsedPrefs = rawPrefs ? JSON.parse(rawPrefs) : {};
+      if (parsedPrefs.language !== normalized) {
+        window.localStorage.setItem(
+          PREFERENCES_STORAGE_KEY,
+          JSON.stringify({ ...parsedPrefs, language: normalized })
+        );
+      }
     }
     if (typeof document !== 'undefined' && document.documentElement) {
       document.documentElement.lang = normalized;
@@ -72,6 +98,11 @@ i18n.use(initReactI18next).init({
       guide: viGuide,
       features: viFeatures,
       error: viError,
+      portal: viPortal,
+      dashboard: viDashboard,
+      dashMonitoring: viDashMonitoring,
+      dashHealing: viDashHealing,
+      dashAdmin: viDashAdmin,
     },
     en: {
       common: enCommon,
@@ -84,13 +115,18 @@ i18n.use(initReactI18next).init({
       guide: enGuide,
       features: enFeatures,
       error: enError,
+      portal: enPortal,
+      dashboard: enDashboard,
+      dashMonitoring: enDashMonitoring,
+      dashHealing: enDashHealing,
+      dashAdmin: enDashAdmin,
     },
   },
   lng: initialLanguage,
   fallbackLng: DEFAULT_LANGUAGE,
   supportedLngs: SUPPORTED_LANGUAGES,
   defaultNS: 'common',
-  ns: ['common', 'security', 'auth', 'home', 'legal', 'contact', 'about', 'guide', 'features', 'error'],
+  ns: ['common', 'security', 'auth', 'home', 'legal', 'contact', 'about', 'guide', 'features', 'error', 'portal', 'dashboard', 'dashMonitoring', 'dashHealing', 'dashAdmin'],
   initImmediate: false,
   interpolation: {
     escapeValue: false,
