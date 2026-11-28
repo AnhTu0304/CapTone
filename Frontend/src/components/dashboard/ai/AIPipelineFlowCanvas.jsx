@@ -182,6 +182,9 @@ export const AIPipelineFlowCanvas = ({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isWheelZooming, setIsWheelZooming] = useState(false);
   const wheelTimeoutRef = useRef(null);
+  const svgRef = useRef(null);
+  const panRafRef = useRef(null);
+  const pendingPanRef = useRef(null);
   const cameraRef = useRef({ zoom: 1, pan: { x: 0, y: 0 }, autoScale: 1, width: 1000, height: 600 });
   const [activeViewMode, setActiveViewMode] = useState(() =>
     showExtendedPipeline ? defaultViewMode : 'all'
@@ -766,15 +769,51 @@ export const AIPipelineFlowCanvas = ({
       if (pinnedInspector) setPinnedInspector(null);
       if (hoveredInspector) setHoveredInspector(null);
     }
-    setPan({
+    pendingPanRef.current = {
       x: e.clientX - dragStart.x,
       y: e.clientY - dragStart.y,
-    });
+    };
+    if (panRafRef.current === null && typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      panRafRef.current = window.requestAnimationFrame(() => {
+        panRafRef.current = null;
+        if (pendingPanRef.current) {
+          setPan(pendingPanRef.current);
+        }
+      });
+    } else if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      setPan(pendingPanRef.current);
+    }
   };
 
   const handleMouseUp = () => {
+    if (panRafRef.current !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(panRafRef.current);
+      panRafRef.current = null;
+    }
+    if (pendingPanRef.current) {
+      setPan(pendingPanRef.current);
+      pendingPanRef.current = null;
+    }
     setIsDragging(false);
   };
+
+  useEffect(() => {
+    return () => {
+      if (panRafRef.current !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(panRafRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const svgEl = svgRef.current;
+    if (!svgEl) return;
+    if (isDragging || isWheelZooming) {
+      if (typeof svgEl.pauseAnimations === 'function') svgEl.pauseAnimations();
+    } else if (typeof svgEl.unpauseAnimations === 'function') {
+      svgEl.unpauseAnimations();
+    }
+  }, [isDragging, isWheelZooming]);
 
   const safeNavigate = (targetPath) => {
     if (didDragRef.current || !onNavigate || !targetPath) return;
@@ -2075,37 +2114,12 @@ export const AIPipelineFlowCanvas = ({
   // Chiều cao tự thích ứng của khung Canvas để vừa khít 100% không bị tràn dọc
   const canvasHeight = useMemo(() => Math.max(380, Math.round(baseCanvasH * autoScale)), [baseCanvasH, autoScale]);
 
-  // Nền lưới chấm đồng bộ 1:1 theo pan & zoom giống Google Stitch / Figma (dùng DUY NHẤT 1 background chung trên .dashboard-root-layout khi isFullScreen)
+  // Nền lưới chấm đồng bộ 1:1 theo pan & zoom
   const effectiveScale = zoom * autoScale;
   const syncedGridStep = Math.max(8, 22 * effectiveScale);
   const syncedDotRadius = Math.max(0.85, Math.min(2.6, 1.45 * effectiveScale));
   const syncedBgX = containerWidth / 2 + pan.x;
   const syncedBgY = (isFullScreen ? containerHeight / 2 : 0) + pan.y;
-
-  useEffect(() => {
-    if (!isFullScreen || !containerRef.current) return;
-    const rootEl = containerRef.current.closest('.dashboard-root-layout');
-    if (!rootEl) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const absX = rect.left + rect.width / 2 + pan.x;
-    const absY = rect.top + rect.height / 2 + pan.y;
-    rootEl.style.setProperty('--canvas-grid-step', `${syncedGridStep.toFixed(2)}px`);
-    rootEl.style.setProperty('--canvas-dot-r', `${syncedDotRadius.toFixed(2)}px`);
-    rootEl.style.setProperty('--canvas-bg-x', `${absX.toFixed(1)}px`);
-    rootEl.style.setProperty('--canvas-bg-y', `${absY.toFixed(1)}px`);
-  }, [isFullScreen, syncedGridStep, syncedDotRadius, pan.x, pan.y, containerWidth, containerHeight]);
-
-  useEffect(() => {
-    if (!isFullScreen) return;
-    return () => {
-      const rootEl = document.querySelector('.dashboard-root-layout');
-      if (!rootEl) return;
-      rootEl.style.removeProperty('--canvas-grid-step');
-      rootEl.style.removeProperty('--canvas-dot-r');
-      rootEl.style.removeProperty('--canvas-bg-x');
-      rootEl.style.removeProperty('--canvas-bg-y');
-    };
-  }, [isFullScreen]);
 
   const isMobileViewport = containerWidth <= 860;
   const isMobileVerticalMode = isMobileViewport && !preferHorizontalOnMobile;
@@ -2221,8 +2235,7 @@ export const AIPipelineFlowCanvas = ({
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
-          backgroundColor: 'rgba(255, 255, 255, 0.96)',
-          backdropFilter: 'blur(10px)',
+          backgroundColor: 'rgba(255, 255, 255, 0.97)',
           padding: '5px 10px',
           borderRadius: '12px',
           border: '1px solid #E2E8F0',
@@ -2433,8 +2446,7 @@ export const AIPipelineFlowCanvas = ({
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(8px)',
+            backgroundColor: 'rgba(255, 255, 255, 0.97)',
             padding: '5px 12px',
             borderRadius: '8px',
             border: '1px solid #E2E8F0',
@@ -2478,11 +2490,11 @@ export const AIPipelineFlowCanvas = ({
           width: `${baseCanvasW}px`,
           height: `${baseCanvasH}px`,
           transform: isFullScreen
-            ? `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${effectiveScale})`
-            : `translateX(-50%) translate(${pan.x}px, ${pan.y}px) scale(${effectiveScale})`,
+            ? `translate(-50%, -50%) translate3d(${pan.x}px, ${pan.y}px, 0) scale(${effectiveScale})`
+            : `translateX(-50%) translate3d(${pan.x}px, ${pan.y}px, 0) scale(${effectiveScale})`,
           transformOrigin: isFullScreen ? 'center center' : 'top center',
           transition: isDragging || isWheelZooming ? 'none' : 'transform 0.24s cubic-bezier(0.22, 1, 0.36, 1)',
-          willChange: 'transform',
+          willChange: isDragging || isWheelZooming ? 'transform' : 'auto',
           pointerEvents: 'auto',
         }}
       >
@@ -2558,6 +2570,7 @@ export const AIPipelineFlowCanvas = ({
 
         {/* Layer 1: SVG Edges (Đường nối Bezier mềm mại + Hạt sáng chuyển động) */}
         <svg
+          ref={svgRef}
           style={{
             position: 'absolute',
             top: 0,
@@ -2612,7 +2625,6 @@ export const AIPipelineFlowCanvas = ({
                     path={edge.pathD}
                     dur="2.8s"
                     repeatCount="indefinite"
-                    rotate="auto"
                   />
                 </circle>
               )}
@@ -2636,7 +2648,6 @@ export const AIPipelineFlowCanvas = ({
                     path={edge.pathD}
                     dur="1.8s"
                     repeatCount="indefinite"
-                    rotate="auto"
                   />
                 </circle>
               )}
@@ -2659,7 +2670,7 @@ export const AIPipelineFlowCanvas = ({
                   />
                   {edge.isTriggered && (
                     <circle r="4" fill="#EF4444">
-                      <animateMotion path={edge.pathD} dur="1.7s" repeatCount="indefinite" rotate="auto" />
+                      <animateMotion path={edge.pathD} dur="1.7s" repeatCount="indefinite" />
                     </circle>
                   )}
                 </g>
@@ -2677,7 +2688,7 @@ export const AIPipelineFlowCanvas = ({
                 />
                 {isRcaActive && (
                   <circle r="4" fill="#7C3AED">
-                    <animateMotion path={rcaToPolicyPath} dur="1.5s" repeatCount="indefinite" rotate="auto" />
+                    <animateMotion path={rcaToPolicyPath} dur="1.5s" repeatCount="indefinite" />
                   </circle>
                 )}
               </g>
@@ -2695,7 +2706,7 @@ export const AIPipelineFlowCanvas = ({
                   />
                   {edge.animating && (
                     <circle r="4" fill={edge.color}>
-                      <animateMotion path={edge.pathD} dur="1.6s" repeatCount="indefinite" rotate="auto" />
+                      <animateMotion path={edge.pathD} dur="1.6s" repeatCount="indefinite" />
                     </circle>
                   )}
                 </g>
@@ -2714,7 +2725,7 @@ export const AIPipelineFlowCanvas = ({
                   />
                   {edge.animating && (
                     <circle r="3.8" fill={edge.color}>
-                      <animateMotion path={edge.pathD} dur="1.8s" repeatCount="indefinite" rotate="auto" />
+                      <animateMotion path={edge.pathD} dur="1.8s" repeatCount="indefinite" />
                     </circle>
                   )}
                 </g>
@@ -2735,7 +2746,7 @@ export const AIPipelineFlowCanvas = ({
                 />
                 {isAgentConnected && (
                   <circle r="3.5" fill="#EA580C">
-                    <animateMotion path={ruleInPath} dur="2.2s" repeatCount="indefinite" rotate="auto" />
+                    <animateMotion path={ruleInPath} dur="2.2s" repeatCount="indefinite" />
                   </circle>
                 )}
 
@@ -2751,7 +2762,7 @@ export const AIPipelineFlowCanvas = ({
                 />
                 {isRuleEngineTriggered && (
                   <circle r="4.2" fill="#EA580C">
-                    <animateMotion path={ruleToRcaPath} dur="1.6s" repeatCount="indefinite" rotate="auto" />
+                    <animateMotion path={ruleToRcaPath} dur="1.6s" repeatCount="indefinite" />
                   </circle>
                 )}
               </g>
@@ -2769,7 +2780,7 @@ export const AIPipelineFlowCanvas = ({
                   opacity={isVerifyActive ? 1 : 0.8}
                 />
                 <circle r={isVerifyActive ? 4 : 3.2} fill={isVerifyActive ? '#0284C7' : '#0EA5E9'}>
-                  <animateMotion path={feedbackLoopPath} dur={isVerifyActive ? '3.8s' : '6.5s'} repeatCount="indefinite" rotate="auto" />
+                  <animateMotion path={feedbackLoopPath} dur={isVerifyActive ? '3.8s' : '6.5s'} repeatCount="indefinite" />
                 </circle>
               </g>
             </>
@@ -4866,8 +4877,6 @@ export const AIPipelineFlowCanvas = ({
             maxWidth: 'calc(100% - 28px)',
             maxHeight: `calc(100% - ${Math.max(10, activeInspector.y)}px - 16px)`,
             backgroundColor: 'rgba(255, 255, 255, 0.98)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
             borderRadius: '14px',
             border: `1.5px solid ${isInspectorPinned ? activeInspectorData.accent : '#CBD5E1'}`,
             boxShadow: isDraggingInspector
@@ -5112,4 +5121,4 @@ export const AIPipelineFlowCanvas = ({
   );
 };
 
-export default AIPipelineFlowCanvas;
+export default React.memo(AIPipelineFlowCanvas);

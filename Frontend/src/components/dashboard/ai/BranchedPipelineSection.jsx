@@ -1218,7 +1218,7 @@ export const BranchedPipelineSection = ({
         />
         {(edge.active || edge.animating) && (
           <circle r={edge.active ? '4' : '3.2'} fill={edge.color}>
-            <animateMotion path={edge.pathD} dur={edge.active ? dur : '2.7s'} repeatCount="indefinite" rotate="auto" />
+            <animateMotion path={edge.pathD} dur={edge.active ? dur : '2.7s'} repeatCount="indefinite" />
           </circle>
         )}
       </g>
@@ -1422,7 +1422,7 @@ export const BranchedPipelineSection = ({
         <path d={d2FeedbackResolvePath} fill="none" stroke={flowState.isFlowActive && !isUnrecoveredLoop ? '#0284C7' : '#38BDF8'} strokeWidth={flowState.isFlowActive && !isUnrecoveredLoop ? 2.6 : 1.7} strokeDasharray={flowState.isFlowActive && !isUnrecoveredLoop ? 'none' : '6 4'} strokeLinecap="round" markerEnd="url(#d2-arrow-feedback)" opacity={isUnrecoveredLoop ? 0.42 : 0.9} />
         {flowState.isFlowActive && !isUnrecoveredLoop && (
           <circle r="4.2" fill="#0284C7">
-            <animateMotion path={d2FeedbackResolvePath} dur="4.4s" repeatCount="indefinite" rotate="auto" />
+            <animateMotion path={d2FeedbackResolvePath} dur="4.4s" repeatCount="indefinite" />
           </circle>
         )}
 
@@ -1430,7 +1430,7 @@ export const BranchedPipelineSection = ({
         <path d={d2FeedbackEscalatePath} fill="none" stroke={isUnrecoveredLoop ? '#DC2626' : '#FCA5A5'} strokeWidth={isUnrecoveredLoop ? 2.8 : 1.5} strokeDasharray={isUnrecoveredLoop ? 'none' : '6 4'} strokeLinecap="round" markerEnd="url(#d2-arrow-escalate)" opacity={isUnrecoveredLoop ? 1 : 0.55} />
         {isUnrecoveredLoop && (
           <circle r="4.5" fill="#DC2626">
-            <animateMotion path={d2FeedbackEscalatePath} dur="3.4s" repeatCount="indefinite" rotate="auto" />
+            <animateMotion path={d2FeedbackEscalatePath} dur="3.4s" repeatCount="indefinite" />
           </circle>
         )}
       </svg>

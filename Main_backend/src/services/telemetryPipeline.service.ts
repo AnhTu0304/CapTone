@@ -510,15 +510,21 @@ export class TelemetryPipelineService {
                AND ha.execution_status::text IN ('COMPLETED', 'SUCCEEDED')
                AND ha.completed_at > NOW() - interval '30 seconds'
            )
+           -- Giữ rào chắn trong 15 phút sau hành động/hậu kiểm thất bại để ngăn đóng non,
+           -- nhưng cho phép tự đóng sau khi dịch vụ đã thực sự phục hồi qua chu kỳ 12/12 sạch khi Circuit Breaker (NO_ACTION) đang ngắt hành động mới
            AND NOT EXISTS (
              SELECT 1 FROM healing_actions ha_fail
              WHERE ha_fail.incident_id = i.id
                AND (
-                 ha_fail.execution_status = 'FAILED'
+                 (
+                   ha_fail.execution_status = 'FAILED'
+                   AND COALESCE(ha_fail.completed_at, ha_fail.started_at, ha_fail.created_at) >= NOW() - interval '15 minutes'
+                 )
                  OR EXISTS (
                    SELECT 1 FROM recovery_verifications rv_fail
                    WHERE rv_fail.healing_action_id = ha_fail.id
                      AND rv_fail.verification_result = false
+                     AND COALESCE(rv_fail.verified_at, ha_fail.completed_at, ha_fail.created_at) >= NOW() - interval '15 minutes'
                  )
                )
                AND NOT EXISTS (

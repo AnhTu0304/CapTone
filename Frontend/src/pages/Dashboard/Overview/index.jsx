@@ -92,6 +92,83 @@ const saveSelectedWorkload = (clusterId, workload) => {
   } catch {}
 };
 
+const EMPTY_ARRAY = [];
+
+const getPredictionTimeMs = (pred) => {
+  const raw = pred?.evaluated_at || pred?.predicted_at || pred?.created_at;
+  if (!raw) return 0;
+  const ms = new Date(raw).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+/**
+ * Hợp nhất kết quả polling từ DB với các dự báo HEALTHY realtime phát qua WebSocket
+ * (do backend dùng cơ chế Zero-Write for NORMAL, không ghi HEALTHY vào PostgreSQL).
+ */
+export const mergePolledPredictions = (prevList = [], dbList = []) => {
+  const safePrev = Array.isArray(prevList) ? prevList : [];
+  const safeDb = Array.isArray(dbList) ? dbList : [];
+  const dbMaxTsByService = new Map();
+
+  for (const item of safeDb) {
+    const key = normalizeServiceName(item?.workload_name || item?.service_id);
+    if (!key) continue;
+    const ts = getPredictionTimeMs(item);
+    if (ts >= (dbMaxTsByService.get(key) || 0)) {
+      dbMaxTsByService.set(key, ts);
+    }
+  }
+
+  const fresherLiveItems = [];
+  const seenLiveServices = new Set();
+  for (const item of safePrev) {
+    const key = normalizeServiceName(item?.workload_name || item?.service_id);
+    if (!key || seenLiveServices.has(key)) continue;
+    const isLiveSynthetic = String(item?.id || '').startsWith('live-');
+    const itemTs = getPredictionTimeMs(item);
+    const dbMaxTs = dbMaxTsByService.get(key) || 0;
+    if ((isLiveSynthetic && itemTs >= dbMaxTs) || itemTs > dbMaxTs) {
+      fresherLiveItems.push(item);
+      seenLiveServices.add(key);
+    }
+  }
+
+  const merged = [...fresherLiveItems, ...safeDb].slice(0, 30);
+  if (
+    merged.length === safePrev.length &&
+    merged.every(
+      (item, idx) =>
+        item?.id === safePrev[idx]?.id &&
+        item?.status === safePrev[idx]?.status &&
+        item?.prediction_type === safePrev[idx]?.prediction_type &&
+        Number(item?.risk_score ?? -1) === Number(safePrev[idx]?.risk_score ?? -1)
+    )
+  ) {
+    return safePrev;
+  }
+  return merged;
+};
+
+const areEntityListsEquivalent = (prevList, nextList) => {
+  if (!Array.isArray(prevList) || !Array.isArray(nextList) || prevList.length !== nextList.length) {
+    return false;
+  }
+  for (let i = 0; i < prevList.length; i++) {
+    const a = prevList[i];
+    const b = nextList[i];
+    if (
+      a?.id !== b?.id ||
+      a?.status !== b?.status ||
+      a?.updated_at !== b?.updated_at ||
+      a?.resolved_at !== b?.resolved_at ||
+      a?.last_occurred_at !== b?.last_occurred_at
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
 export const OverviewPage = () => {
   const { t, i18n } = useTranslation('dashboard');
   const METRIC_CONFIGS = useMemo(() => [
@@ -462,16 +539,7 @@ export const OverviewPage = () => {
           .then((val) => {
             if (isStale()) return;
             const predsList = Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : [];
-            setPredictions((prev) => {
-              if (
-                prev.length === predsList.length &&
-                prev[0]?.id === predsList[0]?.id &&
-                prev[prev.length - 1]?.id === predsList[predsList.length - 1]?.id
-              ) {
-                return prev;
-              }
-              return predsList;
-            });
+            setPredictions((prev) => mergePolledPredictions(prev, predsList));
 
             const inputsMap = {};
             predsList.forEach((pred) => {
@@ -503,11 +571,11 @@ export const OverviewPage = () => {
           .then((val) => {
             if (isStale()) return;
             const allList = Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : [];
-            setIncidents(allList);
+            setIncidents((prev) => (areEntityListsEquivalent(prev, allList) ? prev : allList));
             const openCount = allList.filter((i) =>
               ['OPEN', 'INVESTIGATING'].includes(String(i.status || '').toUpperCase())
             ).length;
-            setClusterOpenIncidents(openCount);
+            setClusterOpenIncidents((prev) => (prev === openCount ? prev : openCount));
 
             const tLower = (currentServiceTarget || '').toLowerCase().trim();
             if (!tLower) return;
@@ -538,11 +606,17 @@ export const OverviewPage = () => {
         aiService
           .getRecommendations({ limit: 20, cluster_id: clusterParam, organization_id: orgParam })
           .then((val) => {
-            if (!isStale()) setRecommendations(Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : []);
+            if (!isStale()) {
+              const items = Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : [];
+              setRecommendations((prev) => (areEntityListsEquivalent(prev, items) ? prev : items));
+            }
           }),
 
         selfHealingService.getPolicies({ organization_id: orgParam }).then((val) => {
-          if (!isStale()) setPolicies(Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : []);
+          if (!isStale()) {
+            const items = Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : [];
+            setPolicies((prev) => (areEntityListsEquivalent(prev, items) ? prev : items));
+          }
         }),
 
         currentServiceTarget
@@ -558,8 +632,8 @@ export const OverviewPage = () => {
                 if (!isStale()) {
                   const items = Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : [];
                   const total = typeof val?.total === 'number' ? val.total : items.length;
-                  setHealingActions(items);
-                  setTotalHealingActions(total);
+                  setHealingActions((prev) => (areEntityListsEquivalent(prev, items) ? prev : items));
+                  setTotalHealingActions((prev) => (prev === total ? prev : total));
                 }
               })
           : Promise.resolve(),
@@ -573,7 +647,10 @@ export const OverviewPage = () => {
                 search: currentServiceTarget,
               })
               .then((val) => {
-                if (!isStale()) setApprovals(Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : []);
+                if (!isStale()) {
+                  const items = Array.isArray(val) ? val : Array.isArray(val?.items) ? val.items : [];
+                  setApprovals((prev) => (areEntityListsEquivalent(prev, items) ? prev : items));
+                }
               })
           : Promise.resolve(),
       ];
@@ -747,10 +824,21 @@ export const OverviewPage = () => {
 
             const clusterAgg = calculateClusterNodeMetrics(nodeMetricsMapRef.current);
             if (clusterAgg) {
-              setNodeTelemetry((prev) => ({
-                ...(prev || {}),
-                ...clusterAgg,
-              }));
+              setNodeTelemetry((prev) => {
+                if (
+                  prev &&
+                  prev.node_cpu_percent === clusterAgg.node_cpu_percent &&
+                  prev.node_ram_percent === clusterAgg.node_ram_percent &&
+                  prev.node_ram_gb === clusterAgg.node_ram_gb &&
+                  prev.disk === clusterAgg.disk
+                ) {
+                  return prev;
+                }
+                return {
+                  ...(prev || {}),
+                  ...clusterAgg,
+                };
+              });
             }
           } else if (payload.type === 'initial_snapshot' && payload.data) {
             const snap = payload.data;
@@ -779,7 +867,11 @@ export const OverviewPage = () => {
           } else if ((payload.type === 'raw_metric' || payload.type === 'metrics') && payload.data) {
             const raw = payload.data;
             if (raw.latency !== undefined) {
-              setNodeTelemetry((prev) => ({ ...(prev || {}), latency: Number(raw.latency) }));
+              const nextLatency = Number(raw.latency);
+              setNodeTelemetry((prev) => {
+                if (prev && Number(prev.latency) === nextLatency) return prev;
+                return { ...(prev || {}), latency: nextLatency };
+              });
             }
           }
         },
@@ -2013,9 +2105,7 @@ export const OverviewPage = () => {
                   gap: '4px',
                   padding: '8px 10px 7px',
                   borderRadius: '13px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.94)',
-                  backdropFilter: 'blur(12px)',
-                  WebkitBackdropFilter: 'blur(12px)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.97)',
                   border: '1px solid rgba(226, 232, 240, 0.95)',
                   boxShadow: '0 4px 14px rgba(15, 23, 42, 0.045)',
                   cursor: 'pointer',
@@ -2213,9 +2303,7 @@ export const OverviewPage = () => {
                 gap: '8px',
                 padding: '4px 10px',
                 borderRadius: '11px',
-                backgroundColor: 'rgba(255, 255, 255, 0.94)',
-                backdropFilter: 'blur(12px)',
-                WebkitBackdropFilter: 'blur(12px)',
+                backgroundColor: 'rgba(255, 255, 255, 0.97)',
                 border: '1px solid rgba(226, 232, 240, 0.95)',
                 boxShadow: '0 3px 12px rgba(15, 23, 42, 0.045)',
               }}
@@ -2388,9 +2476,7 @@ export const OverviewPage = () => {
               flexWrap: 'wrap',
               padding: '5px 9px',
               borderRadius: '11px',
-              backgroundColor: 'rgba(255, 255, 255, 0.92)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
+              backgroundColor: 'rgba(255, 255, 255, 0.97)',
               border: '1px solid rgba(226, 232, 240, 0.95)',
               boxShadow: '0 3px 12px rgba(15, 23, 42, 0.045)',
             }}
@@ -2531,12 +2617,12 @@ export const OverviewPage = () => {
       >
         <AIPipelineFlowCanvas
           selectedService={isClusterOnline ? (currentServiceTarget || t('overview.controls.loading')) : t('overview.controls.disconnected')}
-          seriesSummaries={isClusterOnline ? seriesSummaries : []}
+          seriesSummaries={isClusterOnline ? seriesSummaries : EMPTY_ARRAY}
           prediction={isClusterOnline ? displaySelectedPrediction : null}
           currentActiveStep={isClusterOnline ? currentActiveStep : 0}
           totalSteps={isClusterOnline ? (timesteps.length || 12) : 12}
           isAgentConnected={isClusterOnline}
-          timesteps={isClusterOnline ? timesteps : []}
+          timesteps={isClusterOnline ? timesteps : EMPTY_ARRAY}
           scaleMode={scaleMode}
           isFullScreen={true}
           showExtendedPipeline={true}
