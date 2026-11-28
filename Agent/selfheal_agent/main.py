@@ -609,6 +609,106 @@ class AgentService:
                     record_k8s_api_call(res_kind, "scale", "error", time.perf_counter() - t0, err_code)
                     raise
 
+            def _is_real_int(val: Any) -> bool:
+                return isinstance(val, int) and not isinstance(val, bool)
+
+            def _wait_for_workload_rollout(
+                expected_replicas: Optional[int] = None,
+                timeout_sec: float = 25.0,
+                poll_interval_sec: float = 1.5,
+            ) -> dict[str, Any]:
+                """Poll K8s controller status briefly until new pods are ready and old replicas finish terminating."""
+                if not self.apps_v1 or is_bare_pod or is_daemonset:
+                    return {"rollout_waited": False, "rollout_settled": False}
+
+                deadline = time.monotonic() + max(0.0, timeout_sec)
+                polls = 0
+                wait_start = time.perf_counter()
+
+                while True:
+                    polls += 1
+                    try:
+                        if is_statefulset:
+                            wl = self.apps_v1.read_namespaced_stateful_set(name=target_name, namespace=namespace)
+                        else:
+                            wl = self.apps_v1.read_namespaced_deployment(name=target_name, namespace=namespace)
+                    except Exception:
+                        return {
+                            "rollout_waited": polls > 1,
+                            "rollout_settled": False,
+                            "rollout_wait_ms": int((time.perf_counter() - wait_start) * 1000),
+                        }
+
+                    meta = getattr(wl, "metadata", None)
+                    spec = getattr(wl, "spec", None)
+                    status_obj = getattr(wl, "status", None)
+
+                    spec_replicas = getattr(spec, "replicas", None) if spec else None
+                    desired = expected_replicas if _is_real_int(expected_replicas) else spec_replicas
+                    generation = getattr(meta, "generation", None) if meta else None
+                    observed_gen = getattr(status_obj, "observed_generation", None) if status_obj else None
+                    ready_rep = getattr(status_obj, "ready_replicas", None) if status_obj else None
+                    updated_rep = getattr(status_obj, "updated_replicas", None) if status_obj else None
+                    avail_rep = getattr(status_obj, "available_replicas", None) if status_obj else None
+                    total_rep = getattr(status_obj, "replicas", None) if status_obj else None
+
+                    # Skip polling under unit-test MagicMocks or incomplete fake objects without real integer status
+                    if not _is_real_int(desired) or (
+                        not _is_real_int(ready_rep)
+                        and not _is_real_int(updated_rep)
+                        and not _is_real_int(avail_rep)
+                    ):
+                        return {"rollout_waited": False, "rollout_settled": False}
+
+                    gen_ok = (not _is_real_int(generation)) or (
+                        _is_real_int(observed_gen) and observed_gen >= generation
+                    )
+
+                    if desired == 0:
+                        replicas_ok = (_is_real_int(total_rep) and total_rep == 0) or (
+                            _is_real_int(ready_rep) and ready_rep == 0
+                        )
+                    elif is_statefulset:
+                        current_rep = getattr(status_obj, "current_replicas", None) if status_obj else None
+                        replicas_ok = (
+                            _is_real_int(ready_rep)
+                            and ready_rep >= desired
+                            and ((not _is_real_int(updated_rep)) or updated_rep >= desired)
+                            and ((not _is_real_int(current_rep)) or current_rep >= desired)
+                        )
+                    else:
+                        replicas_ok = (
+                            _is_real_int(updated_rep)
+                            and updated_rep >= desired
+                            and _is_real_int(ready_rep)
+                            and ready_rep >= desired
+                            and _is_real_int(avail_rep)
+                            and avail_rep >= desired
+                            and ((not _is_real_int(total_rep)) or total_rep <= desired)
+                        )
+
+                    if gen_ok and replicas_ok:
+                        return {
+                            "rollout_waited": True,
+                            "rollout_settled": True,
+                            "rollout_polls": polls,
+                            "rollout_wait_ms": int((time.perf_counter() - wait_start) * 1000),
+                            "desired_replicas": desired,
+                            "ready_replicas": ready_rep if _is_real_int(ready_rep) else desired,
+                        }
+
+                    if time.monotonic() >= deadline:
+                        return {
+                            "rollout_waited": True,
+                            "rollout_settled": False,
+                            "rollout_polls": polls,
+                            "rollout_wait_ms": int((time.perf_counter() - wait_start) * 1000),
+                            "desired_replicas": desired,
+                            "ready_replicas": ready_rep if _is_real_int(ready_rep) else 0,
+                        }
+
+                    time.sleep(min(poll_interval_sec, max(0.1, deadline - time.monotonic())))
+
             logger.info(
                 "🛠️ [SelfHealing Executor] Received action request: ID=%s, Type=%s, Target=%s (%s), NS=%s",
                 action_id,
@@ -1131,6 +1231,42 @@ class AgentService:
 
                 else:
                     raise ValueError(f"Unsupported or disallowed healing action type: '{action_type}'")
+
+                rollout_wait_actions = {
+                    "RESTART_POD",
+                    "ROLLOUT_RESTART",
+                    "RESTART_DEPLOYMENT",
+                    "RESTART POD",
+                    "RESTART DEPLOYMENT",
+                    "REPLACE_POD",
+                    "REPLACE POD",
+                    "SCALE_REPLICAS",
+                    "SCALE_UP",
+                    "SCALE_DOWN",
+                    "SCALE_IN",
+                    "SCALE REPLICAS",
+                    "ROLLBACK_DEPLOYMENT",
+                    "ROLLBACK",
+                    "ROLLBACK DEPLOYMENT",
+                    "CLEANUP_STORAGE",
+                    "CLEANUP_TEMP_FILES",
+                    "CLEANUP_TEMPORARY_FILES",
+                    "CLEANUP TEMP FILES",
+                    "ADJUST_RESOURCE_LIMITS",
+                    "ADJUST RESOURCE LIMITS",
+                }
+                if self.apps_v1 and action_type in rollout_wait_actions and not is_bare_pod:
+                    expected_rep = details.get("replicas") if isinstance(details.get("replicas"), int) else None
+                    rollout_meta = _wait_for_workload_rollout(expected_replicas=expected_rep)
+                    details.update(rollout_meta)
+                    if rollout_meta.get("rollout_settled"):
+                        logger.info(
+                            "🟢 Rollout settled for %s/%s (%d polls, %dms)",
+                            workload_kind_label,
+                            target_name,
+                            rollout_meta.get("rollout_polls", 1),
+                            rollout_meta.get("rollout_wait_ms", 0),
+                        )
 
                 elapsed_sec = max(0.001, time.perf_counter() - start_t)
                 duration_ms = int(elapsed_sec * 1000)

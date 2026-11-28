@@ -557,12 +557,11 @@ export class AiService {
     if (!prevAction || !prevActionResult) {
       try {
         // Post-Action Verification Failure Check:
-        // If a K8s command finished >= 35s ago (either legacy SUCCEEDED/COMPLETED or RUNNING awaiting verification
-        // with agent_status COMPLETED/SUCCEEDED) on a still-OPEN incident and no recovery_verification exists yet,
-        // the fact that RCA is triggered again means we MUST verify current health immediately:
-        // finalize RUNNING -> FAILED/COMPLETED so UI stops hanging on "Đang hậu kiểm" and feeds Re-RCA escalation!
+        // Wait at least 65s (> 1 full 60s tumbling batch) after Agent completion and filter telemetry
+        // strictly past action completion + rollout settling grace before judging recovery,
+        // avoiding false VERIFICATION_FAILED verdicts from pre-action or mid-rollout metrics.
         const unverifiedActRes = await pool.query(
-          `SELECT h.id, h.execution_status, act.code AS action_code, h.target_name,
+          `SELECT h.id, h.execution_status, act.code AS action_code, h.target_name, h.result AS action_result,
                   COALESCE(
                     h.completed_at,
                     NULLIF(h.result->>'agent_completed_at', '')::timestamptz,
@@ -575,13 +574,13 @@ export class AiService {
                (
                  h.execution_status = 'RUNNING'
                  AND COALESCE(h.result->>'agent_status', '') IN ('COMPLETED', 'SUCCEEDED')
-                 AND COALESCE(NULLIF(h.result->>'agent_completed_at', '')::timestamptz, h.started_at, NOW()) <= NOW() - interval '35 seconds'
+                 AND COALESCE(NULLIF(h.result->>'agent_completed_at', '')::timestamptz, h.started_at, NOW()) <= NOW() - interval '65 seconds'
                  AND COALESCE(NULLIF(h.result->>'agent_completed_at', '')::timestamptz, h.started_at, h.created_at) >= NOW() - interval '60 minutes'
                )
                OR (
                  h.execution_status::text IN ('COMPLETED', 'SUCCEEDED')
                  AND h.completed_at IS NOT NULL
-                 AND h.completed_at <= NOW() - interval '35 seconds'
+                 AND h.completed_at <= NOW() - interval '65 seconds'
                  AND h.completed_at >= NOW() - interval '60 minutes'
                )
              )
@@ -617,35 +616,58 @@ export class AiService {
           /oomkilled|out of memory/i.test(String(ev || ''))
         );
         const seqArr = Array.isArray(input.metric_sequence) ? input.metric_sequence : [];
-        const seqRestartDelta =
-          seqArr.length >= 2
-            ? Math.max(
-                0,
-                Math.max(...seqArr.map((p) => Number(p?.pod_restart_count ?? 0))) -
-                  Math.min(...seqArr.map((p) => Number(p?.pod_restart_count ?? 0)))
-              )
-            : Number(input.metrics.pod_restart_count ?? 0);
         for (const unv of unverifiedActRes.rows) {
-          const cpuVal = Number(input.metrics.cpu ?? 0);
-          const ramVal = Number(input.metrics.ram ?? 0);
-          const restartCount = Number(input.metrics.pod_restart_count ?? 0);
+          const actCompletedAt = unv.effective_completed_at ? new Date(unv.effective_completed_at) : null;
+          const actualDurationMs = actCompletedAt ? Math.max(1000, Date.now() - actCompletedAt.getTime()) : 1000;
+          const graceSec = RecoveryVerificationService.getActionSettlingCooldownSeconds(
+            unv.action_code,
+            unv.action_result
+          );
+          const postFilter = RecoveryVerificationService.filterPostActionSamples(
+            seqArr as any[],
+            actCompletedAt,
+            graceSec
+          );
+
+          // If this batch carries timestamps, require enough clean post-settling samples (>= 6)
+          // before judging the action, unless the failsafe ceiling (180s) is reached.
+          if (
+            postFilter.hasTimestamps &&
+            postFilter.filtered.length < RecoveryVerificationService.MIN_POST_ACTION_SEQUENCE_SAMPLES &&
+            actualDurationMs < 180_000
+          ) {
+            continue;
+          }
+
+          const evalSeq = postFilter.hasTimestamps ? postFilter.filtered : seqArr;
+          const latestEvalSample: any =
+            evalSeq.length > 0 ? evalSeq[evalSeq.length - 1] : input.metrics;
+          const cpuVal = Number(latestEvalSample?.cpu ?? input.metrics.cpu ?? 0);
+          const ramVal = Number(latestEvalSample?.ram ?? input.metrics.ram ?? 0);
+          const restartCount = Number(latestEvalSample?.pod_restart_count ?? input.metrics.pod_restart_count ?? 0);
+          const evalRestartDelta =
+            evalSeq.length >= 2
+              ? Math.max(
+                  0,
+                  Math.max(...evalSeq.map((p: any) => Number(p?.pod_restart_count ?? 0))) -
+                    Math.min(...evalSeq.map((p: any) => Number(p?.pod_restart_count ?? 0)))
+                )
+              : restartCount;
 
           const verificationCheck =
-            seqArr.length >= 3
-              ? RecoveryVerificationService.evaluateSequenceRecovery(seqArr as any[], {
+            evalSeq.length >= 3
+              ? RecoveryVerificationService.evaluateSequenceRecovery(evalSeq as any[], {
                   isDatabaseWorkload: isDbCacheTarget && !hasOomSignal,
-                  baselineRestartCount: Number(seqArr[0]?.pod_restart_count ?? 0),
+                  baselineRestartCount: Number(evalSeq[0]?.pod_restart_count ?? 0),
                 })
-              : RecoveryVerificationService.evaluateSampleHealth(input.metrics as any, {
-                  isDatabaseWorkload: isDbCacheTarget && seqRestartDelta === 0 && !hasOomSignal,
+              : RecoveryVerificationService.evaluateSampleHealth(latestEvalSample as any, {
+                  isDatabaseWorkload: isDbCacheTarget && evalRestartDelta === 0 && !hasOomSignal,
                   baselineRestartCount: restartCount,
                 });
 
           const metricParts = verificationCheck.violations;
           const telemetrySnapshot = `CPU: ${cpuVal}%, RAM: ${ramVal}%, Restart: ${restartCount}`;
           const isHealthy = verificationCheck.healthy;
-          const actCompletedAt = unv.effective_completed_at ? new Date(unv.effective_completed_at) : null;
-          const actualDurationMs = actCompletedAt ? Math.max(1000, Date.now() - actCompletedAt.getTime()) : 1000;
 
           if (unv.execution_status === 'RUNNING') {
             const verMsg = isHealthy
@@ -655,12 +677,14 @@ export class AiService {
               verificationType: 'K8S_POST_HEALING_PROBE',
               verified: isHealthy,
               statusBefore: { health: 'DEGRADED' },
-              statusAfter: { health: isHealthy ? 'HEALTHY' : 'STILL_DEGRADED', metrics: input.metrics },
+              statusAfter: { health: isHealthy ? 'HEALTHY' : 'STILL_DEGRADED', metrics: latestEvalSample },
               details: {
                 status: isHealthy ? 'VERIFIED_HEALTHY' : 'VERIFICATION_FAILED',
                 message: verMsg,
                 reason: verMsg,
                 elapsed_since_completion_ms: actualDurationMs,
+                post_action_samples_evaluated: evalSeq.length,
+                excluded_pre_action_samples: postFilter.excludedPreActionCount,
               },
               durationMs: actualDurationMs,
               errorMessage: isHealthy ? undefined : verMsg,
@@ -683,8 +707,14 @@ export class AiService {
               [
                 unv.id,
                 JSON.stringify({ health: 'DEGRADED' }),
-                JSON.stringify({ health: 'HEALTHY', metrics: input.metrics }),
-                JSON.stringify({ status: 'VERIFIED_HEALTHY', message: passMsg, elapsed_since_completion_ms: actualDurationMs }),
+                JSON.stringify({ health: 'HEALTHY', metrics: latestEvalSample }),
+                JSON.stringify({
+                  status: 'VERIFIED_HEALTHY',
+                  message: passMsg,
+                  elapsed_since_completion_ms: actualDurationMs,
+                  post_action_samples_evaluated: evalSeq.length,
+                  excluded_pre_action_samples: postFilter.excludedPreActionCount,
+                }),
                 actualDurationMs,
               ]
             ).catch(() => {});
@@ -709,8 +739,14 @@ export class AiService {
               [
                 unv.id,
                 JSON.stringify({ health: 'DEGRADED' }),
-                JSON.stringify({ health: 'STILL_DEGRADED', metrics: input.metrics }),
-                JSON.stringify({ status: 'VERIFICATION_FAILED', message: failMsg, elapsed_since_completion_ms: actualDurationMs }),
+                JSON.stringify({ health: 'STILL_DEGRADED', metrics: latestEvalSample }),
+                JSON.stringify({
+                  status: 'VERIFICATION_FAILED',
+                  message: failMsg,
+                  elapsed_since_completion_ms: actualDurationMs,
+                  post_action_samples_evaluated: evalSeq.length,
+                  excluded_pre_action_samples: postFilter.excludedPreActionCount,
+                }),
                 actualDurationMs,
               ]
             ).catch(() => {});

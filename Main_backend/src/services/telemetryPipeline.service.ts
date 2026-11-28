@@ -409,11 +409,20 @@ export class TelemetryPipelineService {
           ? resolvedTarget.workloadId
           : null;
 
-      // Verify post-action health genuinely from telemetry batch before recording verification and completing action
+      // Verify post-action health genuinely from post-completion telemetry batch before recording verification and completing action
       const unverifiedSuccRes = await pool.query(
-        `SELECT h.id, h.incident_id
+        `SELECT h.id, h.incident_id,
+                act.code AS action_code,
+                h.result AS action_result,
+                COALESCE(
+                  h.completed_at,
+                  NULLIF(h.result->>'agent_completed_at', '')::timestamptz,
+                  h.started_at,
+                  h.created_at
+                ) AS effective_completed_at
          FROM healing_actions h
          JOIN environments e ON e.id = h.environment_id
+         LEFT JOIN healing_action_types act ON act.id = h.action_type_id
          WHERE e.organization_id = $3::uuid
            AND (
              (h.execution_status = 'RUNNING' AND COALESCE(h.result->>'agent_status', '') IN ('COMPLETED', 'SUCCEEDED')
@@ -433,43 +442,81 @@ export class TelemetryPipelineService {
       const seq = Array.isArray(providedSequence) ? providedSequence : [];
       const isDbCacheTarget =
         isDatabaseCacheWorkload(canonicalTargetName) || isDatabaseCacheWorkload(serviceId);
-      const seqEval = RecoveryVerificationService.evaluateSequenceRecovery(seq, {
+      const untimedSeqEval = RecoveryVerificationService.evaluateSequenceRecovery(seq, {
         isDatabaseWorkload: isDbCacheTarget,
         baselineRestartCount: seq.length > 0 ? Number(seq[0]?.pod_restart_count ?? 0) : 0,
       });
-      const seqViolations = seqEval.violations;
-      const batchActuallyHealthy = seq.length >= 12 && seqEval.healthy;
 
       for (const succRow of unverifiedSuccRes.rows) {
-        const tsCheck = RecoveryVerificationService.validateTimestampSequence(seq);
+        const completedAtDate = succRow.effective_completed_at ? new Date(succRow.effective_completed_at) : null;
+        const elapsedMs =
+          completedAtDate && !isNaN(completedAtDate.getTime())
+            ? Math.max(0, Date.now() - completedAtDate.getTime())
+            : 0;
+        const graceSec = RecoveryVerificationService.getActionSettlingCooldownSeconds(
+          succRow.action_code,
+          succRow.action_result
+        );
+        const postFilter = RecoveryVerificationService.filterPostActionSamples(
+          seq,
+          completedAtDate,
+          graceSec
+        );
+
+        let evalSeq = seq;
+        let rowViolations = untimedSeqEval.violations;
+        let rowHealthy = seq.length >= 12 && untimedSeqEval.healthy;
+
+        if (postFilter.hasTimestamps) {
+          if (postFilter.filtered.length < RecoveryVerificationService.MIN_POST_ACTION_SEQUENCE_SAMPLES) {
+            // Current batch still has too few clean samples after rollout/settling grace -> wait for next clean batch
+            continue;
+          }
+          evalSeq = postFilter.filtered;
+          const filteredEval = RecoveryVerificationService.evaluateSequenceRecovery(evalSeq, {
+            isDatabaseWorkload: isDbCacheTarget,
+            baselineRestartCount: evalSeq.length > 0 ? Number(evalSeq[0]?.pod_restart_count ?? 0) : 0,
+          });
+          rowViolations = filteredEval.violations;
+          rowHealthy = filteredEval.healthy;
+
+          // Inside autoResolveIfRecovered (Rule Engine & GRU already cleared current state), never stamp a premature failure before 65s
+          if (!rowHealthy && elapsedMs < 65_000) {
+            continue;
+          }
+        }
+
+        const tsCheck = RecoveryVerificationService.validateTimestampSequence(evalSeq);
         const observationDurationMs = tsCheck.valid && tsCheck.durationMs > 0
           ? tsCheck.durationMs
-          : (seq.length >= 12 ? 60000 : Math.max(5000, seq.length * 5000));
+          : (seq.length >= 12 ? 60000 : Math.max(5000, evalSeq.length * 5000));
 
         await HealingActionModel.finalizeRecoveryVerificationOutcome(succRow.id, {
           verificationType: 'K8S_POST_HEALING_PROBE',
-          verified: batchActuallyHealthy,
+          verified: rowHealthy,
           statusBefore: { health: 'DEGRADED' },
           statusAfter: {
-            health: batchActuallyHealthy ? 'HEALTHY' : 'STILL_DEGRADED',
-            verified_by: '12_POINT_TELEMETRY_BATCH',
-            post_action_metrics_sequence: seq,
-            latest_metrics: seq.length > 0 ? seq[seq.length - 1] : null,
+            health: rowHealthy ? 'HEALTHY' : 'STILL_DEGRADED',
+            verified_by: postFilter.hasTimestamps ? 'POST_ACTION_FILTERED_BATCH' : '12_POINT_TELEMETRY_BATCH',
+            post_action_metrics_sequence: evalSeq,
+            excluded_pre_action_samples: postFilter.excludedPreActionCount,
+            latest_metrics: evalSeq.length > 0 ? evalSeq[evalSeq.length - 1] : null,
           },
           details: {
-            status: batchActuallyHealthy ? 'VERIFIED_HEALTHY' : 'VERIFICATION_FAILED',
-            sample_count: seq.length,
-            violations: seqViolations,
-            metrics: seq.length > 0 ? seq[seq.length - 1] : null,
-            message: batchActuallyHealthy
-              ? `Hậu kiểm thành công sau chu kỳ ${seq.length} điểm viễn trắc: Dịch vụ '${serviceId}' đã phục hồi ổn định.`
-              : `Hậu kiểm thất bại cho '${serviceId}': ${seqViolations.join('; ') || 'Thiếu đủ 12 điểm viễn trắc hợp lệ'}`,
+            status: rowHealthy ? 'VERIFIED_HEALTHY' : 'VERIFICATION_FAILED',
+            sample_count: evalSeq.length,
+            excluded_pre_action_samples: postFilter.excludedPreActionCount,
+            violations: rowViolations,
+            metrics: evalSeq.length > 0 ? evalSeq[evalSeq.length - 1] : null,
+            message: rowHealthy
+              ? `Hậu kiểm thành công sau chu kỳ ${evalSeq.length} điểm viễn trắc hậu hành động: Dịch vụ '${serviceId}' đã phục hồi ổn định.`
+              : `Hậu kiểm thất bại cho '${serviceId}': ${rowViolations.join('; ') || 'Thiếu đủ dữ liệu viễn trắc hợp lệ'}`,
           },
           durationMs: observationDurationMs,
-          errorMessage: batchActuallyHealthy ? undefined : (seqViolations.join('; ') || 'Post-healing telemetry verification failed'),
+          errorMessage: rowHealthy ? undefined : (rowViolations.join('; ') || 'Post-healing telemetry verification failed'),
         }).catch(() => {});
 
-        if (batchActuallyHealthy && succRow.incident_id) {
+        if (rowHealthy && succRow.incident_id) {
           await pool.query(
             `UPDATE healing_actions SET execution_status = 'CANCELLED' WHERE incident_id = $1 AND execution_status = 'PENDING';`,
             [succRow.incident_id]
@@ -509,6 +556,16 @@ export class TelemetryPipelineService {
              WHERE ha.incident_id = i.id
                AND ha.execution_status::text IN ('COMPLETED', 'SUCCEEDED')
                AND ha.completed_at > NOW() - interval '30 seconds'
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM healing_actions ha_unv
+             WHERE ha_unv.incident_id = i.id
+               AND ha_unv.execution_status::text IN ('COMPLETED', 'SUCCEEDED')
+               AND ha_unv.completed_at >= NOW() - interval '60 minutes'
+               AND NOT EXISTS (
+                 SELECT 1 FROM recovery_verifications rv_unv
+                 WHERE rv_unv.healing_action_id = ha_unv.id
+               )
            )
            -- Giữ rào chắn trong 15 phút sau hành động/hậu kiểm thất bại để ngăn đóng non,
            -- nhưng cho phép tự đóng sau khi dịch vụ đã thực sự phục hồi qua chu kỳ 12/12 sạch khi Circuit Breaker (NO_ACTION) đang ngắt hành động mới

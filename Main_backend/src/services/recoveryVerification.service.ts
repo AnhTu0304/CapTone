@@ -59,6 +59,94 @@ export interface IVerificationDetails {
 
 export class RecoveryVerificationService {
   public static readonly DEFAULT_COOLDOWN_SECONDS = 20;
+  public static readonly POST_ROLLOUT_SETTLED_GRACE_SECONDS = 10;
+  public static readonly POST_ROLLOUT_UNSETTLED_GRACE_SECONDS = 25;
+  public static readonly MIN_POST_ACTION_SEQUENCE_SAMPLES = 6;
+
+  private static readonly ROLLOUT_SENSITIVE_ACTIONS = new Set([
+    'ROLLBACK_DEPLOYMENT',
+    'ROLLBACK',
+    'ROLLBACK_DEPLOY',
+    'RESTART_POD',
+    'ROLLOUT_RESTART',
+    'RESTART_DEPLOYMENT',
+    'REPLACE_POD',
+    'SCALE_REPLICAS',
+    'DRAIN_NODE',
+    'CLEANUP_STORAGE',
+    'CLEANUP_TEMP_FILES',
+    'ADJUST_RESOURCE_LIMITS',
+  ]);
+
+  /**
+   * Determine post-completion telemetry settling grace window in seconds based on action type
+   * and whether Kubernetes Agent already confirmed rollout stabilization.
+   */
+  public static getActionSettlingCooldownSeconds(actionCode?: string | null, actionResult?: any): number {
+    const normalizedAction = String(actionCode || '')
+      .toUpperCase()
+      .trim()
+      .replace(/[\s-]+/g, '_');
+    const rolloutSettled = Boolean(
+      actionResult?.details?.rollout_settled === true || actionResult?.rollout_settled === true
+    );
+    if (rolloutSettled) {
+      return this.POST_ROLLOUT_SETTLED_GRACE_SECONDS;
+    }
+    if (this.ROLLOUT_SENSITIVE_ACTIONS.has(normalizedAction)) {
+      return this.POST_ROLLOUT_UNSETTLED_GRACE_SECONDS;
+    }
+    return 15;
+  }
+
+  /**
+   * Extract only telemetry samples collected strictly AFTER action completion + settling grace window
+   * when samples carry timestamps, preventing pre-action / mid-rollout pollution in 60s tumbling batches.
+   */
+  public static filterPostActionSamples(
+    samples: ITelemetrySample[],
+    actionCompletedAt?: Date | string | null,
+    cooldownSeconds: number = this.DEFAULT_COOLDOWN_SECONDS
+  ): {
+    hasTimestamps: boolean;
+    filtered: ITelemetrySample[];
+    cutoffDate: Date | null;
+    excludedPreActionCount: number;
+  } {
+    const seq = Array.isArray(samples) ? samples : [];
+    if (seq.length === 0) {
+      return { hasTimestamps: false, filtered: [], cutoffDate: null, excludedPreActionCount: 0 };
+    }
+
+    const parsedDates = seq.map((s) => this.parseTimestamp(s));
+    const hasTimestamps = parsedDates.some((d) => d !== null);
+    if (!hasTimestamps) {
+      return { hasTimestamps: false, filtered: seq, cutoffDate: null, excludedPreActionCount: 0 };
+    }
+
+    const completedAtDate = actionCompletedAt
+      ? actionCompletedAt instanceof Date
+        ? actionCompletedAt
+        : new Date(actionCompletedAt)
+      : null;
+
+    if (!completedAtDate || isNaN(completedAtDate.getTime())) {
+      return { hasTimestamps: true, filtered: seq, cutoffDate: null, excludedPreActionCount: 0 };
+    }
+
+    const cutoffMs = completedAtDate.getTime() + Math.max(0, cooldownSeconds) * 1000;
+    const filtered = seq.filter((_, idx) => {
+      const d = parsedDates[idx];
+      return d !== null && d.getTime() > cutoffMs;
+    });
+
+    return {
+      hasTimestamps: true,
+      filtered,
+      cutoffDate: new Date(cutoffMs),
+      excludedPreActionCount: seq.length - filtered.length,
+    };
+  }
 
   /**
    * Parse a valid Date object from multiple possible timestamp fields
