@@ -972,6 +972,17 @@ export class AiService {
     if ((input as any).kubernetes) {
       rcaPayload.kubernetes = (input as any).kubernetes;
     }
+    if ((input as any).deployment) {
+      rcaPayload.deployment = (input as any).deployment;
+    } else if (
+      (input as any).kubernetes?.deployment?.version ||
+      (input as any).kubernetes?.deployment?.previous_version
+    ) {
+      rcaPayload.deployment = {
+        current_version: (input as any).kubernetes.deployment.version ?? undefined,
+        previous_version: (input as any).kubernetes.deployment.previous_version ?? undefined,
+      };
+    }
     if ((input as any).prediction) {
       rcaPayload.prediction = (input as any).prediction;
     }

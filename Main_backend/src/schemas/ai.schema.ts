@@ -60,6 +60,7 @@ export const RCARequestSchema = z.object({
   metric_sequence: z.array(GRUMetricPointSchema).optional(),
   logs: z.array(z.string()).max(1000).optional().default([]),
   kubernetes: z.record(z.string(), z.any()).optional(),
+  deployment: z.record(z.string(), z.any()).optional(),
   prediction: z.any().optional(),
   kubernetes_events: z.array(z.string()).max(500).optional().default([]),
   prediction_id: z.string().uuid().optional(),

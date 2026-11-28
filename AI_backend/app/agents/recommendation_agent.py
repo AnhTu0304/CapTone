@@ -314,6 +314,12 @@ class RecommendationAgent:
         blocked_set = set(action_history.blocked_actions) if action_history else set()
         consecutive_failures = action_history.consecutive_failures if action_history else 0
         prev_act_norm = (previous_action or "").upper().strip().replace(" ", "_")
+        # Miễn rào chắn lịch sử SCALE_REPLICAS/RESTART_POD/REPLACE_POD nếu hành động phù hợp là ROLLBACK_DEPLOYMENT chưa từng thử
+        is_untried_rollback = (
+            action == "ROLLBACK_DEPLOYMENT"
+            and "ROLLBACK_DEPLOYMENT" not in blocked_set
+            and prev_act_norm != "ROLLBACK_DEPLOYMENT"
+        )
 
         explicit_cb_early = bool(action_history and action_history.circuit_breaker_tripped)
         prev_cause_norm = (previous_rca_root_cause or "").lower().strip()
@@ -339,9 +345,14 @@ class RecommendationAgent:
         )
 
         if (
-            (prev_act_norm in {"RESTART_POD", "RESTART_DEPLOYMENT"} and previous_action_result in {"FAILED", "PARTIAL"})
-            or ("RESTART_POD" in blocked_set and "REPLACE_POD" not in blocked_set)
-        ) and "REPLACE_POD" not in blocked_set and not explicit_cb_early:
+            not is_untried_rollback
+            and (
+                (prev_act_norm in {"RESTART_POD", "RESTART_DEPLOYMENT"} and previous_action_result in {"FAILED", "PARTIAL"})
+                or ("RESTART_POD" in blocked_set and "REPLACE_POD" not in blocked_set)
+            )
+            and "REPLACE_POD" not in blocked_set
+            and not explicit_cb_early
+        ):
             if has_pod_failure_evidence:
                 action = "REPLACE_POD"
                 reason = (
@@ -356,7 +367,8 @@ class RecommendationAgent:
                     "Dừng tự động hóa (NO_ACTION) để thu thập thêm dữ liệu hoặc chuyển giao kỹ sư vận hành xử lý theo Playbook."
                 )
         elif (
-            "SCALE_REPLICAS" in blocked_set
+            not is_untried_rollback
+            and "SCALE_REPLICAS" in blocked_set
             and "RESTART_POD" not in blocked_set
             and not explicit_cb_early
             and cause != "underutilized"
@@ -368,7 +380,7 @@ class RecommendationAgent:
             )
 
         # Reassess an unsuccessful or partially successful non-escalated action (e.g., SCALE_REPLICAS).
-        elif previous_action_result in {"FAILED", "PARTIAL"} and action == previous_action:
+        elif not is_untried_rollback and previous_action_result in {"FAILED", "PARTIAL"} and action == previous_action:
             scale_fail_count = sum(
                 1
                 for item in (action_history.history if action_history else [])
@@ -532,7 +544,11 @@ class RecommendationAgent:
             or consecutive_failures >= 3
         )
 
-        if (action_history or replace_failed) and (action != "SCALE_REPLICAS" or cause != "underutilized"):
+        if (
+            (action_history or replace_failed)
+            and not is_untried_rollback
+            and (action != "SCALE_REPLICAS" or cause != "underutilized")
+        ):
             explicit_cb = bool(action_history and action_history.circuit_breaker_tripped)
             
             # Additional Safety Checks for DRAIN_NODE (Audit 4)

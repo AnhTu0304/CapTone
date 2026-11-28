@@ -69,7 +69,18 @@ class OpenAIRCAService:
                 "current": kubernetes_data,
                 "analysis": kubernetes.model_dump(),
             },
-            "DEPLOYMENT": payload.deployment.model_dump() if payload.deployment else None,
+            "DEPLOYMENT": (
+                payload.deployment.model_dump()
+                if payload.deployment
+                else (
+                    {
+                        "current_version": payload.kubernetes.deployment.version,
+                        "previous_version": payload.kubernetes.deployment.previous_version,
+                    }
+                    if payload.kubernetes and payload.kubernetes.deployment
+                    else None
+                )
+            ),
             "HEALTH_CHECK": payload.health_check.model_dump() if payload.health_check else None,
             "ACTION_HISTORY": payload.action_history.model_dump() if payload.action_history else None,
             "PREVIOUS_ACTION": {
@@ -151,12 +162,36 @@ class OpenAIRCAService:
         blocked_set = set(payload.action_history.blocked_actions) if payload.action_history else set()
         consecutive_failures = payload.action_history.consecutive_failures if payload.action_history else 0
         prev_act_norm = (payload.previous_action or "").upper().strip().replace(" ", "_")
+        has_deployment_evidence = bool(
+            payload.deployment is not None
+            or (
+                payload.kubernetes is not None
+                and payload.kubernetes.deployment is not None
+            )
+        )
+        is_untried_rollback = (
+            (
+                result.recommendation.action == "ROLLBACK_DEPLOYMENT"
+                or (
+                    fallback_recommendation is not None
+                    and fallback_recommendation.action == "ROLLBACK_DEPLOYMENT"
+                )
+            )
+            and has_deployment_evidence
+            and "ROLLBACK_DEPLOYMENT" not in blocked_set
+            and prev_act_norm != "ROLLBACK_DEPLOYMENT"
+        )
 
         # Bậc thang Cấp 2: Nếu RESTART_POD thất bại -> Leo thang lên REPLACE_POD
         if (
-            (prev_act_norm in {"RESTART_POD", "RESTART_DEPLOYMENT"} and payload.previous_action_result in {"FAILED", "PARTIAL"})
-            or ("RESTART_POD" in blocked_set and "REPLACE_POD" not in blocked_set)
-        ) and "REPLACE_POD" not in blocked_set and not (payload.action_history and payload.action_history.circuit_breaker_tripped):
+            not is_untried_rollback
+            and (
+                (prev_act_norm in {"RESTART_POD", "RESTART_DEPLOYMENT"} and payload.previous_action_result in {"FAILED", "PARTIAL"})
+                or ("RESTART_POD" in blocked_set and "REPLACE_POD" not in blocked_set)
+            )
+            and "REPLACE_POD" not in blocked_set
+            and not (payload.action_history and payload.action_history.circuit_breaker_tripped)
+        ):
             if fallback_recommendation is not None and fallback_recommendation.action == "REPLACE_POD":
                 result.recommendation.action = "REPLACE_POD"
                 result.recommendation.reason = fallback_recommendation.reason
@@ -168,7 +203,7 @@ class OpenAIRCAService:
                 )
 
         # Bậc thang Cấp 3: Circuit Breaker & Node Recovery Enforcement
-        if payload.action_history or (prev_act_norm == "REPLACE_POD" and payload.previous_action_result in {"FAILED", "PARTIAL"}):
+        if not is_untried_rollback and (payload.action_history or (prev_act_norm == "REPLACE_POD" and payload.previous_action_result in {"FAILED", "PARTIAL"})):
             ah = payload.action_history
             latest_err = _extract_latest_failure_detail(ah)
             detail_suffix = f" Lỗi gần nhất: {latest_err}." if latest_err else ""
@@ -211,7 +246,7 @@ class OpenAIRCAService:
             result.recommendation.reason = fallback_recommendation.reason
             result.recommendation.priority = "HIGH"
             action = fallback_recommendation.action
-        if action == "ROLLBACK_DEPLOYMENT" and payload.deployment is None:
+        if action == "ROLLBACK_DEPLOYMENT" and not has_deployment_evidence:
             result.recommendation = RecommendationResult(
                 action="NO_ACTION",
                 reason="Cần có bằng chứng về bản triển khai (Deployment) trước khi đề xuất rollback",
